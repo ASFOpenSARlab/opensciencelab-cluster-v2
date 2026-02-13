@@ -49,6 +49,7 @@ jobs:
       # Allow cdk_deploy_env to override deploy_prefix for deploy
       DEPLOY_PREFIX: >-
         ${{
+
           inputs.cdk_deploy_env == 'test' && 'test' ||
           inputs.cdk_deploy_env == 'prod' && 'prod' ||
           needs.setup.outputs.deploy_prefix
@@ -65,6 +66,7 @@ jobs:
     # Allow cdk_deploy_env to override environment for deploy
     environment: >-
       ${{ inputs.cdk_deploy_env == 'test' && 'test' ||
+
         inputs.cdk_deploy_env == 'prod' && 'prod' ||
         needs.setup.outputs.environment
       }}
