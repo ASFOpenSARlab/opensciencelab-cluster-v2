@@ -1,3 +1,3 @@
-# Here lies dragons!
+# Cluster v2 CDK
 
-Otherwise known as the cluster cdk code.
+Here lies dragons! Otherwise known as the cluster cdk code.
