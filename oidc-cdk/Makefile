@@ -9,7 +9,7 @@ SHELL:=/bin/bash
 .PHONY := cdk-shell
 cdk-shell:
 	echo "Starting CDK Shell"
-	cd ../../build && \
+	cd .. && \
 	make cdk-shell PROJ=oidc-cdk/
 
 .PHONY := cdk-deploy

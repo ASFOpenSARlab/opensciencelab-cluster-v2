@@ -64,7 +64,7 @@ The following ENV VARS are exported to the docker run environment, but `AWS_DEFA
 # It is helpful to set an AWS Profile.
 > export AWS_DEFAULT_PROFILE=cluster-nonprod-profile
 
-# To run the docker environment:
+# To run the main docker environment:
 > make cdk-shell
 bash-4.2#
 ```
@@ -72,21 +72,17 @@ bash-4.2#
 Once we're shelled into the Dockerized environment, we can start working with CDK!
 
 ```bash
+# Switch directory to code and bootstrap CDK if needed
+# AWS accounts need to be bootstrapped for each region (Once!)
+cd /code
+make manual-cdk-bootstrap
+
 # Switch directory to oidc-cdk
 cd /code/oidc-cdk
 
-# AWS accounts need to be bootstrapped for each region (Once!)
-bash-4.2# make cdk-bootstrap
- ⏳  Bootstrapping environment aws://000000000000/us-west-2...
-Trusted accounts for deployment: (none)
-Trusted accounts for lookup: (none)
-Using default execution policy of 'arn:aws:iam::aws:policy/AdministratorAccess'. Pass '--cloudformation-execution-policies' to customize.
-CDKToolkit: creating CloudFormation changeset...
- ✅  Environment aws://000000000000/us-west-2 bootstrapped.
-
 # To see the synthesized template:
-bash-4.2# make cdk-synth
+make cdk-synth
 
 # To Deploy the stack:
-bash-4.2# make cdk-deploy
+make cdk-deploy
 ```
