@@ -1,0 +1,123 @@
+define HELP
+
+Makefile commands:
+
+    help:                   List makefile commands
+
+    lint:                   Run linting commands
+
+	manual-cdk-bootstrap:   Bootstrap an account for CDK. Especially for OIDC.
+
+    cdk-shell:              Enter CDK environment Docker Image
+
+    synth-oidc:             Synth OIDC CDK project
+
+    deploy-oidc:            Deploy OIDC CDK project
+
+    aws-info:               Get AWS account info
+
+endef
+export HELP
+
+# work in BASH
+SHELL:=/bin/bash
+
+# Get terminal colors
+_SUCCESS := "\033[32m%s\033[0m %s\n" # Green text for "printf"
+_DANGER := "\033[31m%s\033[0m %s\n" # Red text for "printf"
+
+# Respect pathing
+export PWD=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
+PROJECT_DIR := $(if $(CI_PROJECT_DIR),$(CI_PROJECT_DIR:/=),$(PWD:/=/))
+BUILD_DEPS ?= /tmp/.build/lambda/python
+
+IMAGE_NAME ?= ghcr.io/asfopensarlab/osl-utils:main
+AWS_DEFAULT_PROFILE := $(AWS_DEFAULT_PROFILE)
+AWS_REGION ?= us-west-2
+IS_PROD ?= false
+
+.PHONY := all
+all: help
+
+.PHONY := help
+help:
+	@echo "$$HELP"
+
+.PHONY := lint
+lint: remove-cdk-out
+	echo "Starting Docker Shell..."
+	echo ""
+	docker run \
+	    $$ARCH_OVERRIDE \
+		-v "$$(pwd):/code" \
+		-it \
+		--rm \
+		--pull always \
+		${IMAGE_NAME} \
+		make all || \
+		(  echo -e "" && echo  'If docker run fails with "no matching manifest", ' \
+		  'try setting ARCH_OVERRIDE: `export ARCH_OVERRIDE=--platform linux/amd64`.' && \
+		  echo -e "" && exit -1 ) && \
+	echo "### All Linting Passed ###" || \
+	echo "⚠️⚠️⚠️ Linting was not successful ⚠️⚠️⚠️"
+
+### CDK Environment
+
+.PHONY := cdk-shell
+cdk-shell:
+	export AWS_DEFAULT_ACCOUNT=`aws sts get-caller-identity --query 'Account' --output=text` && \
+	export AWS_DEFAULT_REGION="${AWS_REGION}" && \
+		if [ -z "$$AWS_DEFAULT_ACCOUNT" ]; then echo "⚠️  Can't infer AWS credentials! ⚠️"; fi && \
+	mkdir -p /tmp/cdkawscli/cache && \
+	docker run --rm -it \
+		$$ARCH_OVERRIDE \
+		-v ~/.aws/:/root/.aws/:ro \
+		-v ${PROJECT_DIR}/:/code/ \
+		-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+		-e AWS_DEFAULT_PROFILE -e AWS_PROFILE \
+		-e AWS_DEFAULT_REGION -e AWS_REGION \
+		-e AWS_DEFAULT_ACCOUNT \
+		-e DEPLOY_PREFIX \
+		--pull always \
+		${IMAGE_NAME} || \
+		(  echo -e "" && echo  'If docker run fails with "no matching manifest", ' \
+		  'try setting ARCH_OVERRIDE: `export ARCH_OVERRIDE=--platform linux/amd64`.' && \
+		  echo -e "" )
+
+.PHONY := manual-cdk-bootstrap
+manual-cdk-bootstrap:
+	export AWS_DEFAULT_ACCOUNT=`aws sts get-caller-identity --query 'Account' --output=text` && \
+	export AWS_DEFAULT_REGION="${AWS_REGION}" && \
+	if [ -z "${AWS_DEFAULT_PROFILE}" ]; then echo "AWS_DEFAULT_PROFILE is not set"; fi && \
+	if [ -z "$$AWS_DEFAULT_ACCOUNT" ]; then echo "⚠️  Can't infer AWS credentials from AWS_DEFAULT_ACCOUNT! ⚠️" && exit; fi && \
+	echo "Make sure we bootstrap credentials manually once per AWS account" && \
+	read -p "Are you sure? [y/N] " ans && ans=$${ans:-N} && \
+	if [ $${ans} = y ] || [ $${ans} = Y ]; then \
+		printf $(_SUCCESS) "Running: \`cdk bootstrap aws://$$AWS_DEFAULT_ACCOUNT/$$AWS_DEFAULT_REGION\`..." && \
+		cdk bootstrap aws://$$AWS_DEFAULT_ACCOUNT/$$AWS_DEFAULT_REGION --public-access-block-configuration false ; \
+	else \
+		printf $(_DANGER) "Aborted" ; \
+	fi
+
+.PHONY := remove-cdk-out
+remove-cdk-out:
+	find . -name "cdk.out" | xargs -n 1 rm -rf
+
+.PHONY := synth-oidc
+synth-oidc:
+	@echo "Synthesizing ${DEPLOY_PREFIX}/oidc-cdk"
+	cd ./oidc-cdk && cdk synth
+
+.PHONY := deploy-oidc
+deploy-oidc:
+	@echo "Deploying ${DEPLOY_PREFIX}/oidc-cdk"
+	cd ./oidc-cdk && cdk --require-approval never deploy
+
+.PHONY := aws-info
+aws-info:
+	@echo -n "AWS User: "
+	@aws sts get-caller-identity \
+		--query "$${query:-Arn}" \
+		--output text
+	@echo "AWS Default Region: $$AWS_DEFAULT_REGION"
+	@echo "AWS Default Profile: $$AWS_DEFAULT_PROFILE"
