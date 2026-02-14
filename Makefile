@@ -107,7 +107,7 @@ manual-cdk-bootstrap:
 	fi
 
 .PHONY := test
-test: remove-cdk-ou
+test: remove-cdk-out
 	@echo "Running tests for Cluster (${DEPLOY_PREFIX})"
 
 .PHONY := synth-cluster
