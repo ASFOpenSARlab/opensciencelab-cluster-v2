@@ -1,0 +1,58 @@
+---
+name: Deploy CDK
+on: # yamllint disable-line rule:truthy
+  workflow_dispatch: {}
+  push:
+    paths:
+      - "cluster-cdk/**"
+      # Or changes to this action:
+      - .github/workflows/deploy-cdk-app.yaml
+    branches:
+      - main
+
+jobs:
+  setup:
+    uses: ASFOpenSARlab/osl-utils/.github/workflows/reusable-setup-env.yaml@v1.1.2
+    with:
+      tagname: ${{ inputs.tagname || github.ref_name }}
+
+  main-pipeline:
+    runs-on: ubuntu-latest
+    needs:
+      - setup
+    environment: ${{ needs.setup.outputs.environment }}
+    container: ghcr.io/asfopensarlab/osl-utils:v1.1.2
+    # These permissions are needed to interact with GitHub's OIDC Token endpoint.
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      DEPLOY_PREFIX: ${{ needs.setup.outputs.deploy_prefix }}
+      AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
+      IS_PROD: >-
+        ${{
+          needs.setup.outputs.environment == 'prod' ||
+          needs.setup.outputs.environment == 'stage'
+        }}
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_NUMBER }}:role/deploy_cluster_stack_role
+          aws-region: ${{ vars.AWS_DEFAULT_REGION }}
+
+      - name: Run Cluster Testsuite
+        if: >-
+          ${{
+            needs.setup.outputs.environment != 'prod' &&
+            needs.setup.outputs.environment != 'stage'
+          }}
+        run: |
+          make test
+
+      - name: CDK Deploy Cluster
+        run: |-
+          make deploy-cluster

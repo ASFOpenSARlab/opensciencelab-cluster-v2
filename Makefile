@@ -6,15 +6,23 @@ Makefile commands:
 
     lint:                   Run linting commands
 
-	manual-cdk-bootstrap:   Bootstrap an account for CDK. Especially for OIDC.
-
     cdk-shell:              Enter CDK environment Docker Image
+
+    manual-cdk-bootstrap:   Bootstrap an account for CDK. Especially for OIDC.
+
+    test:					Run PyTest tests
+
+    synth-cluster:          Synth cluster CDK project
+
+    deploy-cluster:         Deploy cluster CDK project
 
     synth-oidc:             Synth OIDC CDK project
 
     deploy-oidc:            Deploy OIDC CDK project
 
     aws-info:               Get AWS account info
+
+    clean:					Remove .build/ & cdk.out/
 
 endef
 export HELP
@@ -62,7 +70,6 @@ lint: remove-cdk-out
 	echo "⚠️⚠️⚠️ Linting was not successful ⚠️⚠️⚠️"
 
 ### CDK Environment
-
 .PHONY := cdk-shell
 cdk-shell:
 	export AWS_DEFAULT_ACCOUNT=`aws sts get-caller-identity --query 'Account' --output=text` && \
@@ -99,9 +106,33 @@ manual-cdk-bootstrap:
 		printf $(_DANGER) "Aborted" ; \
 	fi
 
+.PHONY := test
+test: remove-cdk-out
+	@echo "Running tests for Cluster (${DEPLOY_PREFIX})"
+
+.PHONY := synth-cluster
+synth-cluster:
+	@echo "Synthesizing ${DEPLOY_PREFIX}/cluster-cdk"
+	cd ./cluster-cdk && cdk synth
+
+.PHONY := deploy-cluster
+deploy-cluster:
+	@echo "Deploying ${DEPLOY_PREFIX}/cluster-cdk"
+	cd ./cluster-cdk && cdk --require-approval never deploy
+
+.PHONY := destroy-cluster
+destroy-cluster:
+	@echo "Destroying ${DEPLOY_PREFIX}/cluster-cdk"
+	cd ./cluster-cdk && cdk destroy --force --all
+
 .PHONY := remove-cdk-out
 remove-cdk-out:
 	find . -name "cdk.out" | xargs -n 1 rm -rf
+
+.PHONY := clean
+clean:
+	rm -rf /tmp/.build/ && \
+	rm -rf ./cluster-cdk/cdk.out/
 
 .PHONY := synth-oidc
 synth-oidc:
