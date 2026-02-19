@@ -1,6 +1,3 @@
-import numpy as np
-x = np.array([[1, 2, 3],
-              [4, 5, 6]])
 from aws_cdk import (
     # Duration,
     Stack,
@@ -27,7 +24,6 @@ class ClusterCdkStack(Stack):
             cluster_name="eks-cluster",
             version=eks.KubernetesVersion.V1_34,
             kubectl_layer=lambda_layer_kubectl_v34,
-            scope=scope,
         )
         
         cluster.add_helm_chart(
