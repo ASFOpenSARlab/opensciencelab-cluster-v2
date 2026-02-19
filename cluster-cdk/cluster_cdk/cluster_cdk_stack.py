@@ -1,10 +1,13 @@
+import numpy as np
+x = np.array([[1, 2, 3],
+              [4, 5, 6]])
 from aws_cdk import (
     # Duration,
     Stack,
     # aws_sqs as sqs,
     aws_eks as eks,
+    lambda_layer_kubectl_v34,
 )
-from aws_cdk.lambda_layer_kubectl_v34 import KubectlV34Layer
 from constructs import Construct
 
 
@@ -23,7 +26,7 @@ class ClusterCdkStack(Stack):
             "EksCluster",
             cluster_name="eks-cluster",
             version=eks.KubernetesVersion.V1_34,
-            kubectl_layer=KubectlV34Layer,
+            kubectl_layer=lambda_layer_kubectl_v34,
             scope=scope,
         )
         
