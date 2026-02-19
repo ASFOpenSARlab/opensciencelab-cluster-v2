@@ -24,7 +24,7 @@ class ClusterCdkStack(Stack):
             "EksCluster",
             cluster_name="eks-cluster",
             version=eks.KubernetesVersion.V1_34,
-            kubectl_layer=lambda_layer_kubectl_v34.KubectlV34Layer,
+            kubectl_layer=lambda_layer_kubectl_v34.KubectlV34Layer(self, "KubectlLayer"),
         )
         
         cluster.add_helm_chart(
