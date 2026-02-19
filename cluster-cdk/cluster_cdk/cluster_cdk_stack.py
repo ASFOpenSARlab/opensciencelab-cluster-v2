@@ -2,6 +2,8 @@ from aws_cdk import (
     # Duration,
     Stack,
     # aws_sqs as sqs,
+    aws_eks as eks,
+    lambda_layer_kubectl_v34,
 )
 from constructs import Construct
 
@@ -17,3 +19,16 @@ class ClusterCdkStack(Stack):
         #     self, "ClusterCdkQueue",
         #     visibility_timeout=Duration.seconds(300),
         # )
+        cluster = eks.Cluster(
+            "EksCluster",
+            cluster_name="eks-cluster",
+            version=eks.KubernetesVersion.V1_34,
+            kubectl_layer=lambda_layer_kubectl_v34,
+            scope=scope,
+        )
+        
+        cluster.add_helm_chart(
+            "JupyterHub",
+            version="4.3.2",
+        )
+        

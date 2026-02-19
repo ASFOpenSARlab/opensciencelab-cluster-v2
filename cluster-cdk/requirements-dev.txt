@@ -1,1 +1,3 @@
+aws-cdk-lib==2.238.0
+aws-cdk.lambda_layer_kubectl_v34==2.0.0
 pytest==8.4.2
