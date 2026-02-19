@@ -111,13 +111,13 @@ install-reqs:
 	echo "Installing CDK Build Deps" && \
     mkdir -p /tmp/.build/ && \
     pip freeze > /tmp/.build/installed && \
-    ( ( cat portal-cdk/requirements.txt | \
+    ( ( cat cluster-cdk/requirements.txt | \
     	grep -v "^#" | \
     	cut -d'=' -f1 | \
     	xargs -I{} grep -q {} /tmp/.build/installed && \
 	  echo "All build modules exists" ) || \
-	  ( echo "Installing portal-cdk/requirements.txt" && \
-		pip install -r portal-cdk/requirements.txt ) )
+	  ( echo "Installing cluster-cdk/requirements.txt" && \
+		pip install -r cluster-cdk/requirements.txt ) )
 
 .PHONY := test
 test: remove-cdk-out install-reqs
