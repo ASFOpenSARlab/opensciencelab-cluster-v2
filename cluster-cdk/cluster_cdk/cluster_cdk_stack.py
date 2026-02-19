@@ -21,6 +21,7 @@ class ClusterCdkStack(Stack):
         # )
         cluster = eks.Cluster(
             id="EksCluster",
+            scope=scope,
             cluster_name="eks-cluster",
             version=eks.KubernetesVersion.V1_34,
             kubectl_layer=lambda_layer_kubectl_v34,
