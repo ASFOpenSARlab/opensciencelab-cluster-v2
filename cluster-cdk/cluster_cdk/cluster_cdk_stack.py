@@ -28,6 +28,7 @@ class ClusterCdkStack(Stack):
         )
         
         cluster.add_helm_chart(
+            "JupyterHelmChart",
             chart="JupyterHub",
             version="4.3.2",
         )
