@@ -20,7 +20,7 @@ class ClusterCdkStack(Stack):
         #     visibility_timeout=Duration.seconds(300),
         # )
         cluster = eks.Cluster(
-            "EksCluster",
+            id="EksCluster",
             cluster_name="eks-cluster",
             version=eks.KubernetesVersion.V1_34,
             kubectl_layer=lambda_layer_kubectl_v34,
