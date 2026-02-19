@@ -2,7 +2,7 @@ from aws_cdk import (
     # Duration,
     Stack,
     # aws_sqs as sqs,
-    aws_eks as eks,
+    aws_eks_v2_alpha as eks,
     lambda_layer_kubectl_v34,
 )
 from constructs import Construct
@@ -24,7 +24,10 @@ class ClusterCdkStack(Stack):
             "EksCluster",
             cluster_name="eks-cluster",
             version=eks.KubernetesVersion.V1_34,
-            kubectl_layer=lambda_layer_kubectl_v34.KubectlV34Layer(self, "KubectlLayer"),
+            kubectl_provider_options=eks.KubectlProviderOptions(
+                kubectl_layer=lambda_layer_kubectl_v34.KubectlV34Layer,
+                
+            )
         )
         
         cluster.add_helm_chart(
