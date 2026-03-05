@@ -3,10 +3,11 @@ from aws_cdk import (
     Stack,
     # aws_sqs as sqs,
     aws_ec2 as ec2,
-    aws_eks_v2_alpha as eks,
+    aws_eks_v2 as eks,
     lambda_layer_kubectl_v34,
     aws_iam as iam,
 )
+
 from constructs import Construct
 
 
@@ -14,11 +15,17 @@ class ClusterCdkStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # vpc = ec2.Vpc(
-        #     self,
-        #     "Vpc"
-        # )
-        
+        build_role = iam.Role(
+            self,
+            "ClusterBuildRole",
+            assumed_by=iam.ArnPrincipal("arn:aws:iam::233535791844:root"), # Security issue?
+            role_name="us-west-2-eks-cluster-build-role",
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name(
+                    "AdministratorAccess"
+                )
+            ]
+        )
         
         cluster_role = iam.Role(
             self,
@@ -49,8 +56,6 @@ class ClusterCdkStack(Stack):
                 )
             }
         )
-        
-        # service_account_role = 
 
         ## https://constructs.dev/packages/@aws-cdk/aws-eks-v2-alpha/v/2.238.0-alpha.0/api/Cluster?lang=python
         cluster = eks.Cluster(
@@ -65,64 +70,39 @@ class ClusterCdkStack(Stack):
             # role=cluster_role,
             # vpc=vpc,
         )
+        cluster.role.grant(
+            build_role,
+            "eks:*",
+        )
         
-        
-        ### LOOK INTO THIS
-            ### 
         service_account = cluster.add_service_account(
             "EbsCsiServiceAccount",
-            name="ebs-csi-service-account",
+            name="ebs-csi-controller-sa", # ebs-csi-controller-sa    ebs-csi-service-account
+            namespace="kube-system",
+            overwrite_service_account=True,
         )
         service_account.role.add_to_principal_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=[
-                    "ec2:CreateSnapshot",
+                    # "ec2:*",
                     "ec2:AttachVolume",
-                    "ec2:DetachVolume",
-                    "ec2:ModifyVolume",
+                    "ec2:CreateSnapshot",
+                    "ec2:CreateTags",
+                    "ec2:CreateVolume",
+                    "ec2:DeleteSnapshot",
                     "ec2:DescribeAvailabilityZones",
                     "ec2:DescribeInstances",
                     "ec2:DescribeSnapshots",
                     "ec2:DescribeTags",
-                    "ec2:DescribeVolumes",
                     "ec2:DescribeVolumeStatus",
-                    "ec2:DeleteSnapshot",
-                    "ec2:CreateTags"
+                    "ec2:DescribeVolumes",
+                    "ec2:DetachVolume",
+                    "ec2:ModifyVolume"
                 ],
                 resources=["*"],
-                )
+            )
         )
-        # service_account.role.add_managed_policy(
-        #     iam.ManagedPolicy.#.from_aws_managed_policy_name("AmazonEBSCSIDriverPolicy")
-        # )
-        
-        # cluster_role.add_to_policy(
-        #     iam.PolicyStatement(
-        #         actions=["eks:AccessKubernetesApi", "eks:Describe*", "eks:List*"],
-        #         resources=[cluster.cluster_arn],
-        #     )
-        # )
-        
-#         cluster.add_manifest(
-#             "AwsAuth",
-#             {
-#                 "apiVersion": "v1",
-#                 "kind": "ConfigMap",
-#                 "metadata": {
-#                     "name": "aws-auth",
-#                     "namespace": "kube-system",
-#                 },
-#                 "data":{
-#                     "mapRoles": """
-# - rolearn: arn:aws:iam::233535791844:role/us-west-2-eks-cluster-user-full-access
-#     username: cluster-user-full-access
-#     groups:
-#     - system:masters
-#                     """
-#                 },
-#             }
-#         )
         
         cluster.add_manifest(
             "CsiStorageClass",
@@ -135,13 +115,13 @@ class ClusterCdkStack(Stack):
                         "storageclass.kubernetes.io/is-default-class": "true",
                     },
                 },
-                "provisioner": "ebs.csi.aws.com",
+                "provisioner": "ebs.csi.eks.amazonaws.com",
                 "parameters": {
                     "type": "gp3",
                     "fsType": "ext4",
                 },
                 "allowVolumeExpansion": True,
-                "volumeBindingMode": "Immediate",
+                "volumeBindingMode": "WaitForFirstConsumer", # Immediate WaitForFirstConsumer
             }
         )
         
@@ -165,7 +145,11 @@ class ClusterCdkStack(Stack):
                         "create": False,
                         "name": service_account.service_account_name,
                     }
-                }
+                },
+                "node":
+                    {
+                        "tolerateAllTaints": True,
+                    }
             }
         )
         
