@@ -57,7 +57,7 @@ class ClusterCdkStack(Stack):
             }
         )
 
-        ## https://constructs.dev/packages/@aws-cdk/aws-eks-v2-alpha/v/2.238.0-alpha.0/api/Cluster?lang=python
+        ## https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#provisioning-clusters
         cluster = eks.Cluster(
             self,
             "EksCluster",
@@ -89,7 +89,7 @@ class ClusterCdkStack(Stack):
                     "ec2:AttachVolume",
                     "ec2:CreateSnapshot",
                     "ec2:CreateTags",
-                    "ec2:CreateVolume",
+                    "ec2:CreateVolume", # Remove?
                     "ec2:DeleteSnapshot",
                     "ec2:DescribeAvailabilityZones",
                     "ec2:DescribeInstances",
@@ -124,6 +124,33 @@ class ClusterCdkStack(Stack):
                 "volumeBindingMode": "WaitForFirstConsumer", # Immediate WaitForFirstConsumer
             }
         )
+
+        
+        # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#add-ons
+        eks.Addon(
+            self,
+            "CniAddon",
+            addon_name="vpc-cni",
+            addon_version="v1.20.4-eksbuild.2",
+            cluster=cluster,
+            # configuration_values={},
+        )
+        eks.Addon( # CHeck if needed
+            self,
+            "CoreDnsAddon",
+            addon_name="coredns",
+            addon_version="v1.12.3-eksbuild.1",
+            cluster=cluster,
+            # configuration_values={},
+        )
+        eks.Addon( # CHeck if needed
+            self,
+            "KubeProxyAddon",
+            addon_name="kube-proxy",
+            addon_version="v1.34.0-eksbuild.2",
+            cluster=cluster,
+            # configuration_values={},
+        )
         
         # https://artifacthub.io/packages/helm/aws-ebs-csi-driver/aws-ebs-csi-driver
         cluster.add_helm_chart(
@@ -146,14 +173,17 @@ class ClusterCdkStack(Stack):
                         "name": service_account.service_account_name,
                     }
                 },
-                "node":
-                    {
-                        "tolerateAllTaints": True,
-                    }
             }
         )
         
-        ## https://constructs.dev/packages/@aws-cdk/aws-eks-v2-alpha/v/2.238.0-alpha.0/api/Cluster?lang=python#addHelmChart
+        ## INCREASE READINESS PROBE DELAY for
+        ## hub, proxy?, any pod with readiness probe failing and delay of 0 seconds
+    
+        # EC2 ELB scheme is different
+        
+        ## https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#helm-charts
+        ## https://artifacthub.io/packages/helm/jupyterhub/jupyterhub?modal=values-schema&path=proxy.service.type
+        ## https://z2jh.jupyter.org/en/latest/resources/reference.html
         cluster.add_helm_chart(
             "JupyterhubHelmChart",
             repository="https://jupyterhub.github.io/helm-chart/",
@@ -168,6 +198,14 @@ class ClusterCdkStack(Stack):
                         "pvc":{
                             "storageClassName": "gp3"
                         }
+                    }
+                },
+                "proxy":{
+                    "service":{
+                        "type": "LoadBalancer",
+                        "nodePorts":{
+                            "http": 31235, # Arbitrary port
+                        },
                     }
                 },
                 "custom": {
