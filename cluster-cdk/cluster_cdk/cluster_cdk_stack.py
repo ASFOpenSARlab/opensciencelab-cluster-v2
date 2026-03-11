@@ -1,8 +1,6 @@
 from aws_cdk import (
     Duration,
     Stack,
-    # aws_sqs as sqs,
-    aws_ec2 as ec2,
     aws_eks_v2 as eks,
     lambda_layer_kubectl_v34,
     aws_iam as iam,
@@ -77,7 +75,7 @@ class ClusterCdkStack(Stack):
         
         service_account = cluster.add_service_account(
             "EbsCsiServiceAccount",
-            name="ebs-csi-controller-sa", # ebs-csi-controller-sa    ebs-csi-service-account
+            name="ebs-csi-controller-sa",
             namespace="kube-system",
             overwrite_service_account=True,
         )
@@ -85,7 +83,6 @@ class ClusterCdkStack(Stack):
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=[
-                    # "ec2:*",
                     "ec2:AttachVolume",
                     "ec2:CreateSnapshot",
                     "ec2:CreateTags",
@@ -156,11 +153,11 @@ class ClusterCdkStack(Stack):
         cluster.add_helm_chart(
             "AwsEbsCsiDriver",
             repository="https://kubernetes-sigs.github.io/aws-ebs-csi-driver",
-            # atomic=True,
+            atomic=True,
             chart="aws-ebs-csi-driver",
             namespace="kube-system",
             version="2.56.1",
-            # timeout=Duration.minutes(6),
+            timeout=Duration.minutes(8),
             values={
                 "controller": {
                     "extraCreateMetadata": True,
@@ -176,37 +173,37 @@ class ClusterCdkStack(Stack):
             }
         )
         
-        ## INCREASE READINESS PROBE DELAY for
-        ## hub, proxy?, any pod with readiness probe failing and delay of 0 seconds
-    
-        # EC2 ELB scheme is different
-        
         ## https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#helm-charts
-        ## https://artifacthub.io/packages/helm/jupyterhub/jupyterhub?modal=values-schema&path=proxy.service.type
+        ## https://artifacthub.io/packages/helm/jupyterhub/jupyterhub?modal=values-schema
         ## https://z2jh.jupyter.org/en/latest/resources/reference.html
         cluster.add_helm_chart(
             "JupyterhubHelmChart",
             repository="https://jupyterhub.github.io/helm-chart/",
-            # atomic=True,
+            atomic=True,
             chart="jupyterhub",
             version="4.3.2",
             namespace="jupyter",
-            # timeout=Duration.minutes(10),
+            timeout=Duration.minutes(15),
             values={
-                "hub":{
+                "hub": {
                     "db": {
                         "pvc":{
-                            "storageClassName": "gp3"
+                            "storageClassName": "gp3",
                         }
-                    }
+                    },
                 },
                 "proxy":{
                     "service":{
                         "type": "LoadBalancer",
                         "nodePorts":{
-                            "http": 31235, # Arbitrary port
+                            "http": 30052,
                         },
-                    }
+                        "annotations":{
+                            "service.beta.kubernetes.io/aws-load-balancer-type": "external",
+                            "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type": "ip",
+                            "service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
+                        }
+                    },
                 },
                 "custom": {
                     "COST_TAG_KEY": "hello",
