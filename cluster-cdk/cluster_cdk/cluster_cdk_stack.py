@@ -16,19 +16,21 @@ class ClusterCdkStack(Stack):
         build_role = iam.Role(
             self,
             "ClusterBuildRole",
-            assumed_by=iam.ArnPrincipal("arn:aws:iam::233535791844:root"), # Security issue?
+            assumed_by=iam.ArnPrincipal(
+                "arn:aws:iam::233535791844:root"  # Security issue?
+            ),
             role_name="us-west-2-eks-cluster-build-role",
             managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "AdministratorAccess"
-                )
-            ]
+                iam.ManagedPolicy.from_aws_managed_policy_name("AdministratorAccess")
+            ],
         )
-        
+
         cluster_role = iam.Role(
             self,
             "ClusterFullAccess",
-            assumed_by=iam.ArnPrincipal("arn:aws:iam::233535791844:root"), # Security issue?
+            assumed_by=iam.ArnPrincipal(
+                "arn:aws:iam::233535791844:root"  # Security issue?
+            ),
             role_name="us-west-2-eks-cluster-user-full-access",
             description="IAM Role for accessing the eks cluster",
             inline_policies={
@@ -44,15 +46,15 @@ class ClusterCdkStack(Stack):
                             effect=iam.Effect.ALLOW,
                         ),
                         iam.PolicyStatement(
-                            actions=[
-                                "ssm:GetParameter"
+                            actions=["ssm:GetParameter"],
+                            resources=[
+                                "arn:aws:ssm:us-west-2:233535791844:parameter/*"
                             ],
-                            resources=["arn:aws:ssm:us-west-2:233535791844:parameter/*"],
                             effect=iam.Effect.ALLOW,
                         ),
-                    ]
+                    ],
                 )
-            }
+            },
         )
 
         ## https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#provisioning-clusters
@@ -65,14 +67,12 @@ class ClusterCdkStack(Stack):
                 kubectl_layer=lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl"),
             ),
             masters_role=cluster_role,
-            # role=cluster_role,
-            # vpc=vpc,
         )
         cluster.role.grant(
             build_role,
             "eks:*",
         )
-        
+
         service_account = cluster.add_service_account(
             "EbsCsiServiceAccount",
             name="ebs-csi-controller-sa",
@@ -86,7 +86,7 @@ class ClusterCdkStack(Stack):
                     "ec2:AttachVolume",
                     "ec2:CreateSnapshot",
                     "ec2:CreateTags",
-                    "ec2:CreateVolume", # Remove?
+                    "ec2:CreateVolume",  # Remove?
                     "ec2:DeleteSnapshot",
                     "ec2:DescribeAvailabilityZones",
                     "ec2:DescribeInstances",
@@ -95,12 +95,12 @@ class ClusterCdkStack(Stack):
                     "ec2:DescribeVolumeStatus",
                     "ec2:DescribeVolumes",
                     "ec2:DetachVolume",
-                    "ec2:ModifyVolume"
+                    "ec2:ModifyVolume",
                 ],
                 resources=["*"],
             )
         )
-        
+
         cluster.add_manifest(
             "CsiStorageClass",
             {
@@ -118,8 +118,8 @@ class ClusterCdkStack(Stack):
                     "fsType": "ext4",
                 },
                 "allowVolumeExpansion": True,
-                "volumeBindingMode": "WaitForFirstConsumer", # Immediate WaitForFirstConsumer
-            }
+                "volumeBindingMode": "WaitForFirstConsumer",
+            },
         )
 
         
@@ -132,7 +132,7 @@ class ClusterCdkStack(Stack):
             cluster=cluster,
             # configuration_values={},
         )
-        eks.Addon( # CHeck if needed
+        eks.Addon(  # Check if needed
             self,
             "CoreDnsAddon",
             addon_name="coredns",
@@ -140,7 +140,7 @@ class ClusterCdkStack(Stack):
             cluster=cluster,
             # configuration_values={},
         )
-        eks.Addon( # CHeck if needed
+        eks.Addon(  # Check if needed
             self,
             "KubeProxyAddon",
             addon_name="kube-proxy",
@@ -148,7 +148,7 @@ class ClusterCdkStack(Stack):
             cluster=cluster,
             # configuration_values={},
         )
-        
+
         # https://artifacthub.io/packages/helm/aws-ebs-csi-driver/aws-ebs-csi-driver
         cluster.add_helm_chart(
             "AwsEbsCsiDriver",
@@ -168,11 +168,11 @@ class ClusterCdkStack(Stack):
                     "serviceAccount": {
                         "create": False,
                         "name": service_account.service_account_name,
-                    }
+                    },
                 },
-            }
+            },
         )
-        
+
         ## https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#helm-charts
         ## https://artifacthub.io/packages/helm/jupyterhub/jupyterhub?modal=values-schema
         ## https://z2jh.jupyter.org/en/latest/resources/reference.html
@@ -187,28 +187,24 @@ class ClusterCdkStack(Stack):
             values={
                 "hub": {
                     "db": {
-                        "pvc":{
+                        "pvc": {
                             "storageClassName": "gp3",
                         }
                     },
                 },
-                "proxy":{
-                    "service":{
+                "proxy": {
+                    "service": {
                         "type": "LoadBalancer",
-                        "nodePorts":{
+                        "nodePorts": {
                             "http": 30052,
                         },
-                        "annotations":{
+                        "annotations": {
                             "service.beta.kubernetes.io/aws-load-balancer-type": "external",
                             "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type": "ip",
                             "service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
-                        }
+                        },
                     },
                 },
-                "custom": {
-                    "COST_TAG_KEY": "hello",
-                    "COST_TAG_VALUE": "world"
-                }
+                "custom": {"COST_TAG_KEY": "hello", "COST_TAG_VALUE": "world"},
             },
         )
-        
