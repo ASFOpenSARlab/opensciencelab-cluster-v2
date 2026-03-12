@@ -106,17 +106,30 @@ manual-cdk-bootstrap:
 		printf $(_DANGER) "Aborted" ; \
 	fi
 
+.PHONY := install-reqs
+install-reqs:
+	echo "Installing CDK Build Deps" && \
+    mkdir -p /tmp/.build/ && \
+    pip freeze > /tmp/.build/installed && \
+    ( ( cat cluster-cdk/requirements.txt | \
+    	grep -v "^#" | \
+    	cut -d'=' -f1 | \
+    	xargs -I{} grep -q {} /tmp/.build/installed && \
+	  echo "All build modules exists" ) || \
+	  ( echo "Installing cluster-cdk/requirements.txt" && \
+		pip install -r cluster-cdk/requirements.txt ) )
+
 .PHONY := test
-test: remove-cdk-out
+test: remove-cdk-out install-reqs
 	@echo "Running tests for Cluster (${DEPLOY_PREFIX})"
 
 .PHONY := synth-cluster
-synth-cluster:
+synth-cluster: install-reqs
 	@echo "Synthesizing ${DEPLOY_PREFIX}/cluster-cdk"
 	cd ./cluster-cdk && cdk synth
 
 .PHONY := deploy-cluster
-deploy-cluster:
+deploy-cluster: install-reqs
 	@echo "Deploying ${DEPLOY_PREFIX}/cluster-cdk"
 	cd ./cluster-cdk && cdk --require-approval never deploy
 

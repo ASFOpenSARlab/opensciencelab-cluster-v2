@@ -41,7 +41,7 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_NUMBER }}:role/deploy_cluster_stack_role
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_NUMBER }}:role/deploy_cluster_stack_role
           aws-region: ${{ vars.AWS_DEFAULT_REGION }}
 
       - name: Run Cluster Testsuite
