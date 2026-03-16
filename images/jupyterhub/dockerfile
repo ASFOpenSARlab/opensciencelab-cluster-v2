@@ -1,5 +1,4 @@
-ARG JUPYTERHUB_HUB_HELM_VERSION=4.3.2
-FROM quay.io/jupyterhub/k8s-hub:$JUPYTERHUB_HUB_HELM_VERSION AS release
+FROM quay.io/jupyterhub/k8s-hub:4.3.2 AS release
 
 # By default, the notebook base image is set to non-sudo user joyvan. This makes root-ful actions difficult.
 USER root
@@ -30,4 +29,4 @@ RUN python3 -m pip install --upgrade \
 # Not sure what this does and may not be needed
 #RUN cp -r /tmp/site-packages/* /usr/local/lib/python*/site-packages
 
-USER jovyan 
+USER jovyan
