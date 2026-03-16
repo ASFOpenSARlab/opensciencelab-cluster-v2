@@ -21,7 +21,7 @@ RUN python3 -m pip install --upgrade \
     awscli \
     pyyaml \
     boto3 \
-    kubernetes \
+    kubernetes==34.1.0 \
     kubernetes_asyncio \
     opensarlab-backend==1.0.4 \
     --
