@@ -7,6 +7,8 @@ on: # yamllint disable-line rule:truthy
   push:
     paths:
       - "images/jupyterhub/**"
+      # Or changes to this action:
+      - .github/workflows/build-and-publish-jupyterhub-image.yaml
 
 # Defines two custom environment variables for the workflow. These are used for the Container registry domain, and a name for the Docker image that this workflow builds.
 env:

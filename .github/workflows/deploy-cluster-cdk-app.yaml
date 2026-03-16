@@ -6,7 +6,7 @@ on: # yamllint disable-line rule:truthy
     paths:
       - "cluster-cdk/**"
       # Or changes to this action:
-      - .github/workflows/deploy-cdk-app.yaml
+      - .github/workflows/deploy-cluster-cdk-app.yaml
     branches:
       - main
 

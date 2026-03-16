@@ -185,6 +185,11 @@ class ClusterCdkStack(Stack):
             timeout=Duration.minutes(15),
             values={
                 "hub": {
+                    "image": {
+                        "name": "ghcr.io/asfopensarlab/opensciencelab-cluster-v2/cluster/jupyterhub",
+                        "tag": "main",
+                        "pullPolicy": "Always",
+                    },
                     "db": {
                         "pvc": {
                             "storageClassName": "gp3",
