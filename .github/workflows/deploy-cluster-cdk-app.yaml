@@ -14,18 +14,32 @@ on: # yamllint disable-line rule:truthy
     #  - "v*.*.*"
 
 jobs:
+  setup:
+    uses: ASFOpenSARlab/osl-utils/.github/workflows/reusable-setup-env.yaml@v1.1.2
+    with:
+      tagname: ${{ inputs.tagname || github.ref_name }}
+
+  check-for-image-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      jupyterhub: ${{ steps.filter.outputs.jupyterhub }}
+    steps:
+      - uses: dorny/paths-filter@v4
+        id: jupyterhub
+        with:
+          filters: |
+            jupyterhub:
+              - 'images/jupyterhub/**'
+
   build-and-publish-jupyterhub-image:
     runs-on: ubuntu-latest
+    needs: check-for-image-changes
+    if: ${{ needs.check-for-image-changes.outputs.jupyterhub == 'true' }}
     steps:
       - name: Build and Publish Custom JupyterHub Image
         uses: ./build-and-publish-jupyterhub-image.yaml
         with:
           ref_name: ${{ inputs.tagname || github.ref_name }}
-
-  setup:
-    uses: ASFOpenSARlab/osl-utils/.github/workflows/reusable-setup-env.yaml@v1.1.2
-    with:
-      tagname: ${{ inputs.tagname || github.ref_name }}
 
   build-and-deploy-cluster:
     runs-on: ubuntu-latest
