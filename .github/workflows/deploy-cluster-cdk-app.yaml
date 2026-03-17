@@ -9,17 +9,29 @@ on: # yamllint disable-line rule:truthy
       - .github/workflows/deploy-cluster-cdk-app.yaml
     branches:
       - main
+    # If matching to a tag, the action will always run regardless if there are any changes in the path
+    #tags:
+    #  - "v*.*.*"
 
 jobs:
+  build-and-publish-jupyterhub-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build and Publish Custom JupyterHub Image
+        uses: ./build-and-publish-jupyterhub-image.yaml
+        with:
+          ref_name: ${{ inputs.tagname || github.ref_name }}
+
   setup:
     uses: ASFOpenSARlab/osl-utils/.github/workflows/reusable-setup-env.yaml@v1.1.2
     with:
       tagname: ${{ inputs.tagname || github.ref_name }}
 
-  main-pipeline:
+  build-and-deploy-cluster:
     runs-on: ubuntu-latest
     needs:
       - setup
+      - build-and-deploy-jupyterhub
     environment: ${{ needs.setup.outputs.environment }}
     container: ghcr.io/asfopensarlab/osl-utils:v1.1.2
     # These permissions are needed to interact with GitHub's OIDC Token endpoint.
