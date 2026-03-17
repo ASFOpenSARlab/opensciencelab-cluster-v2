@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - setup
-      - build-and-deploy-jupyterhub
+      - build-and-publish-jupyterhub-image
     environment: ${{ needs.setup.outputs.environment }}
     container: ghcr.io/asfopensarlab/osl-utils:v1.1.2
     # These permissions are needed to interact with GitHub's OIDC Token endpoint.
