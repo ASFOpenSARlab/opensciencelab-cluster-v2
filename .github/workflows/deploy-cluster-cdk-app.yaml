@@ -8,8 +8,6 @@ on: # yamllint disable-line rule:truthy
         required: true
         type: string
   push:
-    paths:
-      - .github/workflows/deploy-cluster-cdk-app.yaml
     branches:
       - main
     # If matching to a tag, the action will always run regardless if there are any changes in the path
