@@ -1,2 +1,2 @@
-aws-cdk-lib==2.238.0
-pytest==8.4.2
+aws-cdk-lib==2.243.0
+pytest>=8.4.2
