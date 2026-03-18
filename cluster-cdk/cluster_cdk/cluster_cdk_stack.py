@@ -1,3 +1,5 @@
+import os
+
 from aws_cdk import (
     Duration,
     Stack,
@@ -12,6 +14,9 @@ from constructs import Construct
 class ClusterCdkStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
+
+        # Since deploy_prefix is required, intentionally throw an error if not existing.
+        DEPLOY_PREFIX = os.environ["DEPLOY_PREFIX"]
 
         build_role = iam.Role(
             self,
@@ -187,7 +192,7 @@ class ClusterCdkStack(Stack):
                 "hub": {
                     "image": {
                         "name": "ghcr.io/asfopensarlab/opensciencelab-cluster-v2/cluster/jupyterhub",
-                        "tag": "main",
+                        "tag": DEPLOY_PREFIX,
                         "pullPolicy": "Always",
                     },
                     "db": {
