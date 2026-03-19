@@ -20,6 +20,8 @@ jobs:
   build-and-publish-jupyterhub-image:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v6
       - name: Build and Publish Custom JupyterHub Image
         uses: ./build-and-publish-jupyterhub-image.yaml
         with:
