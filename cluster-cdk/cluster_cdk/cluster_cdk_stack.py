@@ -10,6 +10,13 @@ from aws_cdk import (
 
 from constructs import Construct
 
+# SMCE required observability policies
+SMCE_POLICIES = [
+    "AmazonSSMManagedInstanceCore",
+    "CloudWatchAgentAdminPolicy",
+    "CloudWatchAgentServerPolicy",
+]
+
 
 class ClusterCdkStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
@@ -63,7 +70,7 @@ class ClusterCdkStack(Stack):
         )
 
         ## https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#provisioning-clusters
-        cluster = eks.Cluster(
+        self.cluster = eks.Cluster(
             self,
             "EksCluster",
             cluster_name="eks-cluster",
@@ -73,12 +80,18 @@ class ClusterCdkStack(Stack):
             ),
             masters_role=cluster_role,
         )
-        cluster.role.grant(
+        self.cluster.role.grant(
             build_role,
             "eks:*",
         )
 
-        service_account = cluster.add_service_account(
+        ##  Grab the node role, and attach SMCE Policies.
+        # NOTE: EksClusternodePoolRole will need to change to f"{ClusterId}nodePoolRole" if
+        # self.cluster's id is changed from "EksCluster"
+        self.node_role = self._find_node_role_by_id(node_id="EksClusternodePoolRole")
+        self._attach_role_policies(self.node_role)
+
+        service_account = self.cluster.add_service_account(
             "EbsCsiServiceAccount",
             name="ebs-csi-controller-sa",
             namespace="kube-system",
@@ -106,7 +119,7 @@ class ClusterCdkStack(Stack):
             )
         )
 
-        cluster.add_manifest(
+        self.cluster.add_manifest(
             "CsiStorageClass",
             {
                 "apiVersion": "storage.k8s.io/v1",
@@ -133,7 +146,7 @@ class ClusterCdkStack(Stack):
             "CniAddon",
             addon_name="vpc-cni",
             addon_version="v1.20.4-eksbuild.2",
-            cluster=cluster,
+            cluster=self.cluster,
             # configuration_values={},
         )
         eks.Addon(  # Check if needed
@@ -141,7 +154,7 @@ class ClusterCdkStack(Stack):
             "CoreDnsAddon",
             addon_name="coredns",
             addon_version="v1.12.3-eksbuild.1",
-            cluster=cluster,
+            cluster=self.cluster,
             # configuration_values={},
         )
         eks.Addon(  # Check if needed
@@ -149,12 +162,12 @@ class ClusterCdkStack(Stack):
             "KubeProxyAddon",
             addon_name="kube-proxy",
             addon_version="v1.34.0-eksbuild.2",
-            cluster=cluster,
+            cluster=self.cluster,
             # configuration_values={},
         )
 
         # https://artifacthub.io/packages/helm/aws-ebs-csi-driver/aws-ebs-csi-driver
-        cluster.add_helm_chart(
+        self.cluster.add_helm_chart(
             "AwsEbsCsiDriver",
             repository="https://kubernetes-sigs.github.io/aws-ebs-csi-driver",
             atomic=True,
@@ -180,7 +193,7 @@ class ClusterCdkStack(Stack):
         ## https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#helm-charts
         ## https://artifacthub.io/packages/helm/jupyterhub/jupyterhub?modal=values-schema
         ## https://z2jh.jupyter.org/en/latest/resources/reference.html
-        cluster.add_helm_chart(
+        self.cluster.add_helm_chart(
             "JupyterhubHelmChart",
             repository="https://jupyterhub.github.io/helm-chart/",
             atomic=True,
@@ -217,3 +230,15 @@ class ClusterCdkStack(Stack):
                 "custom": {"COST_TAG_KEY": "hello", "COST_TAG_VALUE": "world"},
             },
         )
+
+    def _find_node_role_by_id(self, node_id):
+        for child in self.cluster.node.find_all():
+            if isinstance(child, iam.Role):
+                if child.node.id == node_id:
+                    return child
+
+    def _attach_role_policies(self, role):
+        for policy_name in SMCE_POLICIES:
+            role.add_managed_policy(
+                iam.ManagedPolicy.from_aws_managed_policy_name(policy_name)
+            )
