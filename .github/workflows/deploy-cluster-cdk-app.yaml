@@ -18,12 +18,9 @@ jobs:
       tagname: ${{ inputs.tagname || github.ref_name }}
 
   build-and-publish-jupyterhub-image:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Build and Publish Custom JupyterHub Image
-        uses: ./.github/workflows/build-and-publish-jupyterhub-image.yaml
-        with:
-          ref_name: ${{ inputs.tagname || github.ref_name }}
+    uses: ./.github/workflows/build-and-publish-jupyterhub-image.yaml
+    with:
+      ref_name: ${{ inputs.tagname || github.ref_name }}
 
   build-and-deploy-cluster:
     runs-on: ubuntu-latest
