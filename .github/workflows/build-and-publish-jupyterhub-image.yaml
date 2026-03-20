@@ -1,4 +1,5 @@
 ---
+# yamllint disable rule:line-length
 # https://docs.github.com/en/actions/publishing-packages/publishing-docker-images
 name: Build and Publish jupyterhub image to GHCR
 
