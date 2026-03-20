@@ -4,19 +4,23 @@ FROM quay.io/jupyterhub/k8s-hub:4.3.2 AS release
 USER root
 
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt update && \
-    apt install --no-install-recommends -y \
+RUN apt-get update && \
+    apt-get install --no-install-recommends -y \
     tzdata
-RUN ln -fs /usr/share/zoneinfo/America/Alaska /etc/localtime
-RUN dpkg-reconfigure --frontend noninteractive tzdata
-RUN apt install --no-install-recommends -y \
+
+# Configue timezone
+RUN ln -fs /usr/share/zoneinfo/America/Alaska /etc/localtime &&\
+    dpkg-reconfigure --frontend noninteractive tzdata
+
+# Install system libs
+RUN apt-get install --no-install-recommends -y \
     python3 \
     python3-pip \
     less \
     vim \
     patch
 
-RUN python3 --version
+# Install python packages to make our lives easier
 RUN python3 -m pip install --upgrade \
     awscli \
     pyyaml \
