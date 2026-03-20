@@ -75,6 +75,18 @@ class ClusterCdkStack(Stack):
             default_capacity=0,
         )
 
+        # Grant user access?
+        self.cluster.grant_access(
+            "UserAccessGrant",
+            principal=f"arn:aws:iam::{self.account}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_Project-Admin_0a3eae3e28d91b10",
+            access_policies=[
+                eks.AccessPolicy.from_access_policy_name(
+                    "AmazonEKSClusterAdminPolicy",
+                    access_scope_type=eks.AccessScopeType.CLUSTER,
+                ),
+            ],
+        )
+
         # https://github.com/aws/aws-cdk/issues/37012
         self.cluster.add_nodegroup_capacity(
             "NodeGroupOverride",
@@ -195,43 +207,43 @@ class ClusterCdkStack(Stack):
         ## https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#helm-charts
         ## https://artifacthub.io/packages/helm/jupyterhub/jupyterhub?modal=values-schema
         ## https://z2jh.jupyter.org/en/latest/resources/reference.html
-        self.cluster.add_helm_chart(
-            "JupyterhubHelmChart",
-            repository="https://jupyterhub.github.io/helm-chart/",
-            atomic=True,
-            chart="jupyterhub",
-            version="4.3.2",
-            namespace="jupyter",
-            timeout=Duration.minutes(15),
-            values={
-                "hub": {
-                    "image": {
-                        "name": "ghcr.io/asfopensarlab/opensciencelab-cluster-v2/cluster/jupyterhub",
-                        "tag": self.JUPYTER_HUB_DOCKER_TAG,
-                        "pullPolicy": "Always",
-                    },
-                    "db": {
-                        "pvc": {
-                            "storageClassName": "gp3",
-                        }
-                    },
-                },
-                "proxy": {
-                    "service": {
-                        "type": "LoadBalancer",
-                        "nodePorts": {
-                            "http": 30052,
-                        },
-                        "annotations": {
-                            "service.beta.kubernetes.io/aws-load-balancer-type": "external",
-                            "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type": "ip",
-                            "service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
-                        },
-                    },
-                },
-                "custom": {"COST_TAG_KEY": "hello", "COST_TAG_VALUE": "world"},
-            },
-        )
+        # self.cluster.add_helm_chart(
+        #     "JupyterhubHelmChart",
+        #     repository="https://jupyterhub.github.io/helm-chart/",
+        #     atomic=True,
+        #     chart="jupyterhub",
+        #     version="4.3.2",
+        #     namespace="jupyter",
+        #     timeout=Duration.minutes(15),
+        #     values={
+        #         "hub": {
+        #             "image": {
+        #                 "name": "ghcr.io/asfopensarlab/opensciencelab-cluster-v2/cluster/jupyterhub",
+        #                 "tag": self.JUPYTER_HUB_DOCKER_TAG,
+        #                 "pullPolicy": "Always",
+        #             },
+        #             "db": {
+        #                 "pvc": {
+        #                     "storageClassName": "gp3",
+        #                 }
+        #             },
+        #         },
+        #         "proxy": {
+        #             "service": {
+        #                 "type": "LoadBalancer",
+        #                 "nodePorts": {
+        #                     "http": 30052,
+        #                 },
+        #                 "annotations": {
+        #                     "service.beta.kubernetes.io/aws-load-balancer-type": "external",
+        #                     "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type": "ip",
+        #                     "service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
+        #                 },
+        #             },
+        #         },
+        #         "custom": {"COST_TAG_KEY": "hello", "COST_TAG_VALUE": "world"},
+        #     },
+        # )
 
     def _find_node_role_by_id(self, node_id):
         for child in self.cluster.node.find_all():
