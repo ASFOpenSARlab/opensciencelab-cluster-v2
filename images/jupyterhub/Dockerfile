@@ -1,3 +1,4 @@
+# hadolint global ignore=DL3008,3013,3059  # Ignore pinned dependencies and connsecutive RUNs
 FROM quay.io/jupyterhub/k8s-hub:4.3.2 AS release
 
 # By default, the notebook base image is set to non-sudo user joyvan. This makes root-ful actions difficult.
@@ -18,10 +19,11 @@ RUN apt-get install --no-install-recommends -y \
     python3-pip \
     less \
     vim \
-    patch
+    patch && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install python packages to make our lives easier
-RUN python3 -m pip install --upgrade \
+RUN python3 -m pip install --no-cache-dir --upgrade \
     awscli \
     pyyaml \
     boto3 \
