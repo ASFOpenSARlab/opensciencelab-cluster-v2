@@ -166,9 +166,7 @@ class ClusterCdkStack(Stack):
                 "controller": {
                     "extraCreateMetadata": True,
                     "k8sTagClusterId": "eks-cluster",
-                    # "extraVolumeTags": { # For cost tracking per cluster?
-                    #     "hello": "world"
-                    # },
+                    "extraVolumeTags": {"osl-billing": JUPYTER_HUB_DOCKER_TAG},
                     "serviceAccount": {
                         "create": False,
                         "name": service_account.service_account_name,
@@ -187,7 +185,7 @@ class ClusterCdkStack(Stack):
             chart="jupyterhub",
             version="4.3.2",
             namespace="jupyter",
-            timeout=Duration.minutes(15),
+            timeout=Duration.minutes(10),
             values={
                 "hub": {
                     "image": {
