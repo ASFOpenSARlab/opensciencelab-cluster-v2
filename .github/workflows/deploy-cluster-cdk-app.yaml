@@ -34,7 +34,8 @@ jobs:
       id-token: write
       contents: read
     env:
-      DEPLOY_PREFIX: ${{ needs.setup.outputs.deploy_prefix }}.${{ needs.setup.outputs.shortsha }}
+      DEPLOY_PREFIX: ${{ needs.setup.outputs.deploy_prefix }}
+      JUPYTER_HUB_DOCKER_TAG: ${{ needs.setup.outputs.deploy_prefix }}.${{ needs.setup.outputs.shortsha }}
       AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       IS_PROD: >-
         ${{

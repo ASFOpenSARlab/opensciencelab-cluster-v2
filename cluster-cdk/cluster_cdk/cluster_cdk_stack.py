@@ -15,8 +15,8 @@ class ClusterCdkStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # Since deploy_prefix is required, intentionally throw an error if not existing.
-        DEPLOY_PREFIX = os.environ["DEPLOY_PREFIX"]
+        # Custom images built before deployment share a common tag based off the deploy_prefix and short sha
+        JUPYTER_HUB_DOCKER_TAG = os.environ["JUPYTER_HUB_DOCKER_TAG"]
 
         build_role = iam.Role(
             self,
@@ -192,7 +192,7 @@ class ClusterCdkStack(Stack):
                 "hub": {
                     "image": {
                         "name": "ghcr.io/asfopensarlab/opensciencelab-cluster-v2/cluster/jupyterhub",
-                        "tag": DEPLOY_PREFIX,
+                        "tag": JUPYTER_HUB_DOCKER_TAG,
                         "pullPolicy": "Always",
                     },
                     "db": {
