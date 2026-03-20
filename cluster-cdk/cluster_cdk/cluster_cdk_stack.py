@@ -28,6 +28,30 @@ class ClusterCdkStack(Stack):
         self.DEPLOY_PREFIX = os.getenv("DEPLOY_PREFIX")
         self.JUPYTER_HUB_DOCKER_TAG = os.getenv("JUPYTER_HUB_DOCKER_TAG")
         self.EKS_NODE_TYPE = os.getenv("EKS_NODE_TYPE")
+        self.SMCE_IAM_USER = os.getenv("SMCE_IAM_USER")
+
+        # Two subnets for EKS
+        self.public_subnet = ec2.SubnetConfiguration(
+            name="PublicSubnet",
+            subnet_type=ec2.SubnetType.PUBLIC,
+            cidr_mask=24,
+        )
+        self.private_subnet = ec2.SubnetConfiguration(
+            name="PrivateSubnetWithEgress",
+            subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
+            cidr_mask=24,
+        )
+
+        # Create a custom VPC restricted to the single AZ
+        self.vpc = ec2.Vpc(
+            self,
+            "EksVPC",
+            #max_azs=2,
+            availability_zones=[f"{self.region}a", f"{self.region}b"],
+            ip_addresses=ec2.IpAddresses.cidr("10.0.0.0/16"),
+            # Configure subnet types for EKS (e.g., Public and Private)
+            subnet_configuration=[self.public_subnet, self.private_subnet],
+        )
 
         cluster_role = iam.Role(
             self,
@@ -66,6 +90,7 @@ class ClusterCdkStack(Stack):
             self,
             "EksCluster",
             cluster_name=f"eks-cluster-{self.DEPLOY_PREFIX}",
+            vpc=self.vpc,
             version=eks.KubernetesVersion.V1_34,
             kubectl_provider_options=eks.KubectlProviderOptions(
                 kubectl_layer=lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl"),
@@ -75,10 +100,10 @@ class ClusterCdkStack(Stack):
             default_capacity=0,
         )
 
-        # Grant user access?
+        # Grant user access
         self.cluster.grant_access(
             "UserAccessGrant",
-            principal=f"arn:aws:iam::{self.account}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_Project-Admin_0a3eae3e28d91b10",
+            principal=f"arn:aws:iam::{self.account}:role/aws-reserved/sso.amazonaws.com/{self.SMCE_IAM_USER}",
             access_policies=[
                 eks.AccessPolicy.from_access_policy_name(
                     "AmazonEKSClusterAdminPolicy",
@@ -99,6 +124,11 @@ class ClusterCdkStack(Stack):
             instance_types=[
                 ec2.InstanceType(self.EKS_NODE_TYPE),
             ],
+            # Force the compute in the public subnet, in a single AZ
+            subnets=ec2.SubnetSelection(
+                subnet_type=ec2.SubnetType.PUBLIC,
+                availability_zones=[f"{self.region}a"]  # Force compute into UW2a
+            )
         )
 
 
@@ -180,29 +210,40 @@ class ClusterCdkStack(Stack):
             # configuration_values={},
         )
 
-        # https://artifacthub.io/packages/helm/aws-ebs-csi-driver/aws-ebs-csi-driver
-        self.cluster.add_helm_chart(
+        # https://docs.aws.amazon.com/eks/latest/userguide/workloads-add-ons-available-eks.html#add-ons-aws-ebs-csi-driver
+        eks.Addon(  # Check if needed
+            self,
             "AwsEbsCsiDriver",
-            repository="https://kubernetes-sigs.github.io/aws-ebs-csi-driver",
-            atomic=True,
-            chart="aws-ebs-csi-driver",
-            namespace="kube-system",
-            version="2.56.1",
-            timeout=Duration.minutes(8),
-            values={
-                "controller": {
-                    "extraCreateMetadata": True,
-                    "k8sTagClusterId": "eks-cluster",
-                    # "extraVolumeTags": { # For cost tracking per cluster?
-                    #     "hello": "world"
-                    # },
-                    "serviceAccount": {
-                        "create": False,
-                        "name": service_account.service_account_name,
-                    },
-                },
-            },
+            addon_name="aws-ebs-csi-driver",
+            addon_version="v1.56.0-eksbuild.1",
+            cluster=self.cluster,
+            # configuration_values={},
         )
+
+        # https://artifacthub.io/packages/helm/aws-ebs-csi-driver/aws-ebs-csi-driver
+        # self.cluster.add_helm_chart(
+        #     "AwsEbsCsiDriver",
+        #     repository="https://kubernetes-sigs.github.io/aws-ebs-csi-driver",
+        #     atomic=True,
+        #     chart="aws-ebs-csi-driver",
+        #     #release=f"osl-ebs-driver-{self.DEPLOY_PREFIX.lower()}",
+        #     namespace="kube-system",
+        #     version="2.56.1",
+        #     timeout=Duration.minutes(8),
+        #     values={
+        #         "controller": {
+        #             "extraCreateMetadata": True,
+        #             "k8sTagClusterId": self.cluster.cluster_name,
+        #             # "extraVolumeTags": { # For cost tracking per cluster?
+        #             #     "hello": "world"
+        #             # },
+        #             "serviceAccount": {
+        #                 "create": False,
+        #                 "name": service_account.service_account_name,
+        #             },
+        #         },
+        #     },
+        # )
 
         ## https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#helm-charts
         ## https://artifacthub.io/packages/helm/jupyterhub/jupyterhub?modal=values-schema
@@ -212,6 +253,7 @@ class ClusterCdkStack(Stack):
         #     repository="https://jupyterhub.github.io/helm-chart/",
         #     atomic=True,
         #     chart="jupyterhub",
+        #     #release=f"osl-jupyterhub-{self.DEPLOY_PREFIX.lower()}",
         #     version="4.3.2",
         #     namespace="jupyter",
         #     timeout=Duration.minutes(15),

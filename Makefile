@@ -46,6 +46,7 @@ IS_PROD ?= false
 
 JUPYTER_HUB_DOCKER_TAG ?= main
 EKS_NODE_TYPE ?= c6a.large
+SMCE_IAM_USER ?= Project-Admin_0a1b2c3d4e5f
 
 .PHONY := all
 all: help
@@ -90,6 +91,7 @@ cdk-shell:
 		-e DEPLOY_PREFIX \
 		-e JUPYTER_HUB_DOCKER_TAG \
 		-e EKS_NODE_TYPE \
+		-e SMCE_IAM_USER \
 		-w /code/ \
 		--pull always \
 		${IMAGE_NAME} || \
