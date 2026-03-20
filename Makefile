@@ -44,6 +44,9 @@ AWS_DEFAULT_PROFILE := $(AWS_DEFAULT_PROFILE)
 AWS_REGION ?= us-west-2
 IS_PROD ?= false
 
+JUPYTER_HUB_DOCKER_TAG ?= main
+EKS_NODE_TYPE ?= c6a.large
+
 .PHONY := all
 all: help
 
@@ -85,6 +88,8 @@ cdk-shell:
 		-e AWS_DEFAULT_REGION -e AWS_REGION \
 		-e AWS_DEFAULT_ACCOUNT \
 		-e DEPLOY_PREFIX \
+		-e JUPYTER_HUB_DOCKER_TAG \
+		-e EKS_NODE_TYPE \
 		-w /code/ \
 		--pull always \
 		${IMAGE_NAME} || \
