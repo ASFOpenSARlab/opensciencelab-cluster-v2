@@ -141,9 +141,10 @@ class ClusterCdkStack(Stack):
         else:
             print("Could not attach policies to EksClusternodePoolRole")
 
+        # addon aws-ebs-csi-driver expects this to exist.
         service_account = self.cluster.add_service_account(
             "EbsCsiServiceAccount",
-            name=f"{self.DEPLOY_PREFIX}-ebs-csi-controller-sa",
+            name="ebs-csi-controller-sa",
             namespace="kube-system",
             overwrite_service_account=True,
         )
@@ -210,82 +211,82 @@ class ClusterCdkStack(Stack):
             # configuration_values={},
         )
 
-        # https://docs.aws.amazon.com/eks/latest/userguide/workloads-add-ons-available-eks.html#add-ons-aws-ebs-csi-driver
-        eks.Addon(  # Check if needed
-            self,
-            "AwsEbsCsiDriver",
-            addon_name="aws-ebs-csi-driver",
-            addon_version="v1.56.0-eksbuild.1",
-            cluster=self.cluster,
-            # configuration_values={},
-        )
+        # # https://docs.aws.amazon.com/eks/latest/userguide/workloads-add-ons-available-eks.html#add-ons-aws-ebs-csi-driver
+        # eks.Addon(  # Check if needed
+        #     self,
+        #     "AwsEbsCsiDriver",
+        #     addon_name="aws-ebs-csi-driver",
+        #     addon_version="v1.56.0-eksbuild.1",
+        #     cluster=self.cluster,
+        #     # configuration_values={},
+        # )
 
         # https://artifacthub.io/packages/helm/aws-ebs-csi-driver/aws-ebs-csi-driver
-        # self.cluster.add_helm_chart(
-        #     "AwsEbsCsiDriver",
-        #     repository="https://kubernetes-sigs.github.io/aws-ebs-csi-driver",
-        #     atomic=True,
-        #     chart="aws-ebs-csi-driver",
-        #     #release=f"osl-ebs-driver-{self.DEPLOY_PREFIX.lower()}",
-        #     namespace="kube-system",
-        #     version="2.56.1",
-        #     timeout=Duration.minutes(8),
-        #     values={
-        #         "controller": {
-        #             "extraCreateMetadata": True,
-        #             "k8sTagClusterId": self.cluster.cluster_name,
-        #             # "extraVolumeTags": { # For cost tracking per cluster?
-        #             #     "hello": "world"
-        #             # },
-        #             "serviceAccount": {
-        #                 "create": False,
-        #                 "name": service_account.service_account_name,
-        #             },
-        #         },
-        #     },
-        # )
+        self.cluster.add_helm_chart(
+            "AwsEbsCsiDriver",
+            repository="https://kubernetes-sigs.github.io/aws-ebs-csi-driver",
+            atomic=True,
+            chart="aws-ebs-csi-driver",
+            # release=f"osl-ebs-driver-{self.DEPLOY_PREFIX.lower()}",
+            namespace="kube-system",
+            version="2.56.1",
+            timeout=Duration.minutes(8),
+            values={
+                "controller": {
+                    "extraCreateMetadata": True,
+                    "k8sTagClusterId": self.cluster.cluster_name,
+                    # "extraVolumeTags": { # For cost tracking per cluster?
+                    #     "hello": "world"
+                    # },
+                    "serviceAccount": {
+                        "create": False,
+                        "name": service_account.service_account_name,
+                    },
+                },
+            },
+        )
 
         ## https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#helm-charts
         ## https://artifacthub.io/packages/helm/jupyterhub/jupyterhub?modal=values-schema
         ## https://z2jh.jupyter.org/en/latest/resources/reference.html
-        # self.cluster.add_helm_chart(
-        #     "JupyterhubHelmChart",
-        #     repository="https://jupyterhub.github.io/helm-chart/",
-        #     atomic=True,
-        #     chart="jupyterhub",
-        #     #release=f"osl-jupyterhub-{self.DEPLOY_PREFIX.lower()}",
-        #     version="4.3.2",
-        #     namespace="jupyter",
-        #     timeout=Duration.minutes(15),
-        #     values={
-        #         "hub": {
-        #             "image": {
-        #                 "name": "ghcr.io/asfopensarlab/opensciencelab-cluster-v2/cluster/jupyterhub",
-        #                 "tag": self.JUPYTER_HUB_DOCKER_TAG,
-        #                 "pullPolicy": "Always",
-        #             },
-        #             "db": {
-        #                 "pvc": {
-        #                     "storageClassName": "gp3",
-        #                 }
-        #             },
-        #         },
-        #         "proxy": {
-        #             "service": {
-        #                 "type": "LoadBalancer",
-        #                 "nodePorts": {
-        #                     "http": 30052,
-        #                 },
-        #                 "annotations": {
-        #                     "service.beta.kubernetes.io/aws-load-balancer-type": "external",
-        #                     "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type": "ip",
-        #                     "service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
-        #                 },
-        #             },
-        #         },
-        #         "custom": {"COST_TAG_KEY": "hello", "COST_TAG_VALUE": "world"},
-        #     },
-        # )
+        self.cluster.add_helm_chart(
+            "JupyterhubHelmChart",
+            repository="https://jupyterhub.github.io/helm-chart/",
+            atomic=True,
+            chart="jupyterhub",
+            # release=f"osl-jupyterhub-{self.DEPLOY_PREFIX.lower()}",
+            version="4.3.2",
+            namespace="jupyter",
+            timeout=Duration.minutes(15),
+            values={
+                "hub": {
+                    "image": {
+                        "name": "ghcr.io/asfopensarlab/opensciencelab-cluster-v2/cluster/jupyterhub",
+                        "tag": self.JUPYTER_HUB_DOCKER_TAG,
+                        "pullPolicy": "Always",
+                    },
+                    "db": {
+                        "pvc": {
+                            "storageClassName": "gp3",
+                        }
+                    },
+                },
+                "proxy": {
+                    "service": {
+                        "type": "LoadBalancer",
+                        "nodePorts": {
+                            "http": 30052,
+                        },
+                        "annotations": {
+                            "service.beta.kubernetes.io/aws-load-balancer-type": "external",
+                            "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type": "ip",
+                            "service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
+                        },
+                    },
+                },
+                "custom": {"COST_TAG_KEY": "hello", "COST_TAG_VALUE": "world"},
+            },
+        )
 
     def _find_node_role_by_id(self, node_id):
         for child in self.cluster.node.find_all():
