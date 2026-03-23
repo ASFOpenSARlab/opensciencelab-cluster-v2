@@ -36,7 +36,4 @@ RUN python3 -m pip install --no-cache-dir --upgrade \
     opensarlab-backend==1.0.4 \
     --
 
-# Not sure what this does and may not be needed
-#RUN cp -r /tmp/site-packages/* /usr/local/lib/python*/site-packages
-
 USER jovyan

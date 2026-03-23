@@ -166,7 +166,7 @@ class ClusterCdkStack(Stack):
                 "controller": {
                     "extraCreateMetadata": True,
                     "k8sTagClusterId": "eks-cluster",
-                    "extraVolumeTags": {"osl-billing": JUPYTER_HUB_DOCKER_TAG},
+                    "extraVolumeTags": {"hello": "world"},
                     "serviceAccount": {
                         "create": False,
                         "name": service_account.service_account_name,
