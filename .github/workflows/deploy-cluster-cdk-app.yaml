@@ -1,4 +1,5 @@
 ---
+# yamllint disable rule:line-length
 name: Deploy Cluster CDK
 on: # yamllint disable-line rule:truthy
   workflow_dispatch:
@@ -10,8 +11,6 @@ on: # yamllint disable-line rule:truthy
       - "v*.*.*"
 
 # Jobs run in parallel, steps run in sequence
-# To make sure image build jobs are completed before the cluster is potentially built, we use the "dorny/paths-filter@v4" action to check for file diffs.
-# If there are any diffs, then we build that part of the code.
 # Image builds must complete before the cluster build is started.
 jobs:
   setup:
@@ -19,31 +18,10 @@ jobs:
     with:
       tagname: ${{ inputs.tagname || github.ref_name }}
 
-  check-for-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      jupyterhub: ${{ steps.filter.outputs.jupyterhub }}
-      cluster: ${{ steps.filter.outputs.cluster }}
-    steps:
-      - uses: actions/checkout@v6
-      - uses: dorny/paths-filter@v4
-        id: changes
-        with:
-          filters: |
-            jupyterhub:
-              - 'images/jupyterhub/**'
-            cluster:
-              - 'cluster_cdk/**'
-
   build-and-publish-jupyterhub-image:
-    runs-on: ubuntu-latest
-    needs: check-for-changes
-    steps:
-      - name: Build and Publish Custom JupyterHub Image
-        if: needs.check-for-changes.outputs.jupyterhub == 'true'
-        uses: ./build-and-publish-jupyterhub-image.yaml
-        with:
-          ref_name: ${{ inputs.tagname || github.ref_name }}
+    uses: ./.github/workflows/build-and-publish-jupyterhub-image.yaml
+    with:
+      ref_name: ${{ inputs.tagname || github.ref_name }}
 
   build-and-deploy-cluster:
     runs-on: ubuntu-latest
@@ -58,6 +36,7 @@ jobs:
       contents: read
     env:
       DEPLOY_PREFIX: ${{ needs.setup.outputs.deploy_prefix }}
+      JUPYTER_HUB_DOCKER_TAG: ${{ needs.setup.outputs.deploy_prefix }}
       AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       IS_PROD: >-
         ${{
