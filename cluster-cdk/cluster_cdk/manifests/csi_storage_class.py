@@ -1,0 +1,17 @@
+manifest_definition = {
+    "apiVersion": "storage.k8s.io/v1",
+    "kind": "StorageClass",
+    "metadata": {
+        "name": "gp3",
+        "annotations": {
+            "storageclass.kubernetes.io/is-default-class": "true",
+        },
+    },
+    "provisioner": "ebs.csi.aws.com",
+    "parameters": {
+        "type": "gp3",
+        "fsType": "ext4",
+    },
+    "allowVolumeExpansion": True,
+    "volumeBindingMode": "Immediate",
+}

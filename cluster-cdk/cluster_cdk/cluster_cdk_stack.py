@@ -1,14 +1,19 @@
 import os
 
 from aws_cdk import (
+    Tags,
+    RemovalPolicy,
     Duration,
     Stack,
     aws_eks_v2 as eks,
-    lambda_layer_kubectl_v34,
+    aws_ec2 as ec2,
     aws_iam as iam,
+    lambda_layer_kubectl_v34,
 )
 
 from constructs import Construct
+
+from .manifests import csi_storage_class
 
 # SMCE required observability policies
 SMCE_POLICIES = [
@@ -22,29 +27,66 @@ class ClusterCdkStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # Custom images built before deployment share a common tag based off the deploy_prefix and short sha
-        JUPYTER_HUB_DOCKER_TAG = os.environ["JUPYTER_HUB_DOCKER_TAG"]
+        # CDK provides the AWS Account number via self.account # "233535791844"
+        # CDK provides the AWS Region va self.region
+        self.DEPLOY_PREFIX = os.getenv("DEPLOY_PREFIX")
+        self.JUPYTER_HUB_DOCKER_TAG = os.getenv(
+            "JUPYTER_HUB_DOCKER_TAG", self.DEPLOY_PREFIX
+        )
+        self.EKS_NODE_TYPE = "c6a.large"
 
-        build_role = iam.Role(
-            self,
-            "ClusterBuildRole",
-            assumed_by=iam.ArnPrincipal(
-                "arn:aws:iam::233535791844:root"  # Security issue?
-            ),
-            role_name="us-west-2-eks-cluster-build-role",
-            managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name("AdministratorAccess")
-            ],
+        # self.SMCE_IAM_USER = "Project-Admin_0a1b2c3d4e5f"
+        self.SMCE_IAM_USER = "AWSReservedSSO_Project-Admin_0a3eae3e28d91b10"
+
+        # All resources in this specific stack will get this tag
+        Tags.of(self).add("osl-billing", self.DEPLOY_PREFIX.lower())
+
+        # Two subnets for EKS
+        self.public_subnet = ec2.SubnetConfiguration(
+            name="PublicSubnet",
+            subnet_type=ec2.SubnetType.PUBLIC,
+            cidr_mask=24,
+        )
+        self.private_subnet = ec2.SubnetConfiguration(
+            name="PrivateSubnetWithEgress",
+            subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
+            cidr_mask=24,
         )
 
-        cluster_role = iam.Role(
+        # Create a custom VPC restricted to the single AZ
+        self.vpc = ec2.Vpc(
+            self,
+            "EksVPC",
+            # max_azs=2,
+            availability_zones=[f"{self.region}a", f"{self.region}d"],
+            ip_addresses=ec2.IpAddresses.cidr("10.0.0.0/16"),
+            # Configure subnet types for EKS (e.g., Public and Private)
+            subnet_configuration=[self.public_subnet, self.private_subnet],
+        )
+
+        ## https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks_v2/README.html#provisioning-clusters
+        self.cluster = eks.Cluster(
+            self,
+            "EksCluster",
+            vpc=self.vpc,
+            cluster_name=f"{self.DEPLOY_PREFIX}-eks-cluster",
+            version=eks.KubernetesVersion.V1_34,
+            kubectl_provider_options=eks.KubectlProviderOptions(
+                kubectl_layer=lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl"),
+            ),
+            # masters_role=cluster_master_role,
+            default_capacity_type=eks.DefaultCapacityType.NODEGROUP,
+            default_capacity=0,
+        )
+
+        cluster_user_role = iam.Role(
             self,
             "ClusterFullAccess",
             assumed_by=iam.ArnPrincipal(
-                "arn:aws:iam::233535791844:root"  # Security issue?
+                f"arn:aws:iam::{self.account}:root"  # Security issue?
             ),
-            role_name="us-west-2-eks-cluster-user-full-access",
-            description="IAM Role for accessing the eks cluster",
+            role_name=f"{self.region}-{self.DEPLOY_PREFIX}-eks-cluster-user-full-access",
+            description="IAM Role for user accessing the eks cluster",
             inline_policies={
                 "Document1": iam.PolicyDocument(
                     assign_sids=True,
@@ -60,44 +102,111 @@ class ClusterCdkStack(Stack):
                         iam.PolicyStatement(
                             actions=["ssm:GetParameter"],
                             resources=[
-                                "arn:aws:ssm:us-west-2:233535791844:parameter/*"
+                                f"arn:aws:ssm:{self.region}:{self.account}:parameter/*"
                             ],
                             effect=iam.Effect.ALLOW,
                         ),
                     ],
-                )
+                ),
             },
         )
 
-        ## https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#provisioning-clusters
-        self.cluster = eks.Cluster(
+        ##  https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/AccessEntry.html
+        eks.AccessEntry(
             self,
-            "EksCluster",
-            cluster_name="eks-cluster",
-            version=eks.KubernetesVersion.V1_34,
-            kubectl_provider_options=eks.KubectlProviderOptions(
-                kubectl_layer=lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl"),
-            ),
-            masters_role=cluster_role,
+            "UserAccessCloudshell",
+            access_policies=[
+                eks.AccessPolicy.from_access_policy_name(
+                    "AmazonEKSClusterAdminPolicy",
+                    access_scope_type=eks.AccessScopeType.CLUSTER,
+                ),
+            ],
+            cluster=self.cluster,
+            principal=cluster_user_role.role_arn,
+            access_entry_type=eks.AccessEntryType.STANDARD,
+            removal_policy=RemovalPolicy.DESTROY,
         )
-        self.cluster.role.grant(
-            build_role,
-            "eks:*",
+
+        # Access Entry for EKS UI
+        eks.AccessEntry(
+            self,
+            "UserAccessUI",
+            access_policies=[
+                eks.AccessPolicy.from_access_policy_name(
+                    "AmazonEKSClusterAdminPolicy",
+                    access_scope_type=eks.AccessScopeType.CLUSTER,
+                ),
+            ],
+            cluster=self.cluster,
+            # principal=f"arn:aws:sts::{self.account}:assumed-role/{self.SMCE_IAM_USER}",
+            principal=f"arn:aws:iam::{self.account}:role/aws-reserved/sso.amazonaws.com/{self.SMCE_IAM_USER}",
+            access_entry_type=eks.AccessEntryType.STANDARD,
+            removal_policy=RemovalPolicy.DESTROY,
+        )
+
+        # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/AlbController.html
+        # This installs the load balancer helm chart and needed networking.
+        # However, the actual load balancer and traffic paths are described in jupyterhub proxy service annotations
+        # Addtional helm chart options:https://github.com/kubernetes-sigs/aws-load-balancer-controller/blob/main/helm/aws-load-balancer-controller/values.yaml
+        eks.AlbController(
+            self,
+            "MyAlbController",
+            cluster=self.cluster,
+            version=eks.AlbControllerVersion.V2_8_2,
+            # additional_helm_chart_values=eks.AlbControllerOptions(
+            #     enable_waf=False, enable_wafv2=False
+            # ),
+            additional_helm_chart_values={
+                "enableWaf": False,
+                "enableWafv2": False,
+                "defaultTags": {"AlbControllerManaged": True},
+            },
+            removal_policy=RemovalPolicy.DESTROY,
+        )
+
+        # https://github.com/aws/aws-cdk/issues/37012
+        self.cluster.add_nodegroup_capacity(
+            "core",
+            ami_type=eks.NodegroupAmiType.AL2023_X86_64_STANDARD,
+            capacity_type=eks.CapacityType.ON_DEMAND,
+            desired_size=1,
+            max_size=1,
+            min_size=1,
+            # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_ec2/InstanceClass.html
+            instance_types=[
+                ec2.InstanceType(self.EKS_NODE_TYPE),
+            ],
+            # Force the compute in the public subnet, in a single AZ
+            subnets=ec2.SubnetSelection(
+                subnet_type=ec2.SubnetType.PUBLIC,
+                availability_zones=[f"{self.region}a"],  # Force compute into UW2a
+            ),
+            labels={"hub.jupyter.org/node-purpose": "core"},
+            # taints=[
+            #     eks.TaintSpec(
+            #         effect=eks.TaintEffect.NO_SCHEDULE,
+            #         key="hub.jupyter.org/dedicated",
+            #         value="core",
+            #     )
+            # ],
         )
 
         ##  Grab the node role, and attach SMCE Policies.
         # NOTE: EksClusternodePoolRole will need to change to f"{ClusterId}nodePoolRole" if
         # self.cluster's id is changed from "EksCluster"
-        self.node_role = self._find_node_role_by_id(node_id="EksClusternodePoolRole")
-        self._attach_role_policies(self.node_role)
+        self.node_role = self._find_node_role_by_id(node_id="NodeGroupRole")
+        if self.node_role:
+            self._attach_role_policies(self.node_role)
+        else:
+            print("Could not attach policies to EksClusternodePoolRole")
 
-        service_account = self.cluster.add_service_account(
+        csi_service_account = self.cluster.add_service_account(
             "EbsCsiServiceAccount",
             name="ebs-csi-controller-sa",
             namespace="kube-system",
             overwrite_service_account=True,
         )
-        service_account.role.add_to_principal_policy(
+        csi_service_account.role.add_to_principal_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=[
@@ -120,24 +229,7 @@ class ClusterCdkStack(Stack):
         )
 
         self.cluster.add_manifest(
-            "CsiStorageClass",
-            {
-                "apiVersion": "storage.k8s.io/v1",
-                "kind": "StorageClass",
-                "metadata": {
-                    "name": "gp3",
-                    "annotations": {
-                        "storageclass.kubernetes.io/is-default-class": "true",
-                    },
-                },
-                "provisioner": "ebs.csi.eks.amazonaws.com",
-                "parameters": {
-                    "type": "gp3",
-                    "fsType": "ext4",
-                },
-                "allowVolumeExpansion": True,
-                "volumeBindingMode": "WaitForFirstConsumer",
-            },
+            "CsiStorageClass", csi_storage_class.manifest_definition
         )
 
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#add-ons
@@ -157,6 +249,20 @@ class ClusterCdkStack(Stack):
             cluster=self.cluster,
             # configuration_values={},
         )
+
+        ## Look up latest default version of amazon-cloudwatch-observability:
+        # aws eks describe-addon-versions \
+        #   --addon-name amazon-cloudwatch-observability \
+        #   --kubernetes-version 1.34 \
+        #   --query "addons[0].addonVersions[?compatibilities[0].defaultVersion]"
+        eks.Addon(
+            self,
+            "CloudwatchObserv",
+            addon_name="amazon-cloudwatch-observability",
+            addon_version="v4.10.2-eksbuild.1",
+            cluster=self.cluster,
+        )
+
         eks.Addon(  # Check if needed
             self,
             "KubeProxyAddon",
@@ -172,38 +278,53 @@ class ClusterCdkStack(Stack):
             repository="https://kubernetes-sigs.github.io/aws-ebs-csi-driver",
             atomic=True,
             chart="aws-ebs-csi-driver",
+            release=f"osl-ebs-driver-{self.DEPLOY_PREFIX.lower()}",
             namespace="kube-system",
             version="2.56.1",
             timeout=Duration.minutes(8),
             values={
                 "controller": {
                     "extraCreateMetadata": True,
-                    "k8sTagClusterId": "eks-cluster",
+                    "k8sTagClusterId": self.cluster.cluster_name,
                     "extraVolumeTags": {"hello": "world"},
                     "serviceAccount": {
                         "create": False,
-                        "name": service_account.service_account_name,
+                        "name": csi_service_account.service_account_name,
                     },
                 },
             },
         )
 
-        ## https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#helm-charts
-        ## https://artifacthub.io/packages/helm/jupyterhub/jupyterhub?modal=values-schema
-        ## https://z2jh.jupyter.org/en/latest/resources/reference.html
+        # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#helm-charts
+        # https://artifacthub.io/packages/helm/jupyterhub/jupyterhub?modal=values-schema
+        # https://z2jh.jupyter.org/en/latest/resources/reference.html
         self.cluster.add_helm_chart(
             "JupyterhubHelmChart",
             repository="https://jupyterhub.github.io/helm-chart/",
-            atomic=True,
+            atomic=False,
             chart="jupyterhub",
+            release=f"osl-jupyterhub-{self.DEPLOY_PREFIX.lower()}",
             version="4.3.2",
             namespace="jupyter",
             timeout=Duration.minutes(10),
             values={
+                "prePuller": {
+                    "continuous": {"enabled": False},
+                    "hook": {"enabled": False},
+                },
+                "scheduling": {
+                    "userPlaceholder": {"enabled": False},
+                    "userScheduler": {
+                        "enabled": True,
+                        "labels": {"sidecar.istio.io/inject": "false"},
+                    },
+                    "corePods": {"nodeAffinity": {"matchNodePurpose": "require"}},
+                    "userPods": {"nodeAffinity": {"matchNodePurpose": "require"}},
+                },
                 "hub": {
                     "image": {
                         "name": "ghcr.io/asfopensarlab/opensciencelab-cluster-v2/cluster/jupyterhub",
-                        "tag": JUPYTER_HUB_DOCKER_TAG,
+                        "tag": self.JUPYTER_HUB_DOCKER_TAG,
                         "pullPolicy": "Always",
                     },
                     "db": {
@@ -232,7 +353,7 @@ class ClusterCdkStack(Stack):
     def _find_node_role_by_id(self, node_id):
         for child in self.cluster.node.find_all():
             if isinstance(child, iam.Role):
-                if child.node.id == node_id:
+                if node_id in child.node.id:
                     return child
 
     def _attach_role_policies(self, role):
