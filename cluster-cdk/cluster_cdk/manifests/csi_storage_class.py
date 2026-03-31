@@ -14,4 +14,5 @@ manifest_definition = {
     },
     "allowVolumeExpansion": True,
     "volumeBindingMode": "Immediate",
+    "reclaimPolicy": "Delete",
 }

@@ -39,10 +39,14 @@ export PWD=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 PROJECT_DIR := $(if $(CI_PROJECT_DIR),$(CI_PROJECT_DIR:/=),$(PWD:/=/))
 BUILD_DEPS ?= /tmp/.build/lambda/python
 
+# These env vars should be defined in either a local or github environment
 IMAGE_NAME ?= ghcr.io/asfopensarlab/osl-utils:main
 AWS_DEFAULT_PROFILE := $(AWS_DEFAULT_PROFILE)
 AWS_REGION ?= us-west-2
 IS_PROD ?= false
+
+JUPYTER_HUB_DOCKER_TAG ?= main
+UI_IAM_USER := $(UI_IAM_USER)
 
 .PHONY := all
 all: help
@@ -85,6 +89,8 @@ cdk-shell:
 		-e AWS_DEFAULT_REGION -e AWS_REGION \
 		-e AWS_DEFAULT_ACCOUNT \
 		-e DEPLOY_PREFIX \
+		-e JUPYTER_HUB_DOCKER_TAG \
+		-e UI_IAM_USER \
 		-w /code/ \
 		--pull always \
 		${IMAGE_NAME} || \

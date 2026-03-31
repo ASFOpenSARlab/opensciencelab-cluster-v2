@@ -1,6 +1,9 @@
 import os
+import tomllib
+import pathlib
 
 from aws_cdk import (
+    CfnTag,
     Tags,
     RemovalPolicy,
     Duration,
@@ -33,10 +36,20 @@ class ClusterCdkStack(Stack):
         self.JUPYTER_HUB_DOCKER_TAG = os.getenv(
             "JUPYTER_HUB_DOCKER_TAG", self.DEPLOY_PREFIX
         )
-        self.EKS_NODE_TYPE = "c6a.large"
+        self.UI_IAM_USER = os.getenv("UI_IAM_USER", None)
 
-        # self.SMCE_IAM_USER = "Project-Admin_0a1b2c3d4e5f"
-        self.SMCE_IAM_USER = "AWSReservedSSO_Project-Admin_0a3eae3e28d91b10"
+        self.OPENSCIENCELAB_CONFIG_FILE = (
+            pathlib.Path(__file__).absolute().parent / "opensciencelab.toml"
+        )
+        osl_config_with_defaults = self._get_osl_config_with_defaults()
+
+        # If deploy_prefix not found in config sections, use defaults
+        # This allows for development using defaults
+        self.osl_config = osl_config_with_defaults.get(
+            self.DEPLOY_PREFIX, osl_config_with_defaults.get("defaults")
+        )
+
+        print(vars(self))
 
         # All resources in this specific stack will get this tag
         Tags.of(self).add("osl-billing", self.DEPLOY_PREFIX.lower())
@@ -127,22 +140,22 @@ class ClusterCdkStack(Stack):
             removal_policy=RemovalPolicy.DESTROY,
         )
 
-        # Access Entry for EKS UI
-        eks.AccessEntry(
-            self,
-            "UserAccessUI",
-            access_policies=[
-                eks.AccessPolicy.from_access_policy_name(
-                    "AmazonEKSClusterAdminPolicy",
-                    access_scope_type=eks.AccessScopeType.CLUSTER,
-                ),
-            ],
-            cluster=self.cluster,
-            # principal=f"arn:aws:sts::{self.account}:assumed-role/{self.SMCE_IAM_USER}",
-            principal=f"arn:aws:iam::{self.account}:role/aws-reserved/sso.amazonaws.com/{self.SMCE_IAM_USER}",
-            access_entry_type=eks.AccessEntryType.STANDARD,
-            removal_policy=RemovalPolicy.DESTROY,
-        )
+        if self.UI_IAM_USER:
+            # Access Entry for EKS UI
+            eks.AccessEntry(
+                self,
+                "UserAccessUI",
+                access_policies=[
+                    eks.AccessPolicy.from_access_policy_name(
+                        "AmazonEKSClusterAdminPolicy",
+                        access_scope_type=eks.AccessScopeType.CLUSTER,
+                    ),
+                ],
+                cluster=self.cluster,
+                principal=f"arn:aws:iam::{self.account}:role/aws-reserved/sso.amazonaws.com/{self.UI_IAM_USER}",
+                access_entry_type=eks.AccessEntryType.STANDARD,
+                removal_policy=RemovalPolicy.DESTROY,
+            )
 
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/AlbController.html
         # This installs the load balancer helm chart and needed networking.
@@ -165,31 +178,56 @@ class ClusterCdkStack(Stack):
         )
 
         # https://github.com/aws/aws-cdk/issues/37012
-        self.cluster.add_nodegroup_capacity(
-            "core",
-            ami_type=eks.NodegroupAmiType.AL2023_X86_64_STANDARD,
-            capacity_type=eks.CapacityType.ON_DEMAND,
-            desired_size=1,
-            max_size=1,
-            min_size=1,
-            # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_ec2/InstanceClass.html
-            instance_types=[
-                ec2.InstanceType(self.EKS_NODE_TYPE),
-            ],
-            # Force the compute in the public subnet, in a single AZ
-            subnets=ec2.SubnetSelection(
-                subnet_type=ec2.SubnetType.PUBLIC,
-                availability_zones=[f"{self.region}a"],  # Force compute into UW2a
-            ),
-            labels={"hub.jupyter.org/node-purpose": "core"},
-            # taints=[
-            #     eks.TaintSpec(
-            #         effect=eks.TaintEffect.NO_SCHEDULE,
-            #         key="hub.jupyter.org/dedicated",
-            #         value="core",
-            #     )
-            # ],
-        )
+        for node in self.osl_config["nodes"]:
+            # Define the Launch Template with the desired EC2 instance tags
+            # These tags will be applied to the EC2 instances when they are launched by the Auto Scaling Group
+            launch_template = ec2.CfnLaunchTemplate(
+                self,
+                f"{self.DEPLOY_PREFIX}-{node['name']}-LaunchTemplate",
+                launch_template_data=ec2.CfnLaunchTemplate.LaunchTemplateDataProperty(
+                    tag_specifications=[
+                        ec2.CfnLaunchTemplate.TagSpecificationProperty(
+                            resource_type="instance",
+                            tags=[
+                                CfnTag(key="osl-billing", value=self.DEPLOY_PREFIX),
+                                CfnTag(key="Name", value=f"{self.DEPLOY_PREFIX}-core"),
+                            ],
+                        ),
+                        ec2.CfnLaunchTemplate.TagSpecificationProperty(
+                            resource_type="volume",
+                            tags=[
+                                CfnTag(key="osl-billing", value=self.DEPLOY_PREFIX),
+                                CfnTag(
+                                    key="Name", value=f"{self.DEPLOY_PREFIX}-core-root"
+                                ),
+                            ],
+                        ),
+                    ]
+                ),
+            )
+
+            self.cluster.add_nodegroup_capacity(
+                node["name"],
+                ami_type=eks.NodegroupAmiType.AL2023_X86_64_STANDARD,
+                capacity_type=eks.CapacityType.ON_DEMAND,
+                desired_size=node.get("group_desired_size", 0),
+                max_size=node.get("group_max_size", 100),
+                min_size=node.get("group_min_size", 0),
+                # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_ec2/InstanceClass.html
+                instance_types=[
+                    ec2.InstanceType(instant) for instant in node["instance"]
+                ],
+                launch_template_spec=eks.LaunchTemplateSpec(
+                    id=launch_template.ref,
+                    version=launch_template.attr_latest_version_number,
+                ),
+                # Force the compute in the public subnet, in a single AZ
+                subnets=ec2.SubnetSelection(
+                    subnet_type=ec2.SubnetType.PUBLIC,
+                    availability_zones=[f"{self.region}a"],  # Force compute into UW2a
+                ),
+                labels=node.get("labels", None),
+            )
 
         ##  Grab the node role, and attach SMCE Policies.
         # NOTE: EksClusternodePoolRole will need to change to f"{ClusterId}nodePoolRole" if
@@ -286,7 +324,10 @@ class ClusterCdkStack(Stack):
                 "controller": {
                     "extraCreateMetadata": True,
                     "k8sTagClusterId": self.cluster.cluster_name,
-                    "extraVolumeTags": {"hello": "world"},
+                    "extraVolumeTags": {
+                        "osl-billing": self.DEPLOY_PREFIX,
+                        "hello": "world",
+                    },
                     "serviceAccount": {
                         "create": False,
                         "name": csi_service_account.service_account_name,
@@ -361,3 +402,32 @@ class ClusterCdkStack(Stack):
             role.add_managed_policy(
                 iam.ManagedPolicy.from_aws_managed_policy_name(policy_name)
             )
+
+    def _get_osl_config_with_defaults(self) -> dict:
+
+        with open(self.OPENSCIENCELAB_CONFIG_FILE, "rb") as f:
+            config: dict = tomllib.load(f)
+
+        defaults: dict = config.get("defaults", {})
+
+        merged = {}
+
+        merged["defaults"] = defaults
+
+        # Cycle through all the labs
+        for lab_name, lab_config in config.items():
+            lab = {}
+
+            lab["environment"] = lab_config.get("environment", defaults["environment"])
+
+            # Replace of all nodes if lab nodes are defined
+            lab["nodes"] = lab_config.get("nodes", defaults["nodes"])
+
+            # Replace of all nodes if lab nodes are defined
+            lab["lab_profiles"] = lab_config.get(
+                "lab_profiles", defaults["lab_profiles"]
+            )
+
+            merged[lab_name] = lab
+
+        return merged

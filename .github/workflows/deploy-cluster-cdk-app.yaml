@@ -49,6 +49,7 @@ jobs:
       DEPLOY_PREFIX: ${{ needs.setup.outputs.deploy_prefix }}
       JUPYTER_HUB_DOCKER_TAG: ${{ needs.setup.outputs.deploy_prefix }}
       AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
+      UI_IAM_USER: ${{ vars.UI_IAM_USER }}
       IS_PROD: >-
         ${{
           needs.setup.outputs.environment == 'prod' ||

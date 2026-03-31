@@ -12,3 +12,12 @@ node_modules/
 package-lock.json
 package.json
 
+*.swp
+package-lock.json
+.pytest_cache
+*.egg-info
+
+# CDK asset staging directory
+.cdk.staging
+cdk.out
+cdk.context.json
