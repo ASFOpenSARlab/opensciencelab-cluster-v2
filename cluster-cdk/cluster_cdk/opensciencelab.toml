@@ -32,4 +32,8 @@ environment = "dev"
   instance = ["m5a.large", "m6a.large"]
   group_desired_size = 0
   group_min_size = 0
-  group_max_size = 1
+  group_max_size = 5
+
+    [defaults.nodes.labels]
+    "hub.jupyter.org/node-purpose" = "user"
+    "opensciencelab.local/node-type" = "user"
