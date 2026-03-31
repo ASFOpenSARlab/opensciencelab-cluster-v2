@@ -9,7 +9,7 @@ environment = "lab-env-1"
 [defaults]
 environment = ""  # The name of the GitHub environment that contains AWS account numbers and other info. This is currently just descruptive
 
-  # TOML is not whitespace sensitive. The spacing here is simply for readability.
+  # TOML is not whitespace sensitive. The tabbing here is simply for readability.
 
   # Lab profiles are yet to be implemented. This is an example of how they will look.
   [[defaults.lab_profiles]]
@@ -20,19 +20,16 @@ environment = ""  # The name of the GitHub environment that contains AWS account
 
   [[defaults.nodes]]
   name = ""  # Nodes are unique by name. The node name must be url friendly.
+  node_type = "user"  # Node type can be "user" or "core"
   instance = []  # List of EC2 instance types with the most preferred being listed first
   group_desired_size = 0  # The desired amount of running nodes. Defaults to zero.
   group_min_size = 0  # Minimum number of active nodes running. Defaults to zero.
   group_max_size = 1  # Maximum number of active nodes running. Must be greater than zero.
 
-    # Labels applied to node. Useful for scheduling and bookkeeping
-    [defaults.nodes.labels]
-    label1 = value
-    label2 = value
-
   # The core node is required for JupyterHub and other critical pods. 
   [[defaults.nodes]]
   name = "core"
+  node_type = "core"
   instance = ["t3a.medium"]
   group_min_size = 1
   group_max_size = 1

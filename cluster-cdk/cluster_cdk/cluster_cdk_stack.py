@@ -179,6 +179,17 @@ class ClusterCdkStack(Stack):
 
         # https://github.com/aws/aws-cdk/issues/37012
         for node in self.osl_config["nodes"]:
+            node_type = node.get("node_type", "user")
+
+            # Node labels to apply depending on node type
+            node_labels = node.get("labels", {})
+            if node_type == "core":
+                node_labels["hub.jupyter.org/node-purpose"] = "core"
+                node_labels["opensciencelab.local/node-type"] = "core"
+            if node_type == "user":
+                node_labels["hub.jupyter.org/node-purpose"] = "user"
+                node_labels["opensciencelab.local/node-type"] = "user"
+
             # Define the Launch Template with the desired EC2 instance tags
             # These tags will be applied to the EC2 instances when they are launched by the Auto Scaling Group
             launch_template = ec2.CfnLaunchTemplate(
@@ -226,7 +237,7 @@ class ClusterCdkStack(Stack):
                     subnet_type=ec2.SubnetType.PUBLIC,
                     availability_zones=[f"{self.region}a"],  # Force compute into UW2a
                 ),
-                labels=node.get("labels", None),
+                labels=node_labels,
             )
 
         ##  Grab the node role, and attach SMCE Policies.
