@@ -1,8 +1,8 @@
 import os
-import tomllib
+import tomllib  # type: ignore
 import pathlib
 
-from aws_cdk import (
+from aws_cdk import (  # type: ignore
     CfnTag,
     Tags,
     RemovalPolicy,
@@ -14,7 +14,7 @@ from aws_cdk import (
     lambda_layer_kubectl_v34,
 )
 
-from constructs import Construct
+from constructs import Construct  # type: ignore
 
 from .manifests import csi_storage_class
 
@@ -46,13 +46,13 @@ class ClusterCdkStack(Stack):
         # If deploy_prefix not found in config sections, use defaults
         # This allows for development using defaults
         self.osl_config = osl_config_with_defaults.get(
-            self.DEPLOY_PREFIX, osl_config_with_defaults.get("defaults")
+            self.DEPLOY_PREFIX, osl_config_with_defaults.get("defaults", {})
         )
 
         print(vars(self))
 
         # All resources in this specific stack will get this tag
-        Tags.of(self).add("osl-billing", self.DEPLOY_PREFIX.lower())
+        Tags.of(self).add("osl-billing", self.DEPLOY_PREFIX.lower())  # type: ignore
 
         # Two subnets for EKS
         self.public_subnet = ec2.SubnetConfiguration(
@@ -243,7 +243,7 @@ class ClusterCdkStack(Stack):
         ##  Grab the node role, and attach SMCE Policies.
         # NOTE: EksClusternodePoolRole will need to change to f"{ClusterId}nodePoolRole" if
         # self.cluster's id is changed from "EksCluster"
-        self.node_role = self._find_node_role_by_id(node_id="NodeGroupRole")
+        self.node_role: iam.Role = self._find_node_role_by_id(node_id="NodeGroupRole")
         if self.node_role:
             self._attach_role_policies(self.node_role)
         else:
@@ -327,7 +327,7 @@ class ClusterCdkStack(Stack):
             repository="https://kubernetes-sigs.github.io/aws-ebs-csi-driver",
             atomic=True,
             chart="aws-ebs-csi-driver",
-            release=f"osl-ebs-driver-{self.DEPLOY_PREFIX.lower()}",
+            release=f"osl-ebs-driver-{self.DEPLOY_PREFIX.lower()}",  # type: ignore
             namespace="kube-system",
             version="2.56.1",
             timeout=Duration.minutes(8),
@@ -355,7 +355,7 @@ class ClusterCdkStack(Stack):
             repository="https://jupyterhub.github.io/helm-chart/",
             atomic=False,
             chart="jupyterhub",
-            release=f"osl-jupyterhub-{self.DEPLOY_PREFIX.lower()}",
+            release=f"osl-jupyterhub-{self.DEPLOY_PREFIX.lower()}",  # type: ignore
             version="4.3.2",
             namespace="jupyter",
             timeout=Duration.minutes(10),
@@ -402,13 +402,13 @@ class ClusterCdkStack(Stack):
             },
         )
 
-    def _find_node_role_by_id(self, node_id):
+    def _find_node_role_by_id(self, node_id: str) -> iam.Role:
         for child in self.cluster.node.find_all():
             if isinstance(child, iam.Role):
                 if node_id in child.node.id:
                     return child
 
-    def _attach_role_policies(self, role):
+    def _attach_role_policies(self, role: iam.Role) -> None:
         for policy_name in SMCE_POLICIES:
             role.add_managed_policy(
                 iam.ManagedPolicy.from_aws_managed_policy_name(policy_name)
