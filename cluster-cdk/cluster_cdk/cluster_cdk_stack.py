@@ -18,13 +18,6 @@ from constructs import Construct  # type: ignore
 
 from .manifests import csi_storage_class
 
-# SMCE required observability policies
-SMCE_POLICIES = [
-    "AmazonSSMManagedInstanceCore",
-    "CloudWatchAgentAdminPolicy",
-    "CloudWatchAgentServerPolicy",
-]
-
 
 class ClusterCdkStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
@@ -217,7 +210,7 @@ class ClusterCdkStack(Stack):
                 ),
             )
 
-            self.cluster.add_nodegroup_capacity(
+            node_group = self.cluster.add_nodegroup_capacity(
                 node["name"],
                 ami_type=eks.NodegroupAmiType.AL2023_X86_64_STANDARD,
                 capacity_type=eks.CapacityType.ON_DEMAND,
@@ -240,14 +233,15 @@ class ClusterCdkStack(Stack):
                 labels=node_labels,
             )
 
-        ##  Grab the node role, and attach SMCE Policies.
-        # NOTE: EksClusternodePoolRole will need to change to f"{ClusterId}nodePoolRole" if
-        # self.cluster's id is changed from "EksCluster"
-        self.node_role: iam.Role = self._find_node_role_by_id(node_id="NodeGroupRole")
-        if self.node_role:
-            self._attach_role_policies(self.node_role)
-        else:
-            print("Could not attach policies to EksClusternodePoolRole")
+            # SMCE required observability policies
+            for managed_policy in [
+                "AmazonSSMManagedInstanceCore",
+                "CloudWatchAgentAdminPolicy",
+                "CloudWatchAgentServerPolicy",
+            ]:
+                node_group.role.add_managed_policy(
+                    iam.ManagedPolicy.from_aws_managed_policy_name(managed_policy)
+                )
 
         csi_service_account = self.cluster.add_service_account(
             "EbsCsiServiceAccount",
@@ -401,18 +395,6 @@ class ClusterCdkStack(Stack):
                 "custom": {"COST_TAG_KEY": "hello", "COST_TAG_VALUE": "world"},
             },
         )
-
-    def _find_node_role_by_id(self, node_id: str) -> iam.Role:
-        for child in self.cluster.node.find_all():
-            if isinstance(child, iam.Role):
-                if node_id in child.node.id:
-                    return child
-
-    def _attach_role_policies(self, role: iam.Role) -> None:
-        for policy_name in SMCE_POLICIES:
-            role.add_managed_policy(
-                iam.ManagedPolicy.from_aws_managed_policy_name(policy_name)
-            )
 
     def _get_osl_config_with_defaults(self) -> dict:
         with open(self.OPENSCIENCELAB_CONFIG_FILE, "rb") as f:
