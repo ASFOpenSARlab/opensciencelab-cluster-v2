@@ -90,7 +90,7 @@ class ClusterCdkStack(Stack):
             assumed_by=iam.ArnPrincipal(
                 f"arn:aws:iam::{self.account}:root"  # Security issue?
             ),
-            role_name=f"{self.region}-{self.DEPLOY_PREFIX}-eks-cluster-user-full-access",
+            role_name=f"eks-cluster-user-full-access-{self.DEPLOY_PREFIX}",
             description="IAM Role for user accessing the eks cluster",
             inline_policies={
                 "Document1": iam.PolicyDocument(
@@ -166,14 +166,17 @@ class ClusterCdkStack(Stack):
             # These tags will be applied to the EC2 instances when they are launched by the Auto Scaling Group
             launch_template = ec2.CfnLaunchTemplate(
                 self,
-                f"{self.DEPLOY_PREFIX}-{node['name']}-LaunchTemplate",
+                f"{node['name']}-LaunchTemplate-{self.DEPLOY_PREFIX}",
                 launch_template_data=ec2.CfnLaunchTemplate.LaunchTemplateDataProperty(
                     tag_specifications=[
                         ec2.CfnLaunchTemplate.TagSpecificationProperty(
                             resource_type="instance",
                             tags=[
                                 CfnTag(key="osl-billing", value=self.DEPLOY_PREFIX),
-                                CfnTag(key="Name", value=f"{self.DEPLOY_PREFIX}-core"),
+                                CfnTag(
+                                    key="Name",
+                                    value=f"jupyterhub-core-{self.DEPLOY_PREFIX}",
+                                ),
                             ],
                         ),
                         ec2.CfnLaunchTemplate.TagSpecificationProperty(
@@ -181,7 +184,8 @@ class ClusterCdkStack(Stack):
                             tags=[
                                 CfnTag(key="osl-billing", value=self.DEPLOY_PREFIX),
                                 CfnTag(
-                                    key="Name", value=f"{self.DEPLOY_PREFIX}-core-root"
+                                    key="Name",
+                                    value=f"jupyterhub-core-root-{self.DEPLOY_PREFIX}",
                                 ),
                             ],
                         ),
