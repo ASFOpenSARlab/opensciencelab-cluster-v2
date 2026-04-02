@@ -17,14 +17,30 @@ jobs:
     with:
       tagname: ${{ inputs.tagname || github.ref_name }}
 
+  check-for-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      jupyterhub: ${{ steps.filter.outputs.jupyterhub }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
+        id: changes
+        with:
+          filters: |
+            jupyterhub:
+              - 'images/jupyterhub/**'
+
   build-and-publish-jupyterhub-image:
-    if: github.event.inputs.do_build_images == 'true'
+    needs: check-for-changes
+    if: needs.check-for-changes.outputs.jupyterhub == 'true'
     uses: ./.github/workflows/build-and-publish-jupyterhub-image.yaml
     with:
       ref_name: ${{ inputs.tagname || github.ref_name }}
 
   build-and-deploy-cluster:
     runs-on: ubuntu-latest
+    # Ensure that this job always runs even if the image build doesn't
+    # However, don't run if the image build fails or is cancelled
     if: >-
       always() &&
       (needs.build-and-publish-jupyterhub-image.result == 'success' ||
