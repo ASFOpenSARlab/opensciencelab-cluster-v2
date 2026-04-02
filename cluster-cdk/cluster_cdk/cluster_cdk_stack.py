@@ -4,6 +4,7 @@ import pathlib
 
 from aws_cdk import (  # type: ignore
     CfnTag,
+    CfnOutput,
     Tags,
     RemovalPolicy,
     Duration,
@@ -147,23 +148,6 @@ class ClusterCdkStack(Stack):
                 access_entry_type=eks.AccessEntryType.STANDARD,
                 removal_policy=RemovalPolicy.DESTROY,
             )
-
-        # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/AlbController.html
-        # This installs the load balancer helm chart and needed networking.
-        # However, the actual load balancer and traffic paths are described in jupyterhub proxy service annotations
-        # Addtional helm chart options:https://github.com/kubernetes-sigs/aws-load-balancer-controller/blob/main/helm/aws-load-balancer-controller/values.yaml
-        eks.AlbController(
-            self,
-            "MyAlbController",
-            cluster=self.cluster,
-            version=eks.AlbControllerVersion.V2_8_2,
-            additional_helm_chart_values={
-                "enableWaf": False,
-                "enableWafv2": False,
-                "defaultTags": {"AlbControllerManaged": True},
-            },
-            removal_policy=RemovalPolicy.DESTROY,
-        )
 
         # https://github.com/aws/aws-cdk/issues/37012
         for node in self.osl_config["nodes"]:
@@ -335,6 +319,24 @@ class ClusterCdkStack(Stack):
             },
         )
 
+        # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/AlbController.html
+        # This installs the load balancer helm chart and needed networking.
+        # However, the actual load balancer and traffic paths are described in jupyterhub proxy service annotations
+        # Addtional helm chart options:https://github.com/kubernetes-sigs/aws-load-balancer-controller/blob/main/helm/aws-load-balancer-controller/values.yaml
+        # NOTE that if a cluster is destroyed the NLB and associated target groups might need to be manually deleted.
+        eks.AlbController(
+            self,
+            "MyAlbController",
+            cluster=self.cluster,
+            version=eks.AlbControllerVersion.V2_8_2,
+            additional_helm_chart_values={
+                "enableWaf": False,
+                "enableWafv2": False,
+                "defaultTags": {"AlbControllerManaged": True},
+            },
+            removal_policy=RemovalPolicy.DESTROY,
+        )
+
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#helm-charts
         # https://artifacthub.io/packages/helm/jupyterhub/jupyterhub?modal=values-schema
         # https://z2jh.jupyter.org/en/latest/resources/reference.html
@@ -388,6 +390,18 @@ class ClusterCdkStack(Stack):
                 },
                 "custom": {"COST_TAG_KEY": "hello", "COST_TAG_VALUE": "world"},
             },
+        )
+
+        # Since the NLB is created via annotations, we need to get the url after jupyterhub installation.
+        nlb_url = self.cluster.get_service_load_balancer_address(
+            "proxy-public", namespace="jupyter"
+        )
+
+        CfnOutput(
+            self,
+            "NLB URL",
+            value=f"http://{nlb_url}",
+            description="The url of the Network Load Balancer",
         )
 
     def _get_osl_config_with_defaults(self) -> dict:
