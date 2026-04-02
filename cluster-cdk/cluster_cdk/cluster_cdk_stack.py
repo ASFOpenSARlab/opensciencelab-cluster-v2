@@ -63,7 +63,6 @@ class ClusterCdkStack(Stack):
         self.vpc = ec2.Vpc(
             self,
             "EksVPC",
-            # max_azs=2,
             availability_zones=[f"{self.region}a", f"{self.region}d"],
             ip_addresses=ec2.IpAddresses.cidr("10.0.0.0/16"),
             # Configure subnet types for EKS (e.g., Public and Private)
@@ -75,12 +74,11 @@ class ClusterCdkStack(Stack):
             self,
             "EksCluster",
             vpc=self.vpc,
-            cluster_name=f"{self.DEPLOY_PREFIX}-eks-cluster",
+            cluster_name=f"eks-cluster-{self.DEPLOY_PREFIX}",
             version=eks.KubernetesVersion.V1_34,
             kubectl_provider_options=eks.KubectlProviderOptions(
                 kubectl_layer=lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl"),
             ),
-            # masters_role=cluster_master_role,
             default_capacity_type=eks.DefaultCapacityType.NODEGROUP,
             default_capacity=0,
         )
@@ -159,9 +157,6 @@ class ClusterCdkStack(Stack):
             "MyAlbController",
             cluster=self.cluster,
             version=eks.AlbControllerVersion.V2_8_2,
-            # additional_helm_chart_values=eks.AlbControllerOptions(
-            #     enable_waf=False, enable_wafv2=False
-            # ),
             additional_helm_chart_values={
                 "enableWaf": False,
                 "enableWafv2": False,
@@ -219,7 +214,7 @@ class ClusterCdkStack(Stack):
                 min_size=node.get("group_min_size", 0),
                 # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_ec2/InstanceClass.html
                 instance_types=[
-                    ec2.InstanceType(instant) for instant in node["instance"]
+                    ec2.InstanceType(instance) for instance in node["instance"]
                 ],
                 launch_template_spec=eks.LaunchTemplateSpec(
                     id=launch_template.ref,
@@ -331,7 +326,6 @@ class ClusterCdkStack(Stack):
                     "k8sTagClusterId": self.cluster.cluster_name,
                     "extraVolumeTags": {
                         "osl-billing": self.DEPLOY_PREFIX,
-                        "hello": "world",
                     },
                     "serviceAccount": {
                         "create": False,
