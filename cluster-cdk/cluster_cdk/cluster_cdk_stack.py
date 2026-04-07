@@ -12,12 +12,13 @@ from aws_cdk import (  # type: ignore
     aws_eks_v2 as eks,
     aws_ec2 as ec2,
     aws_iam as iam,
+    aws_elasticloadbalancingv2 as elbv2,
     lambda_layer_kubectl_v34,
 )
 
 from constructs import Construct  # type: ignore
 
-from .manifests import csi_storage_class
+from .manifests import csi_storage_class, jupyterhub_proxy_service
 
 
 class ClusterCdkStack(Stack):
@@ -82,6 +83,25 @@ class ClusterCdkStack(Stack):
             ),
             default_capacity_type=eks.DefaultCapacityType.NODEGROUP,
             default_capacity=0,
+            alb_controller=eks.AlbControllerOptions(
+                version=eks.AlbControllerVersion.V2_8_2,
+                overwrite_service_account=False,
+                additional_helm_chart_values={
+                    "enableWaf": False,
+                    "enableWafv2": False,
+                    "defaultTags": {"AlbControllerManaged": True},
+                },
+                removal_policy=RemovalPolicy.DESTROY,
+            ),
+        )
+
+        # Create namespace jupyterhub proxy for load balancer service
+        # This will create a NLB selecting for the jupyterhub pod to be created later
+        # Note that resources are not cleaned up properly on deletion.
+        self.cluster.add_manifest(
+            "JupyterHubNLBService",
+            jupyterhub_proxy_service.create_namespace_definition,
+            jupyterhub_proxy_service.manifest_service_definition,
         )
 
         cluster_user_role = iam.Role(
@@ -193,8 +213,10 @@ class ClusterCdkStack(Stack):
                 ),
             )
 
+            # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/NodegroupOptions.html
             node_group = self.cluster.add_nodegroup_capacity(
                 node["name"],
+                nodegroup_name=f"{node['name']}-NodeGroup-{self.DEPLOY_PREFIX}",
                 ami_type=eks.NodegroupAmiType.AL2023_X86_64_STANDARD,
                 capacity_type=eks.CapacityType.ON_DEMAND,
                 desired_size=node.get("group_desired_size", 0),
@@ -323,24 +345,6 @@ class ClusterCdkStack(Stack):
             },
         )
 
-        # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/AlbController.html
-        # This installs the load balancer helm chart and needed networking.
-        # However, the actual load balancer and traffic paths are described in jupyterhub proxy service annotations
-        # Addtional helm chart options:https://github.com/kubernetes-sigs/aws-load-balancer-controller/blob/main/helm/aws-load-balancer-controller/values.yaml
-        # NOTE that if a cluster is destroyed the NLB and associated target groups might need to be manually deleted.
-        eks.AlbController(
-            self,
-            "MyAlbController",
-            cluster=self.cluster,
-            version=eks.AlbControllerVersion.V2_8_2,
-            additional_helm_chart_values={
-                "enableWaf": False,
-                "enableWafv2": False,
-                "defaultTags": {"AlbControllerManaged": True},
-            },
-            removal_policy=RemovalPolicy.DESTROY,
-        )
-
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#helm-charts
         # https://artifacthub.io/packages/helm/jupyterhub/jupyterhub?modal=values-schema
         # https://z2jh.jupyter.org/en/latest/resources/reference.html
@@ -380,16 +384,9 @@ class ClusterCdkStack(Stack):
                     },
                 },
                 "proxy": {
+                    "https": {"enabled": False},
                     "service": {
-                        "type": "LoadBalancer",
-                        "nodePorts": {
-                            "http": 30052,
-                        },
-                        "annotations": {
-                            "service.beta.kubernetes.io/aws-load-balancer-type": "external",
-                            "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type": "ip",
-                            "service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
-                        },
+                        "type": "ClusterIP",
                     },
                 },
                 "custom": {"COST_TAG_KEY": "hello", "COST_TAG_VALUE": "world"},
@@ -398,7 +395,7 @@ class ClusterCdkStack(Stack):
 
         # Since the NLB is created via annotations, we need to get the url after jupyterhub installation.
         nlb_url = self.cluster.get_service_load_balancer_address(
-            "proxy-public", namespace="jupyter"
+            "proxy-public-loadbalancer", namespace="jupyter"
         )
 
         CfnOutput(

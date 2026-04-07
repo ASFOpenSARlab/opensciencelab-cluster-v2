@@ -34,6 +34,7 @@ RUN python3 -m pip install --no-cache-dir --upgrade \
     kubernetes==34.1.0 \
     kubernetes_asyncio \
     opensarlab-backend==1.0.4 \
+    helloworld \
     --
 
 USER jovyan

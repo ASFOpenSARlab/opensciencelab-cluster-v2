@@ -33,7 +33,7 @@ jobs:
 
   build-and-publish-jupyterhub-image:
     needs: check-for-changes
-    if: needs.check-for-changes.outputs.jupyterhub == 'true'
+    if: ${{ needs.check-for-changes.outputs.jupyterhub == 'true' }}
     uses: ./.github/workflows/build-and-publish-jupyterhub-image.yaml
     with:
       ref_name: ${{ inputs.tagname || github.ref_name }}
