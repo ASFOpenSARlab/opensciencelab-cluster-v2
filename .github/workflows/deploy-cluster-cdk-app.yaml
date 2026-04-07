@@ -43,10 +43,7 @@ jobs:
     # Ensure that this job always runs even if the image build doesn't
     # However, don't run if the image build fails or is cancelled
     if: >-
-      always() &&
-      (needs.build-and-publish-jupyterhub-image.result == 'success' ||
-      needs.build-and-publish-jupyterhub-image.result == 'skipped') &&
-      !cancelled()
+      always() && (needs.build-and-publish-jupyterhub-image.result == 'success' || needs.build-and-publish-jupyterhub-image.result == 'skipped') && !cancelled()
     needs:
       - setup
       - build-and-publish-jupyterhub-image

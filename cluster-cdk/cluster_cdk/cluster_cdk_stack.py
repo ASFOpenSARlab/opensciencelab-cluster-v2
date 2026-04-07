@@ -12,7 +12,6 @@ from aws_cdk import (  # type: ignore
     aws_eks_v2 as eks,
     aws_ec2 as ec2,
     aws_iam as iam,
-    aws_elasticloadbalancingv2 as elbv2,
     lambda_layer_kubectl_v34,
 )
 
