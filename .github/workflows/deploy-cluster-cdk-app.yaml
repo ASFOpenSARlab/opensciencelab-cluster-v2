@@ -18,13 +18,32 @@ jobs:
     with:
       tagname: ${{ inputs.tagname || github.ref_name }}
 
+  check-for-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      jupyterhub: ${{ steps.filter.outputs.jupyterhub }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
+        id: changes
+        with:
+          filters: |
+            jupyterhub:
+              - 'images/jupyterhub/**'
+
   build-and-publish-jupyterhub-image:
+    needs: check-for-changes
+    if: ${{ needs.check-for-changes.outputs.jupyterhub == 'true' }}
     uses: ./.github/workflows/build-and-publish-jupyterhub-image.yaml
     with:
       ref_name: ${{ inputs.tagname || github.ref_name }}
 
   build-and-deploy-cluster:
     runs-on: ubuntu-latest
+    # Ensure that this job always runs even if the image build doesn't
+    # However, don't run if the image build fails or is cancelled
+    if: >-
+      always() && (needs.build-and-publish-jupyterhub-image.result == 'success' || needs.build-and-publish-jupyterhub-image.result == 'skipped') && !cancelled()
     needs:
       - setup
       - build-and-publish-jupyterhub-image
@@ -38,6 +57,7 @@ jobs:
       DEPLOY_PREFIX: ${{ needs.setup.outputs.deploy_prefix }}
       JUPYTER_HUB_DOCKER_TAG: ${{ needs.setup.outputs.deploy_prefix }}
       AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
+      UI_IAM_USER: ${{ vars.UI_IAM_USER }}
       IS_PROD: >-
         ${{
           needs.setup.outputs.environment == 'prod' ||

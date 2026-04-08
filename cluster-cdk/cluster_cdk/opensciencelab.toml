@@ -1,0 +1,33 @@
+[dev]
+environment = "dev"
+
+[defaults]
+environment = "dev"
+
+  [[defaults.lab_profiles]]
+  name = "m5a.xlarge"
+  description = "Hello"
+  image_url = "localhost"
+  node = "m5a.xlarge"
+
+  [[defaults.lab_profiles]]
+  name = "m5a.large"
+  description = "Hello, there"
+  image_url = "localhost"
+  node = "m5a.large"
+
+  [[defaults.nodes]]
+  name = "core"
+  node_type = "core"
+  instance = ["t3a.medium"]
+  group_desired_size = 1
+  group_min_size = 1
+  group_max_size = 1
+
+  [[defaults.nodes]]
+  name = "sar"
+  node_type = "user"
+  instance = ["m5a.large", "m6a.large"]
+  group_desired_size = 0
+  group_min_size = 0
+  group_max_size = 5
