@@ -6,7 +6,16 @@ on: # yamllint disable-line rule:truthy
     inputs:
       envOverride:
         description: "Environment override"
-        type: environment
+        type: choice
+        default: ""
+        options:
+          - ""
+          - prod
+          - test
+          - dev
+          - avo-prod
+          - azdwr-prod-opensarlab
+          - geos626
   push:
     branches:
       - main
