@@ -77,6 +77,10 @@ jobs:
           (inputs.envOverride != '' && inputs.envOverride || needs.setup.outputs.environment) == 'stage'
         }}
     steps:
+      - name: Log Environment
+        run: |
+          echo Selected Environment: ${{ inputs.envOverride != '' && inputs.envOverride || needs.setup.outputs.environment }}
+
       - name: Checkout Repo
         uses: actions/checkout@v6
 
