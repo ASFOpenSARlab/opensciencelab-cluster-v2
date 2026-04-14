@@ -138,7 +138,7 @@ synth-cluster: install-reqs
 .PHONY := deploy-cluster
 deploy-cluster: install-reqs
 	@echo "Deploying ${DEPLOY_PREFIX}/cluster-cdk"
-	cd ./cluster-cdk && cdk --require-approval never deploy
+	cd ./cluster-cdk && cdk --require-approval never deploy --no-rollback
 
 .PHONY := destroy-cluster
 destroy-cluster:
