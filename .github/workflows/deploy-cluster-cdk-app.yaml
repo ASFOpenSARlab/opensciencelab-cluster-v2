@@ -17,12 +17,6 @@ on: # yamllint disable-line rule:truthy
     branches:
       - main
 
-    tags:
-      - "v*.*.*"
-
-env:
-  PROD_DEPLOYMENTS: '["prod", "stage", "avo-prod", "azdwr-prod-opensarlab", "geos626"]'
-
 jobs:
   setup:
     uses: ASFOpenSARlab/osl-utils/.github/workflows/reusable-setup-env.yaml@v1.1.2
@@ -33,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - setup
-    environment: ${{ inputs.envOverride != '' && inputs.envOverride || needs.setup.outputs.environment }}
+    environment: ${{ inputs.envOverride || needs.setup.outputs.environment }}
     # container: ghcr.io/asfopensarlab/osl-utils:v1.1.2
     # These permissions are needed to interact with GitHub's OIDC Token endpoint.
     permissions:
@@ -44,12 +38,10 @@ jobs:
       JUPYTER_HUB_DOCKER_TAG: ${{ github.event.inputs.jupyterhub-image-tag || needs.setup.outputs.deploy_prefix }}
       AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       UI_IAM_USER: ${{ vars.UI_IAM_USER }}
-      IS_PROD: ${{ contains(fromJSON(env.PROD_DEPLOYMENTS), inputs.envOverride != '' && inputs.envOverride || needs.setup.outputs.environment ) }}
     steps:
       - name: Log Environment
         run: |
-          echo IS_PROD: ${{ env.IS_PROD }}
-          echo Selected Environment: ${{ inputs.envOverride != '' && inputs.envOverride || needs.setup.outputs.environment }}
+          echo Selected Environment: ${{ inputs.envOverride || needs.setup.outputs.environment }}
 
       - name: Checkout Repo
         uses: actions/checkout@v6
@@ -61,7 +53,7 @@ jobs:
           aws-region: ${{ vars.AWS_DEFAULT_REGION }}
 
       - name: Run Cluster Testsuite
-        if: contains(fromJSON('["prod", "stage", "avo-prod", "azdwr-prod-opensarlab", "geos626"]'), inputs.envOverride != '' && inputs.envOverride || needs.setup.outputs.environment )
+        if: contains(fromJSON('["dev", "test"]'), inputs.envOverride || needs.setup.outputs.environment )
         run: |
           make test
 
