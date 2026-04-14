@@ -41,7 +41,7 @@ jobs:
       JUPYTER_HUB_DOCKER_TAG: ${{ github.event.inputs.jupyterhub-image-tag || needs.setup.outputs.deploy_prefix }}
       AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       UI_IAM_USER: ${{ vars.UI_IAM_USER }}
-      IS_PROD: contains(fromJSON('["prod", "stage", "avo-prod", "azdwr-prod-opensarlab", "geos626"]'), (inputs.envOverride != '' && inputs.envOverride || needs.setup.outputs.environment) )
+      IS_PROD: contains(fromJSON('["prod", "stage", "avo-prod", "azdwr-prod-opensarlab", "geos626"]'), inputs.envOverride != '' && inputs.envOverride || needs.setup.outputs.environment )
     steps:
       - name: Log Environment
         run: |
@@ -58,7 +58,7 @@ jobs:
           aws-region: ${{ vars.AWS_DEFAULT_REGION }}
 
       - name: Run Cluster Testsuite
-        if: contains(fromJSON('["prod", "stage", "avo-prod", "azdwr-prod-opensarlab", "geos626"]'), (inputs.envOverride != '' && inputs.envOverride || needs.setup.outputs.environment) )
+        if: contains(fromJSON('["prod", "stage", "avo-prod", "azdwr-prod-opensarlab", "geos626"]'), inputs.envOverride != '' && inputs.envOverride || needs.setup.outputs.environment )
         run: |
           make test
 
