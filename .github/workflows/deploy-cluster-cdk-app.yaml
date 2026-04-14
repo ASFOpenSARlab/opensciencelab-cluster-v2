@@ -28,7 +28,7 @@ jobs:
     needs:
       - setup
     environment: ${{ inputs.envOverride || needs.setup.outputs.environment }}
-    # container: ghcr.io/asfopensarlab/osl-utils:v1.1.2
+    container: ghcr.io/asfopensarlab/osl-utils:v1.1.2
     # These permissions are needed to interact with GitHub's OIDC Token endpoint.
     permissions:
       id-token: write
@@ -46,17 +46,17 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v6
 
-      # - name: Configure AWS Credentials
-      #   uses: aws-actions/configure-aws-credentials@v4
-      #   with:
-      #     role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_NUMBER }}:role/deploy_cluster_stack_role
-      #     aws-region: ${{ vars.AWS_DEFAULT_REGION }}
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_NUMBER }}:role/deploy_cluster_stack_role
+          aws-region: ${{ vars.AWS_DEFAULT_REGION }}
 
       - name: Run Cluster Testsuite
         if: contains(fromJSON('["dev", "test"]'), inputs.envOverride || needs.setup.outputs.environment )
         run: |
           make test
 
-      # - name: CDK Deploy Cluster
-      #   run: |-
-      #     make deploy-cluster
+      - name: CDK Deploy Cluster
+        run: |-
+          make deploy-cluster
