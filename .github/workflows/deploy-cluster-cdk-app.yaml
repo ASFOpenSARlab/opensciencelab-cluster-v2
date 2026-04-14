@@ -28,7 +28,7 @@ jobs:
     uses: ASFOpenSARlab/osl-utils/.github/workflows/reusable-setup-env.yaml@v1.1.2
     with:
       tagname: ${{ inputs.tagname || github.ref_name }}
-
+  
   build-and-deploy-cluster:
     runs-on: ubuntu-latest
     needs:
@@ -44,7 +44,7 @@ jobs:
       JUPYTER_HUB_DOCKER_TAG: ${{ github.event.inputs.jupyterhub-image-tag || needs.setup.outputs.deploy_prefix }}
       AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       UI_IAM_USER: ${{ vars.UI_IAM_USER }}
-      IS_PROD: ${{ contains(fromJSON("${{ env.PROD_DEPLOYMENTS }}"), inputs.envOverride != '' && inputs.envOverride || needs.setup.outputs.environment ) }}
+      IS_PROD: ${{ contains(fromJSON(env.PROD_DEPLOYMENTS), inputs.envOverride != '' && inputs.envOverride || needs.setup.outputs.environment ) }}
     steps:
       - name: Log Environment
         run: |
