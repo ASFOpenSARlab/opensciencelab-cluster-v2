@@ -11,16 +11,8 @@ on: # yamllint disable-line rule:truthy
 
       envOverride:
         description: "Environment override"
-        type: choice
-        default: ""
-        options:
-          - ""
-          - prod
-          - test
-          - dev
-          - avo-prod
-          - azdwr-prod-opensarlab
-          - geos626
+        type: environment
+        default: "dev"
   push:
     branches:
       - main
@@ -38,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - setup
-    environment: ${{ needs.setup.outputs.environment }}
+    environment: ${{ inputs.envOverride != '' && inputs.envOverride || needs.setup.outputs.environment }}
     container: ghcr.io/asfopensarlab/osl-utils:v1.1.2
     # These permissions are needed to interact with GitHub's OIDC Token endpoint.
     permissions:
