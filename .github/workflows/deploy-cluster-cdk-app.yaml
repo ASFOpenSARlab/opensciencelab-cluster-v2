@@ -4,6 +4,11 @@ name: Deploy Cluster CDK
 on: # yamllint disable-line rule:truthy
   workflow_dispatch:
     inputs:
+      jupyterhub-image-tag:
+        description: "image tag of `opensciencelab-jupyterhub` (ex. 'dp', 'v1.0.2', etc.)"
+        required: false
+        default: ''
+
       envOverride:
         description: "Environment override"
         type: choice
@@ -19,48 +24,21 @@ on: # yamllint disable-line rule:truthy
   push:
     branches:
       - main
-    # If matching to a tag, the action will always run regardless if there are any changes in the path
+
     tags:
       - "v*.*.*"
 
-# Jobs run in parallel, steps run in sequence
-# Image builds must complete before the cluster build is started.
 jobs:
   setup:
     uses: ASFOpenSARlab/osl-utils/.github/workflows/reusable-setup-env.yaml@v1.1.2
     with:
       tagname: ${{ inputs.tagname || github.ref_name }}
 
-  check-for-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      jupyterhub: ${{ steps.filter.outputs.jupyterhub }}
-    steps:
-      - uses: actions/checkout@v6
-      - uses: dorny/paths-filter@v4
-        id: changes
-        with:
-          filters: |
-            jupyterhub:
-              - 'images/jupyterhub/**'
-
-  build-and-publish-jupyterhub-image:
-    needs: check-for-changes
-    if: ${{ needs.check-for-changes.outputs.jupyterhub == 'true' }}
-    uses: ./.github/workflows/build-and-publish-jupyterhub-image.yaml
-    with:
-      ref_name: ${{ inputs.tagname || github.ref_name }}
-
   build-and-deploy-cluster:
     runs-on: ubuntu-latest
-    # Ensure that this job always runs even if the image build doesn't
-    # However, don't run if the image build fails or is cancelled
-    if: >-
-      always() && (needs.build-and-publish-jupyterhub-image.result == 'success' || needs.build-and-publish-jupyterhub-image.result == 'skipped') && !cancelled()
     needs:
       - setup
-      - build-and-publish-jupyterhub-image
-    environment: ${{ inputs.envOverride != '' && inputs.envOverride || needs.setup.outputs.environment }}
+    environment: ${{ needs.setup.outputs.environment }}
     container: ghcr.io/asfopensarlab/osl-utils:v1.1.2
     # These permissions are needed to interact with GitHub's OIDC Token endpoint.
     permissions:
@@ -68,7 +46,7 @@ jobs:
       contents: read
     env:
       DEPLOY_PREFIX: ${{ needs.setup.outputs.deploy_prefix }}
-      JUPYTER_HUB_DOCKER_TAG: ${{ needs.setup.outputs.deploy_prefix }}
+      JUPYTER_HUB_DOCKER_TAG: ${{ github.event.inputs.jupyterhub-image-tag || needs.setup.outputs.deploy_prefix }}
       AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       UI_IAM_USER: ${{ vars.UI_IAM_USER }}
       IS_PROD: >-
