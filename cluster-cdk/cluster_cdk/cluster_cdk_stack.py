@@ -550,7 +550,6 @@ class ClusterCdkStack(Stack):
             namespace="jupyter",
             timeout=Duration.minutes(15),
         )
-        self.nlb_url = ""
 
     def setup_outputs(self) -> None:
         CfnOutput(
