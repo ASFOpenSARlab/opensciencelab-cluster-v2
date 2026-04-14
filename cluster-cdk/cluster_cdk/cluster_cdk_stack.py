@@ -69,7 +69,6 @@ class ClusterCdkStack(Stack):
         return merged
 
     def setup_env(self):
-
         # CDK provides the AWS Account number via self.account # "233535791844"
         # CDK provides the AWS Region va self.region
         self.DEPLOY_PREFIX = os.getenv("DEPLOY_PREFIX")
@@ -95,7 +94,6 @@ class ClusterCdkStack(Stack):
         print(vars(self))
 
     def setup_networking(self):
-
         # Two subnets for EKS
         public_subnet = ec2.SubnetConfiguration(
             name="PublicSubnet",
@@ -119,7 +117,6 @@ class ClusterCdkStack(Stack):
         )
 
     def setup_cluster(self) -> None:
-
         ## https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks_v2/README.html#provisioning-clusters
         self.cluster = eks.Cluster(
             self,
@@ -246,7 +243,6 @@ class ClusterCdkStack(Stack):
         )
 
     def setup_nodegroup(self) -> None:
-
         # https://github.com/aws/aws-cdk/issues/37012eks.Cluster
         for node in self.osl_config["nodes"]:
             node_type = node.get("node_type", "user")
@@ -330,7 +326,6 @@ class ClusterCdkStack(Stack):
                 self.core_nodegroup = node_group
 
     def setup_ebs_csi_storage(self) -> None:
-
         # CSI storage
         csi_service_account = self.cluster.add_service_account(
             "EbsCsiServiceAccount",
@@ -411,7 +406,6 @@ class ClusterCdkStack(Stack):
         )
 
     def setup_jupyterhub(self) -> None:
-
         self.jupyterhub_helm_version = "4.3.2"
 
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#helm-charts
@@ -466,7 +460,6 @@ class ClusterCdkStack(Stack):
         self.jupyerhub_helm_chart.node.add_dependency(self.ebs_csi_driver_helm_chart)
 
     def setup_load_balancer(self) -> None:
-
         # The default CDK AWS Controller is woefully out of date.
         # Use the helm chart
         self.load_balancer_controller_version = "3.2.1"
@@ -560,7 +553,6 @@ class ClusterCdkStack(Stack):
         self.nlb_url = ""
 
     def setup_outputs(self) -> None:
-
         CfnOutput(
             self,
             "NLB URL",
