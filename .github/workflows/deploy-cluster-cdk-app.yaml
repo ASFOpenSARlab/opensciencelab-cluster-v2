@@ -20,6 +20,9 @@ on: # yamllint disable-line rule:truthy
     tags:
       - "v*.*.*"
 
+env:
+  PROD_DEPLOYMENTS: '["prod", "stage", "avo-prod", "azdwr-prod-opensarlab", "geos626"]'
+
 jobs:
   setup:
     uses: ASFOpenSARlab/osl-utils/.github/workflows/reusable-setup-env.yaml@v1.1.2
@@ -31,7 +34,7 @@ jobs:
     needs:
       - setup
     environment: ${{ inputs.envOverride != '' && inputs.envOverride || needs.setup.outputs.environment }}
-    container: ghcr.io/asfopensarlab/osl-utils:v1.1.2
+    # container: ghcr.io/asfopensarlab/osl-utils:v1.1.2
     # These permissions are needed to interact with GitHub's OIDC Token endpoint.
     permissions:
       id-token: write
@@ -41,7 +44,7 @@ jobs:
       JUPYTER_HUB_DOCKER_TAG: ${{ github.event.inputs.jupyterhub-image-tag || needs.setup.outputs.deploy_prefix }}
       AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       UI_IAM_USER: ${{ vars.UI_IAM_USER }}
-      IS_PROD: ${{ contains(fromJSON('["prod", "stage", "avo-prod", "azdwr-prod-opensarlab", "geos626"]'), inputs.envOverride != '' && inputs.envOverride || needs.setup.outputs.environment ) }}
+      IS_PROD: ${{ contains(fromJSON("${{ env.PROD_DEPLOYMENTS }}"), inputs.envOverride != '' && inputs.envOverride || needs.setup.outputs.environment ) }}
     steps:
       - name: Log Environment
         run: |
