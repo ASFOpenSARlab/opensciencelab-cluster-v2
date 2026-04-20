@@ -24,11 +24,12 @@ class ClusterCdkStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        """*************************************************************************
+        #####################################################################
+        #
+        #    Setup Environment
+        #
+        #####################################################################
 
-            Setup Environment
-
-        """
         # CDK provides the AWS Account number via self.account # "233535791844"
         # CDK provides the AWS Region va self.region
         self.DEPLOY_PREFIX = os.getenv("DEPLOY_PREFIX")
@@ -53,11 +54,11 @@ class ClusterCdkStack(Stack):
 
         print(vars(self))
 
-        """*************************************************************************
-
-            Setup Networking
-
-        """
+        #####################################################################
+        #
+        #    Setup Networking
+        #
+        #####################################################################
 
         # Two subnets for EKS
         public_subnet = ec2.SubnetConfiguration(
@@ -81,11 +82,11 @@ class ClusterCdkStack(Stack):
             subnet_configuration=[public_subnet, private_subnet],
         )
 
-        """*************************************************************************
-
-            Setup Cluster
-
-        """
+        #####################################################################
+        #
+        #    Setup Cluster
+        #
+        #####################################################################
 
         ## https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks_v2/README.html#provisioning-clusters
         self.cluster = eks.Cluster(
@@ -212,13 +213,13 @@ class ClusterCdkStack(Stack):
             # configuration_values={},
         )
 
-        """*************************************************************************
-
-            Setup Nodegroups
-
-            These are paired 1-to-1 with auto scaling groups but are better managed by k8s.
-
-        """
+        #####################################################################
+        #
+        #    Setup Nodegroups
+        #
+        #    These are paired 1-to-1 with auto scaling groups but are better managed by k8s.
+        #
+        #####################################################################
 
         # https://github.com/aws/aws-cdk/issues/37012eks.Cluster
         for node in self.osl_config["nodes"]:
@@ -302,11 +303,11 @@ class ClusterCdkStack(Stack):
             if node_type == "core":
                 self.core_nodegroup = node_group
 
-        """*************************************************************************
-
-            Setup EBS CSI Storage for volume creation
-
-        """
+        #####################################################################
+        #
+        #    Setup EBS CSI Storage for volume creation
+        #
+        #####################################################################
 
         # CSI storage
         csi_service_account = self.cluster.add_service_account(
@@ -387,10 +388,11 @@ class ClusterCdkStack(Stack):
             },
         )
 
-        """*************************************************************************
-
-            Setup JupyterHub
-        """
+        #####################################################################
+        #
+        #    Setup JupyterHub
+        #
+        #####################################################################
 
         self.jupyterhub_helm_version = "4.3.2"
 
@@ -445,11 +447,11 @@ class ClusterCdkStack(Stack):
 
         self.jupyerhub_helm_chart.node.add_dependency(self.ebs_csi_driver_helm_chart)
 
-        """*************************************************************************
-
-            Setup Load Balancer
-
-        """
+        #####################################################################
+        #
+        #    Setup Load Balancer
+        #
+        #####################################################################
 
         # The default CDK AWS Controller is woefully out of date.
         # Use the helm chart
@@ -544,11 +546,11 @@ class ClusterCdkStack(Stack):
             timeout=Duration.minutes(15),
         )
 
-        """*************************************************************************
-
-            Setup CDK Outputs
-
-        """
+        #####################################################################
+        #
+        #    Setup CDK Outputs
+        #
+        #####################################################################
 
         CfnOutput(
             self,
