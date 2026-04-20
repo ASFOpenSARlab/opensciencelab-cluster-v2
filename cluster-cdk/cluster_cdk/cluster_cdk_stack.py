@@ -2,6 +2,8 @@ import os
 import tomllib  # type: ignore
 import pathlib
 
+import requests
+
 from aws_cdk import (  # type: ignore
     CfnTag,
     CfnOutput,
@@ -17,12 +19,16 @@ from aws_cdk import (  # type: ignore
 
 from constructs import Construct  # type: ignore
 
-from .manifests import csi_storage_class, jupyterhub_proxy_service
-
 
 class ClusterCdkStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
+
+        #####################################################################
+        #
+        #    Setup Environment
+        #
+        #####################################################################
 
         # CDK provides the AWS Account number via self.account # "233535791844"
         # CDK provides the AWS Region va self.region
@@ -43,18 +49,24 @@ class ClusterCdkStack(Stack):
             self.DEPLOY_PREFIX, osl_config_with_defaults.get("defaults", {})
         )
 
+        # All resources in this specific stack will get this tag
+        Tags.of(self).add("osl-billing", f"eks-cluster-{self.DEPLOY_PREFIX.lower()}")  # type: ignore
+
         print(vars(self))
 
-        # All resources in this specific stack will get this tag
-        Tags.of(self).add("osl-billing", self.DEPLOY_PREFIX.lower())  # type: ignore
+        #####################################################################
+        #
+        #    Setup Networking
+        #
+        #####################################################################
 
         # Two subnets for EKS
-        self.public_subnet = ec2.SubnetConfiguration(
+        public_subnet = ec2.SubnetConfiguration(
             name="PublicSubnet",
             subnet_type=ec2.SubnetType.PUBLIC,
             cidr_mask=24,
         )
-        self.private_subnet = ec2.SubnetConfiguration(
+        private_subnet = ec2.SubnetConfiguration(
             name="PrivateSubnetWithEgress",
             subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
             cidr_mask=24,
@@ -67,8 +79,14 @@ class ClusterCdkStack(Stack):
             availability_zones=[f"{self.region}a", f"{self.region}d"],
             ip_addresses=ec2.IpAddresses.cidr("10.0.0.0/16"),
             # Configure subnet types for EKS (e.g., Public and Private)
-            subnet_configuration=[self.public_subnet, self.private_subnet],
+            subnet_configuration=[public_subnet, private_subnet],
         )
+
+        #####################################################################
+        #
+        #    Setup Cluster
+        #
+        #####################################################################
 
         ## https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks_v2/README.html#provisioning-clusters
         self.cluster = eks.Cluster(
@@ -82,25 +100,6 @@ class ClusterCdkStack(Stack):
             ),
             default_capacity_type=eks.DefaultCapacityType.NODEGROUP,
             default_capacity=0,
-            alb_controller=eks.AlbControllerOptions(
-                version=eks.AlbControllerVersion.V2_8_2,
-                overwrite_service_account=False,
-                additional_helm_chart_values={
-                    "enableWaf": False,
-                    "enableWafv2": False,
-                    "defaultTags": {"AlbControllerManaged": True},
-                },
-                removal_policy=RemovalPolicy.DESTROY,
-            ),
-        )
-
-        # Create namespace jupyterhub proxy for load balancer service
-        # This will create a NLB selecting for the jupyterhub pod to be created later
-        # Note that resources are not cleaned up properly on deletion.
-        self.cluster.add_manifest(
-            "JupyterHubNLBService",
-            jupyterhub_proxy_service.create_namespace_definition,
-            jupyterhub_proxy_service.manifest_service_definition,
         )
 
         cluster_user_role = iam.Role(
@@ -136,7 +135,7 @@ class ClusterCdkStack(Stack):
         )
 
         ##  https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/AccessEntry.html
-        eks.AccessEntry(
+        self.user_cloudshell_entry = eks.AccessEntry(
             self,
             "UserAccessCloudshell",
             access_policies=[
@@ -151,9 +150,11 @@ class ClusterCdkStack(Stack):
             removal_policy=RemovalPolicy.DESTROY,
         )
 
+        self.user_cloudshell_entry.node.add_dependency(self.cluster)
+
         if self.UI_IAM_USER:
             # Access Entry for EKS UI
-            eks.AccessEntry(
+            self.user_access_ui_entry = eks.AccessEntry(
                 self,
                 "UserAccessUI",
                 access_policies=[
@@ -168,7 +169,59 @@ class ClusterCdkStack(Stack):
                 removal_policy=RemovalPolicy.DESTROY,
             )
 
-        # https://github.com/aws/aws-cdk/issues/37012
+            self.user_access_ui_entry.node.add_dependency(self.cluster)
+
+        # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#add-ons
+        eks.Addon(
+            self,
+            "CniAddon",
+            addon_name="vpc-cni",
+            addon_version="v1.20.4-eksbuild.2",
+            cluster=self.cluster,
+            # configuration_values={},
+        )
+        eks.Addon(  # Check if needed
+            self,
+            "CoreDnsAddon",
+            addon_name="coredns",
+            addon_version="v1.12.3-eksbuild.1",
+            cluster=self.cluster,
+            # configuration_values={},
+        )
+
+        ## Look up latest default version of amazon-cloudwatch-observability:
+        # aws eks describe-addon-versions \
+        #   --addon-name amazon-cloudwatch-observability \
+        #   --kubernetes-version 1.34 \
+        #   --query "addons[0].addonVersions[?compatibilities[0].defaultVersion]"
+        self.cw_observe_addon = eks.Addon(
+            self,
+            "CloudwatchObserv",
+            addon_name="amazon-cloudwatch-observability",
+            addon_version="v4.10.2-eksbuild.1",
+            cluster=self.cluster,
+        )
+
+        self.cw_observe_addon.node.add_dependency(self.cluster)
+
+        eks.Addon(  # Check if needed
+            self,
+            "KubeProxyAddon",
+            addon_name="kube-proxy",
+            addon_version="v1.34.0-eksbuild.2",
+            cluster=self.cluster,
+            # configuration_values={},
+        )
+
+        #####################################################################
+        #
+        #    Setup Nodegroups
+        #
+        #    These are paired 1-to-1 with auto scaling groups but are better managed by k8s.
+        #
+        #####################################################################
+
+        # https://github.com/aws/aws-cdk/issues/37012eks.Cluster
         for node in self.osl_config["nodes"]:
             node_type = node.get("node_type", "user")
 
@@ -247,6 +300,16 @@ class ClusterCdkStack(Stack):
                     iam.ManagedPolicy.from_aws_managed_policy_name(managed_policy)
                 )
 
+            if node_type == "core":
+                self.core_nodegroup = node_group
+
+        #####################################################################
+        #
+        #    Setup EBS CSI Storage for volume creation
+        #
+        #####################################################################
+
+        # CSI storage
         csi_service_account = self.cluster.add_service_account(
             "EbsCsiServiceAccount",
             name="ebs-csi-controller-sa",
@@ -276,58 +339,39 @@ class ClusterCdkStack(Stack):
         )
 
         self.cluster.add_manifest(
-            "CsiStorageClass", csi_storage_class.manifest_definition
+            "CsiStorageClass",
+            {
+                "apiVersion": "storage.k8s.io/v1",
+                "kind": "StorageClass",
+                "metadata": {
+                    "name": "gp3",
+                    "annotations": {
+                        "storageclass.kubernetes.io/is-default-class": "true",
+                    },
+                },
+                "provisioner": "ebs.csi.aws.com",
+                "parameters": {
+                    "type": "gp3",
+                    "fsType": "ext4",
+                },
+                "allowVolumeExpansion": True,
+                "volumeBindingMode": "Immediate",
+                "reclaimPolicy": "Delete",
+            },
         )
 
-        # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#add-ons
-        eks.Addon(
-            self,
-            "CniAddon",
-            addon_name="vpc-cni",
-            addon_version="v1.20.4-eksbuild.2",
-            cluster=self.cluster,
-            # configuration_values={},
-        )
-        eks.Addon(  # Check if needed
-            self,
-            "CoreDnsAddon",
-            addon_name="coredns",
-            addon_version="v1.12.3-eksbuild.1",
-            cluster=self.cluster,
-            # configuration_values={},
-        )
-
-        ## Look up latest default version of amazon-cloudwatch-observability:
-        # aws eks describe-addon-versions \
-        #   --addon-name amazon-cloudwatch-observability \
-        #   --kubernetes-version 1.34 \
-        #   --query "addons[0].addonVersions[?compatibilities[0].defaultVersion]"
-        eks.Addon(
-            self,
-            "CloudwatchObserv",
-            addon_name="amazon-cloudwatch-observability",
-            addon_version="v4.10.2-eksbuild.1",
-            cluster=self.cluster,
-        )
-
-        eks.Addon(  # Check if needed
-            self,
-            "KubeProxyAddon",
-            addon_name="kube-proxy",
-            addon_version="v1.34.0-eksbuild.2",
-            cluster=self.cluster,
-            # configuration_values={},
-        )
+        self.csi_driver_version = "2.56.1"
 
         # https://artifacthub.io/packages/helm/aws-ebs-csi-driver/aws-ebs-csi-driver
-        self.cluster.add_helm_chart(
+        self.ebs_csi_driver_helm_chart = self.cluster.add_helm_chart(
             "AwsEbsCsiDriver",
             repository="https://kubernetes-sigs.github.io/aws-ebs-csi-driver",
             atomic=True,
             chart="aws-ebs-csi-driver",
             release=f"osl-ebs-driver-{self.DEPLOY_PREFIX.lower()}",  # type: ignore
             namespace="kube-system",
-            version="2.56.1",
+            version=self.csi_driver_version,
+            wait=True,
             timeout=Duration.minutes(8),
             values={
                 "controller": {
@@ -344,17 +388,26 @@ class ClusterCdkStack(Stack):
             },
         )
 
+        #####################################################################
+        #
+        #    Setup JupyterHub
+        #
+        #####################################################################
+
+        self.jupyterhub_helm_version = "4.3.2"
+
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#helm-charts
         # https://artifacthub.io/packages/helm/jupyterhub/jupyterhub?modal=values-schema
         # https://z2jh.jupyter.org/en/latest/resources/reference.html
-        self.cluster.add_helm_chart(
+        self.jupyerhub_helm_chart = self.cluster.add_helm_chart(
             "JupyterhubHelmChart",
             repository="https://jupyterhub.github.io/helm-chart/",
             atomic=False,
             chart="jupyterhub",
             release=f"osl-jupyterhub-{self.DEPLOY_PREFIX.lower()}",  # type: ignore
-            version="4.3.2",
+            version=self.jupyterhub_helm_version,
             namespace="jupyter",
+            wait=True,
             timeout=Duration.minutes(10),
             values={
                 "prePuller": {
@@ -392,16 +445,132 @@ class ClusterCdkStack(Stack):
             },
         )
 
-        # Since the NLB is created via annotations, we need to get the url after jupyterhub installation.
-        nlb_url = self.cluster.get_service_load_balancer_address(
-            "proxy-public-loadbalancer", namespace="jupyter"
+        self.jupyerhub_helm_chart.node.add_dependency(self.ebs_csi_driver_helm_chart)
+
+        #####################################################################
+        #
+        #    Setup Load Balancer
+        #
+        #####################################################################
+
+        # The default CDK AWS Controller is woefully out of date.
+        # Use the helm chart
+        self.load_balancer_controller_version = "3.2.1"
+
+        alb_sa = self.cluster.add_service_account(
+            "aws-load-balancer-controller-sa", namespace="kube-system"
         )
+
+        alb_controller_url = f"https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v{self.load_balancer_controller_version}/docs/install/iam_policy.json"
+        policy_json = requests.get(url=alb_controller_url).json()
+
+        for statement in policy_json["Statement"]:
+            alb_sa.add_to_principal_policy(iam.PolicyStatement.from_json(statement))
+
+        load_balancer_helm_chart = self.cluster.add_helm_chart(
+            "ALBController",
+            chart="aws-load-balancer-controller",
+            repository="https://aws.github.io/eks-charts",
+            namespace="kube-system",
+            wait=True,  # Until the pods are ready
+            timeout=Duration.minutes(10),
+            version=self.load_balancer_controller_version,
+            values={
+                "clusterName": self.cluster.cluster_name,
+                "serviceAccount": {
+                    "create": False,
+                    "name": alb_sa.service_account_name,
+                },
+                "region": self.region,
+                "vpcId": self.cluster.vpc.vpc_id,
+                "nodeSelector": {"opensciencelab.local/node-type": "core"},
+                "enableWaf": False,
+                "enableWafv2": False,
+                "defaultTags": {"AlbControllerManaged": True},
+            },
+        )
+
+        # Create namespace jupyterhub proxy for load balancer service
+        # Annotations on the service will create a NLB selecting for the jupyterhub proxy pod
+        #
+        # WARNING: Before deleting the stack, you MUST open AWS CloudShell and manually run `kubectl -n jupyter delete svc proxy-public-loadbalancer`.
+        # For reasons unknown, having CDK auto-delete the k8s service on destroy does not safely delete all the networking resources
+        load_balancer_manifest = self.cluster.add_manifest(
+            "JupyterHubNLBService",
+            {
+                "apiVersion": "v1",
+                "kind": "Service",
+                "metadata": {
+                    "name": "proxy-public-loadbalancer",
+                    "namespace": "jupyter",
+                    "labels": {
+                        "app": "jupyterhub",
+                        "opensciencelab.local/node-type": "core",
+                    },
+                    "annotations": {
+                        "service.beta.kubernetes.io/aws-load-balancer-name": f"eks-cluster-{self.DEPLOY_PREFIX}",
+                        "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type": "ip",
+                        "service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
+                        "service.beta.kubernetes.io/aws-load-balancer-type": "external",
+                        "service.beta.kubernetes.io/aws-load-balancer-healthcheck-path": "/hub/health",
+                        "service.beta.kubernetes.io/aws-load-balancer-healthcheck-healthy-threshold": "3",
+                    },
+                },
+                "spec": {
+                    "ports": [
+                        {"protocol": "TCP", "port": 80, "targetPort": 8000},
+                    ],
+                    "selector": {
+                        "app": "jupyterhub",
+                        "component": "proxy",
+                    },
+                    "type": "LoadBalancer",
+                },
+            },
+        )
+
+        # The nlb manifest is dependant on jupyterhub for the jupyter namespace.
+        # And is dependent on the load balancer controller to delete the NLB when the coreesponding k8s service is deleted.
+        # Since such relationships are not explicit in the cdk code above, we need to declare the relationships here.
+        # "If the controller pod is deleted before the Ingress object (e.g., during a cdk destroy),
+        #  the Ingress will remain in a "Terminating" state, and the ALB will be orphaned."
+        load_balancer_manifest.node.add_dependency(self.core_nodegroup)
+        load_balancer_manifest.node.add_dependency(self.jupyerhub_helm_chart)
+        load_balancer_manifest.node.add_dependency(alb_sa)
+        load_balancer_manifest.node.add_dependency(load_balancer_helm_chart)
+
+        # Since the NLB is created via annotations, we need to get the url after jupyterhub installation.
+        self.nlb_url = self.cluster.get_service_load_balancer_address(
+            "proxy-public-loadbalancer",
+            namespace="jupyter",
+            timeout=Duration.minutes(15),
+        )
+
+        #####################################################################
+        #
+        #    Setup CDK Outputs
+        #
+        #####################################################################
 
         CfnOutput(
             self,
             "NLB URL",
-            value=f"http://{nlb_url}",
+            value=f"http://{self.nlb_url}",
             description="The url of the Network Load Balancer",
+        )
+
+        CfnOutput(
+            self,
+            "NLB Controller Helm Version",
+            value=self.load_balancer_controller_version,
+            description="The version of the AWS Load Balancer Controller Helm Chart",
+        )
+
+        CfnOutput(
+            self,
+            "JupyterHub Helm Version",
+            value=self.jupyterhub_helm_version,
+            description="The version of the JupyterHub Helm Chart version",
         )
 
     def _get_osl_config_with_defaults(self) -> dict:
