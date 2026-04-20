@@ -24,51 +24,11 @@ class ClusterCdkStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        self.setup_env()
+        """*************************************************************************
 
-        self.setup_networking()
+            Setup Environment
 
-        self.setup_cluster()  # Depends on vpc
-
-        self.setup_nodegroup()  # Depends on cluster
-
-        self.setup_ebs_csi_storage()  # Depends on cluster
-
-        self.setup_jupyterhub()  # Depends on cluster, csi driver, nodegroup
-
-        self.setup_load_balancer()  # Depends on cluster, Jupyter namespace from JupyterHub
-
-        self.setup_outputs()
-
-    def _get_osl_config_with_defaults(self) -> dict:
-        with open(self.OPENSCIENCELAB_CONFIG_FILE, "rb") as f:
-            config: dict = tomllib.load(f)
-
-        defaults: dict = config.get("defaults", {})
-
-        merged = {}
-
-        merged["defaults"] = defaults
-
-        # Cycle through all the labs
-        for lab_name, lab_config in config.items():
-            lab = {}
-
-            lab["environment"] = lab_config.get("environment", defaults["environment"])
-
-            # Replace of all nodes if lab nodes are defined
-            lab["nodes"] = lab_config.get("nodes", defaults["nodes"])
-
-            # Replace of all nodes if lab nodes are defined
-            lab["lab_profiles"] = lab_config.get(
-                "lab_profiles", defaults["lab_profiles"]
-            )
-
-            merged[lab_name] = lab
-
-        return merged
-
-    def setup_env(self):
+        """
         # CDK provides the AWS Account number via self.account # "233535791844"
         # CDK provides the AWS Region va self.region
         self.DEPLOY_PREFIX = os.getenv("DEPLOY_PREFIX")
@@ -93,7 +53,12 @@ class ClusterCdkStack(Stack):
 
         print(vars(self))
 
-    def setup_networking(self):
+        """*************************************************************************
+
+            Setup Networking
+
+        """
+
         # Two subnets for EKS
         public_subnet = ec2.SubnetConfiguration(
             name="PublicSubnet",
@@ -116,7 +81,12 @@ class ClusterCdkStack(Stack):
             subnet_configuration=[public_subnet, private_subnet],
         )
 
-    def setup_cluster(self) -> None:
+        """*************************************************************************
+
+            Setup Cluster
+
+        """
+
         ## https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks_v2/README.html#provisioning-clusters
         self.cluster = eks.Cluster(
             self,
@@ -242,7 +212,14 @@ class ClusterCdkStack(Stack):
             # configuration_values={},
         )
 
-    def setup_nodegroup(self) -> None:
+        """*************************************************************************
+
+            Setup Nodegroups
+
+            These are paired 1-to-1 with auto scaling groups but are better managed by k8s.
+
+        """
+
         # https://github.com/aws/aws-cdk/issues/37012eks.Cluster
         for node in self.osl_config["nodes"]:
             node_type = node.get("node_type", "user")
@@ -325,7 +302,12 @@ class ClusterCdkStack(Stack):
             if node_type == "core":
                 self.core_nodegroup = node_group
 
-    def setup_ebs_csi_storage(self) -> None:
+        """*************************************************************************
+
+            Setup EBS CSI Storage for volume creation
+
+        """
+
         # CSI storage
         csi_service_account = self.cluster.add_service_account(
             "EbsCsiServiceAccount",
@@ -405,7 +387,11 @@ class ClusterCdkStack(Stack):
             },
         )
 
-    def setup_jupyterhub(self) -> None:
+        """*************************************************************************
+
+            Setup JupyterHub
+        """
+
         self.jupyterhub_helm_version = "4.3.2"
 
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#helm-charts
@@ -459,7 +445,12 @@ class ClusterCdkStack(Stack):
 
         self.jupyerhub_helm_chart.node.add_dependency(self.ebs_csi_driver_helm_chart)
 
-    def setup_load_balancer(self) -> None:
+        """*************************************************************************
+
+            Setup Load Balancer
+
+        """
+
         # The default CDK AWS Controller is woefully out of date.
         # Use the helm chart
         self.load_balancer_controller_version = "3.2.1"
@@ -499,7 +490,9 @@ class ClusterCdkStack(Stack):
 
         # Create namespace jupyterhub proxy for load balancer service
         # Annotations on the service will create a NLB selecting for the jupyterhub proxy pod
-        # Note that resources are not cleaned up properly on deletion.
+        #
+        # WARNING: Before deleting the stack, you MUST open AWS CloudShell and manually run `kubectl -n jupyter delete svc proxy-public-loadbalancer`.
+        # For reasons unknown, having CDK auto-delete the k8s service on destroy does not safely delete all the networking resources
         load_balancer_manifest = self.cluster.add_manifest(
             "JupyterHubNLBService",
             {
@@ -535,8 +528,8 @@ class ClusterCdkStack(Stack):
         )
 
         # The nlb manifest is dependant on jupyterhub for the jupyter namespace.
-        # And the nlb controller to delete the NLB when the service is deleted.
-        # Since such relationships are not explicit in the code above, we need to declare the relationships here.
+        # And is dependent on the load balancer controller to delete the NLB when the coreesponding k8s service is deleted.
+        # Since such relationships are not explicit in the cdk code above, we need to declare the relationships here.
         # "If the controller pod is deleted before the Ingress object (e.g., during a cdk destroy),
         #  the Ingress will remain in a "Terminating" state, and the ALB will be orphaned."
         load_balancer_manifest.node.add_dependency(self.core_nodegroup)
@@ -551,7 +544,12 @@ class ClusterCdkStack(Stack):
             timeout=Duration.minutes(15),
         )
 
-    def setup_outputs(self) -> None:
+        """*************************************************************************
+
+            Setup CDK Outputs
+
+        """
+
         CfnOutput(
             self,
             "NLB URL",
@@ -572,3 +570,31 @@ class ClusterCdkStack(Stack):
             value=self.jupyterhub_helm_version,
             description="The version of the JupyterHub Helm Chart version",
         )
+
+    def _get_osl_config_with_defaults(self) -> dict:
+        with open(self.OPENSCIENCELAB_CONFIG_FILE, "rb") as f:
+            config: dict = tomllib.load(f)
+
+        defaults: dict = config.get("defaults", {})
+
+        merged = {}
+
+        merged["defaults"] = defaults
+
+        # Cycle through all the labs
+        for lab_name, lab_config in config.items():
+            lab = {}
+
+            lab["environment"] = lab_config.get("environment", defaults["environment"])
+
+            # Replace of all nodes if lab nodes are defined
+            lab["nodes"] = lab_config.get("nodes", defaults["nodes"])
+
+            # Replace of all nodes if lab nodes are defined
+            lab["lab_profiles"] = lab_config.get(
+                "lab_profiles", defaults["lab_profiles"]
+            )
+
+            merged[lab_name] = lab
+
+        return merged
