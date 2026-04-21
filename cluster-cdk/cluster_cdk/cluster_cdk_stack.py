@@ -425,7 +425,7 @@ class ClusterCdkStack(Stack):
                 },
                 "hub": {
                     "image": {
-                        "name": "ghcr.io/asfopensarlab/opensciencelab-cluster-v2/cluster/jupyterhub",
+                        "name": "ghcr.io/asfopensarlab/opensciencelab-jupyterhub",
                         "tag": self.JUPYTER_HUB_DOCKER_TAG,
                         "pullPolicy": "Always",
                     },
