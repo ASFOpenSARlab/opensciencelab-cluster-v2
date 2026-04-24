@@ -7,13 +7,16 @@ import requests
 from aws_cdk import (  # type: ignore
     CfnTag,
     CfnOutput,
+    custom_resources as cr,
     Tags,
     RemovalPolicy,
     Duration,
     Stack,
+    SecretValue,
     aws_eks_v2 as eks,
     aws_ec2 as ec2,
     aws_iam as iam,
+    aws_secretsmanager as secretsmanager,
     lambda_layer_kubectl_v34,
 )
 
@@ -32,7 +35,7 @@ class ClusterCdkStack(Stack):
 
         # CDK provides the AWS Account number via self.account # "233535791844"
         # CDK provides the AWS Region va self.region
-        self.DEPLOY_PREFIX = os.getenv("DEPLOY_PREFIX")
+        self.DEPLOY_PREFIX = str(os.getenv("DEPLOY_PREFIX")).lower()
         self.JUPYTER_HUB_DOCKER_TAG = os.getenv(
             "JUPYTER_HUB_DOCKER_TAG", self.DEPLOY_PREFIX
         )
@@ -41,16 +44,18 @@ class ClusterCdkStack(Stack):
         self.OPENSCIENCELAB_CONFIG_FILE = (
             pathlib.Path(__file__).absolute().parent / "opensciencelab.toml"
         )
-        osl_config_with_defaults = self._get_osl_config_with_defaults()
 
         # If deploy_prefix not found in config sections, use defaults
         # This allows for development using defaults
+        osl_config_with_defaults = self._get_osl_config_with_defaults()
         self.osl_config = osl_config_with_defaults.get(
             self.DEPLOY_PREFIX, osl_config_with_defaults.get("defaults", {})
         )
 
         # All resources in this specific stack will get this tag
-        Tags.of(self).add("osl-billing", f"eks-cluster-{self.DEPLOY_PREFIX.lower()}")  # type: ignore
+        Tags.of(self).add("osl-billing", f"eks-cluster-{self.DEPLOY_PREFIX}")  # type: ignore
+
+        kubectl_layer = lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl")
 
         print(vars(self))
 
@@ -96,7 +101,7 @@ class ClusterCdkStack(Stack):
             cluster_name=f"eks-cluster-{self.DEPLOY_PREFIX}",
             version=eks.KubernetesVersion.V1_34,
             kubectl_provider_options=eks.KubectlProviderOptions(
-                kubectl_layer=lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl"),
+                kubectl_layer=kubectl_layer,
             ),
             default_capacity_type=eks.DefaultCapacityType.NODEGROUP,
             default_capacity=0,
@@ -368,7 +373,7 @@ class ClusterCdkStack(Stack):
             repository="https://kubernetes-sigs.github.io/aws-ebs-csi-driver",
             atomic=True,
             chart="aws-ebs-csi-driver",
-            release=f"osl-ebs-driver-{self.DEPLOY_PREFIX.lower()}",  # type: ignore
+            release=f"osl-ebs-driver-{self.DEPLOY_PREFIX}",  # type: ignore
             namespace="kube-system",
             version=self.csi_driver_version,
             wait=True,
@@ -390,6 +395,53 @@ class ClusterCdkStack(Stack):
 
         #####################################################################
         #
+        #    Setup Secret Manager values
+        #
+        #####################################################################
+
+        sso_token_secret_name = f"sso-token/eks-cluster-{self.DEPLOY_PREFIX}"
+
+        self.sso_token = secretsmanager.Secret(
+            self,
+            "SSOTokenSecret",
+            secret_name=sso_token_secret_name,
+            description="SSO Token to communicate with the Portal",
+            secret_string_value=SecretValue.unsafe_plain_text(
+                "ReplaceMeOrYouWillAlwaysFail"
+            ),
+            # removal_policy=None  # Don't set removal policy so that the following custom resource can delete the secret
+        )
+
+        ####
+        #  Make sure that the SSO Token secret is destroyed immediately instead of waiting days
+        #
+        cr.AwsCustomResource(
+            self,
+            "DeleteSSOSecretCR",
+            on_delete=cr.AwsSdkCall(
+                service="SecretsManager",
+                action="deleteSecret",
+                parameters={
+                    "SecretId": self.sso_token.secret_arn,
+                    "ForceDeleteWithoutRecovery": True,  # Optional: Deletes immediately
+                },
+                physical_resource_id=cr.PhysicalResourceId.of(
+                    self.sso_token.secret_arn
+                ),
+            ),
+            policy=cr.AwsCustomResourcePolicy.from_statements(
+                [
+                    iam.PolicyStatement(
+                        actions=["secretsmanager:DeleteSecret"],
+                        resources=[self.sso_token.secret_arn],
+                        effect=iam.Effect.ALLOW,
+                    )
+                ]
+            ),
+        )
+
+        #####################################################################
+        #
         #    Setup JupyterHub
         #
         #####################################################################
@@ -404,7 +456,7 @@ class ClusterCdkStack(Stack):
             repository="https://jupyterhub.github.io/helm-chart/",
             atomic=False,
             chart="jupyterhub",
-            release=f"osl-jupyterhub-{self.DEPLOY_PREFIX.lower()}",  # type: ignore
+            release=f"osl-jupyterhub-{self.DEPLOY_PREFIX}",  # type: ignore
             version=self.jupyterhub_helm_version,
             namespace="jupyter",
             wait=True,
