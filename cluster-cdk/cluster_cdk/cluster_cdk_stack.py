@@ -486,6 +486,24 @@ class ClusterCdkStack(Stack):
                             "storageClassName": "gp3",
                         }
                     },
+                    "extraFiles": {
+                        self._set_extra_file(
+                            "/web/usr/local/lib/jupyterhub/portal_auth.py",
+                            "python",
+                            "/usr/local/lib/python*/site-packages",
+                        ),
+                        self._set_extra_file(
+                            "/config/1_service_creds.py",
+                            "python",
+                            "/usr/local/etc/jupyterhub/jupyterhub_config.d/1_service_creds.py",
+                            extra_args={"lab_short_name": self.DEPLOY_PREFIX},
+                        ),
+                        self._set_extra_file(
+                            "/config/2_auth.py",
+                            "python",
+                            "/usr/local/etc/jupyterhub/jupyterhub_config.d/2_auth.py",
+                        ),
+                    },
                 },
                 "proxy": {
                     "https": {"enabled": False},
@@ -652,3 +670,55 @@ class ClusterCdkStack(Stack):
             merged[lab_name] = lab
 
         return merged
+
+    def _set_extra_file(
+        self,
+        key_name: str,
+        file_path: str,
+        file_type: str,
+        mount_path: str,
+        extra_args: dict = {},
+    ) -> dict[str, dict[str, str | bytes | dict]]:
+        """
+        Helper function to get files and setup for helm chart injection
+
+        https://z2jh.jupyter.org/en/stable/resources/reference.html#singleuser-extrafiles
+        https://z2jh.jupyter.org/en/stable/resources/reference.html#hub-extrafiles
+
+
+        extra_args: dicionary of string format values to be inserted into file.
+
+        """
+        full_file_path = (
+            pathlib.Path(__file__).absolute().parent / "jupyterhub" / file_path
+        )
+
+        if file_type == "python":
+            file_category = "stringData"
+
+            with open(full_file_path, "r") as f:
+                file_contents: str = f.read()
+
+            if extra_args:
+                file_contents = file_contents.format(**extra_args)
+
+        elif file_type == "toml":
+            file_category = "data"
+
+            with open(full_file_path, "rb") as f:
+                file_contents: dict = tomllib.load(f)
+
+            if extra_args:
+                file_contents = file_contents.format(**extra_args)
+
+        elif file_type == "binary":
+            file_category = "binaryData"
+            with open(full_file_path, "rb") as f:
+                file_contents: bytes = f.read()
+
+        else:
+            raise ValueError(
+                f"Argument file_type of {file_path} needs to be set as python, json, toml, or binary."
+            )
+
+        return {key_name: {"mountPath": mount_path, file_category: file_contents}}

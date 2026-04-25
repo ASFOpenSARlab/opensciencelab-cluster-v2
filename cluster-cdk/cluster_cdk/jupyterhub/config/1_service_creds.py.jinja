@@ -1,0 +1,81 @@
+import sys
+import secrets
+
+LAB_SHORT_NAME = f"{lab_short_name}"
+
+def set_jh_secret(secret_name: str, secret_text: str) -> str:
+    with open(f"/usr/local/secrets/{secret_name}", 'w+') as f:
+        f.write(secret_text)
+
+def get_jh_secret(secret_name: str) -> str:
+    with open(f"/usr/local/secrets/{secret_name}", 'r') as f:
+        value = f.read()
+    return value
+
+# Set API token
+set_jh_secret('lab-user-ro-token', str(secrets.token_hex(32)))
+set_jh_secret('lab-user-w-token', str(secrets.token_hex(32)))
+
+# c.JupyterHub.services is defined eariler in the JupyterHub config
+c.JupyterHub.services.append({
+        "name": "lab-user-ro-service",
+        "api_token": get_jh_secret('lab-user-ro-token'),
+    }
+)
+c.JupyterHub.services.append({
+        "name": "lab-user-w-service",
+        "api_token": get_jh_secret('lab-user-w-token'),
+    }
+)
+c.JupyterHub.services.append({
+        "name": "jupyterhub-idle-culler-service",
+        "command": [
+            sys.executable,
+            "-m", "jupyterhub_idle_culler",
+            "--timeout=3600",
+            "--cull-every=300",
+            "--url=http://127.0.0.1:8081/lab/"+LAB_SHORT_NAME+"/hub/api"
+        ],
+    }
+)
+
+# c.JupyterHub.load_roles is defined eariler in the JupyterHub config
+c.JupyterHub.load_roles.append({
+        "name": "lab-user-ro-service-role",
+        "scopes": [ 
+            'read:roles:users',
+            'read:users:groups',
+            'read:users:name'
+        ],
+        "services": [
+            "lab-user-ro-service",
+        ],
+    }
+)
+c.JupyterHub.load_roles.append({
+        "name": "lab-user-w-service-role",
+        "scopes": [ 
+            'groups'
+        ],
+        "services": [
+            "lab-user-w-service",
+        ],
+    }
+)
+c.JupyterHub.load_roles.append({
+        "name": "jupyterhub-idle-culler-role",
+        "scopes": [
+            "list:users",
+            "read:users:name",
+            "read:users:activity",
+            "read:servers",
+            "delete:servers",
+            "admin:servers",
+            # "admin:users", # if using --cull-users
+        ],
+        # assignment of role's permissions to:
+        "services": [
+            "jupyterhub-idle-culler-service"
+        ],
+    }
+)
