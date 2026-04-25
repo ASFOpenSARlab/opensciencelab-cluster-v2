@@ -487,24 +487,25 @@ class ClusterCdkStack(Stack):
                             "storageClassName": "gp3",
                         }
                     },
-                    "extraFiles": {
-                        self._set_extra_file(
+                    "extraFiles": (
+                        {}
+                        | self._set_extra_file(
                             "jupyterhub/web/usr/local/lib/jupyterhub/portal_auth.py",
                             "python",
                             "/usr/local/lib/python*/site-packages/portal_auth.py",
-                        ),
-                        self._set_extra_file(
+                        )
+                        | self._set_extra_file(
                             "jupyterhub/config/1_service_creds.py",
                             "python",
                             "/usr/local/etc/jupyterhub/jupyterhub_config.d/1_service_creds.py",
                             extra_args={"LAB_SHORT_NAME": self.DEPLOY_PREFIX},
-                        ),
-                        self._set_extra_file(
+                        )
+                        | self._set_extra_file(
                             "jupyterhub/config/2_auth.py",
                             "python",
                             "/usr/local/etc/jupyterhub/jupyterhub_config.d/2_auth.py",
-                        ),
-                    },
+                        )
+                    ),
                 },
                 "proxy": {
                     "https": {"enabled": False},
