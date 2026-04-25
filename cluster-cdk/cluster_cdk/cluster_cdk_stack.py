@@ -1,6 +1,7 @@
 import os
 import tomllib  # type: ignore
 import pathlib
+from string import Template
 
 import requests
 
@@ -490,13 +491,13 @@ class ClusterCdkStack(Stack):
                         self._set_extra_file(
                             "jupyterhub/web/usr/local/lib/jupyterhub/portal_auth.py",
                             "python",
-                            "/usr/local/lib/python*/site-packages",
+                            "/usr/local/lib/python*/site-packages/portal_auth.py",
                         ),
                         self._set_extra_file(
                             "jupyterhub/config/1_service_creds.py",
                             "python",
                             "/usr/local/etc/jupyterhub/jupyterhub_config.d/1_service_creds.py",
-                            extra_args={"lab_short_name": self.DEPLOY_PREFIX},
+                            extra_args={"LAB_SHORT_NAME": self.DEPLOY_PREFIX},
                         ),
                         self._set_extra_file(
                             "jupyterhub/config/2_auth.py",
@@ -685,7 +686,7 @@ class ClusterCdkStack(Stack):
         https://z2jh.jupyter.org/en/stable/resources/reference.html#hub-extrafiles
 
 
-        extra_args: dicionary of string format values to be inserted into file.
+        extra_args: A dicionary of string values to be subsituted into stringData file
 
         """
         full_file_path = self.HOME_DIR / file_path
@@ -694,19 +695,15 @@ class ClusterCdkStack(Stack):
             file_category = "stringData"
 
             with open(full_file_path, "r") as f:
-                file_contents: str = f.read()
-
-            if extra_args:
-                file_contents = file_contents.format(**extra_args)
+                contents: str = f.read()
+                templ = Template(contents)
+                file_contents = templ.safe_substitute(**extra_args)
 
         elif file_type == "toml":
             file_category = "data"
 
             with open(full_file_path, "rb") as f:
                 file_contents: dict = tomllib.load(f)
-
-            if extra_args:
-                file_contents = file_contents.format(**extra_args)
 
         elif file_type == "binary":
             file_category = "binaryData"
