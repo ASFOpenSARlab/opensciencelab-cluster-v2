@@ -495,15 +495,15 @@ class ClusterCdkStack(Stack):
                             "/usr/local/lib/python*/site-packages/portal_auth.py",
                         )
                         | self._set_extra_file(
-                            "jupyterhub/config/1_service_creds.py",
+                            "jupyterhub/config/1_auth.py",
                             "python",
-                            "/usr/local/etc/jupyterhub/jupyterhub_config.d/1_service_creds.py",
-                            extra_args={"LAB_SHORT_NAME": self.DEPLOY_PREFIX},
+                            "/usr/local/etc/jupyterhub/jupyterhub_config.d/1_auth.py",
                         )
                         | self._set_extra_file(
-                            "jupyterhub/config/2_auth.py",
+                            "jupyterhub/config/2_idle_culler.py",
                             "python",
-                            "/usr/local/etc/jupyterhub/jupyterhub_config.d/2_auth.py",
+                            "/usr/local/etc/jupyterhub/jupyterhub_config.d/2_idle_culler.py",
+                            extra_args={"LAB_SHORT_NAME": self.DEPLOY_PREFIX},
                         )
                     ),
                 },
