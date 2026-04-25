@@ -673,7 +673,6 @@ class ClusterCdkStack(Stack):
 
     def _set_extra_file(
         self,
-        key_name: str,
         file_path: str,
         file_type: str,
         mount_path: str,
@@ -720,5 +719,7 @@ class ClusterCdkStack(Stack):
             raise ValueError(
                 f"Argument file_type of {file_path} needs to be set as python, json, toml, or binary."
             )
+
+        key_name = full_file_path.name
 
         return {key_name: {"mountPath": mount_path, file_category: file_contents}}
