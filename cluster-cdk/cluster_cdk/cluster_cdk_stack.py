@@ -33,6 +33,8 @@ class ClusterCdkStack(Stack):
         #
         #####################################################################
 
+        self.HOME_DIR = pathlib.Path(__file__).absolute().parent
+
         # CDK provides the AWS Account number via self.account # "233535791844"
         # CDK provides the AWS Region va self.region
         self.DEPLOY_PREFIX = str(os.getenv("DEPLOY_PREFIX")).lower()
@@ -41,9 +43,7 @@ class ClusterCdkStack(Stack):
         )
         self.UI_IAM_USER = os.getenv("UI_IAM_USER", None)
 
-        self.OPENSCIENCELAB_CONFIG_FILE = (
-            pathlib.Path(__file__).absolute().parent / "opensciencelab.toml"
-        )
+        self.OPENSCIENCELAB_CONFIG_FILE = self.HOME_DIR / "opensciencelab.toml"
 
         # If deploy_prefix not found in config sections, use defaults
         # This allows for development using defaults
@@ -488,18 +488,18 @@ class ClusterCdkStack(Stack):
                     },
                     "extraFiles": {
                         self._set_extra_file(
-                            "/web/usr/local/lib/jupyterhub/portal_auth.py",
+                            "jupyterhub/web/usr/local/lib/jupyterhub/portal_auth.py",
                             "python",
                             "/usr/local/lib/python*/site-packages",
                         ),
                         self._set_extra_file(
-                            "/config/1_service_creds.py",
+                            "jupyterhub/config/1_service_creds.py",
                             "python",
                             "/usr/local/etc/jupyterhub/jupyterhub_config.d/1_service_creds.py",
                             extra_args={"lab_short_name": self.DEPLOY_PREFIX},
                         ),
                         self._set_extra_file(
-                            "/config/2_auth.py",
+                            "jupyterhub/config/2_auth.py",
                             "python",
                             "/usr/local/etc/jupyterhub/jupyterhub_config.d/2_auth.py",
                         ),
@@ -688,9 +688,7 @@ class ClusterCdkStack(Stack):
         extra_args: dicionary of string format values to be inserted into file.
 
         """
-        full_file_path = (
-            pathlib.Path(__file__).absolute().parent / "jupyterhub" / file_path
-        )
+        full_file_path = self.HOME_DIR / file_path
 
         if file_type == "python":
             file_category = "stringData"
