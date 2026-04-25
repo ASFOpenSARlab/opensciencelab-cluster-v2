@@ -492,17 +492,17 @@ class ClusterCdkStack(Stack):
                         | self._set_extra_file(
                             "jupyterhub/web/usr/local/lib/jupyterhub/portal_auth.py",
                             "python",
-                            "/usr/local/lib/python*/site-packages/portal_auth.py",
+                            "/usr/local/lib/python3.12/site-packages/",
                         )
                         | self._set_extra_file(
                             "jupyterhub/config/1_auth.py",
                             "python",
-                            "/usr/local/etc/jupyterhub/jupyterhub_config.d/1_auth.py",
+                            "/usr/local/etc/jupyterhub/jupyterhub_config.d/",
                         )
                         | self._set_extra_file(
                             "jupyterhub/config/2_idle_culler.py",
                             "python",
-                            "/usr/local/etc/jupyterhub/jupyterhub_config.d/2_idle_culler.py",
+                            "/usr/local/etc/jupyterhub/jupyterhub_config.d/",
                             extra_args={"LAB_SHORT_NAME": self.DEPLOY_PREFIX},
                         )
                     ),
@@ -699,6 +699,10 @@ class ClusterCdkStack(Stack):
                 contents: str = f.read()
                 templ = Template(contents)
                 file_contents = templ.safe_substitute(**extra_args)
+
+            print(
+                f"Rendering {full_file_path} of file_type 'python' using extra_args '{extra_args}'"
+            )
 
         elif file_type == "toml":
             file_category = "data"
