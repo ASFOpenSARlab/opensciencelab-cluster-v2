@@ -2,9 +2,11 @@ import os
 
 import boto3
 
-# This try/except is needed for debugging if a problem occurs. AWS Codebuild doesn't allow for useful error messaging.
 try:
-    from jupyterhub.portal_auth import PortalAuthenticator
+    # If an error occurs with setting the auth but JupyterHub still starts, the dummy login will be the default.
+    # This could lead to unauthorized entry. So disable login until the last needed moment.
+    print("Disabling login temporarily...")
+    c.JupyterHub.authenticator_class = "nullauthenticator.NullAuthenticator"
 
     AWS_REGION = os.environ.get("AWS_REGION", "")
     SSO_TOKEN_ARN = os.environ.get("SSO_TOKEN_ARN", "")
@@ -23,6 +25,8 @@ try:
         "cookie_options": {"expires_days": 7.0},
     }
 
+    from jupyterhub.portal_auth import PortalAuthenticator
+
     c.JupyterHub.authenticator_class = PortalAuthenticator  # noqa: F821
 
     # How often (seconds) should the JH auth info be refreshed.
@@ -30,13 +34,6 @@ try:
 
 except Exception as e:
     print(f"Something went wrong with auth... {e}")
-
-    # If an error occurs with setting the auth but JupyterHub still starts, the dummy login will be the default.
-    # This could lead to unauthorized entry. So disable login until the last needed moment.
-    print("Disabling login temporarily...")
-    c.JupyterHub.authenticator_class = (  # noqa: F821
-        "nullauthenticator.NullAuthenticator"
-    )
 
 finally:
     print("Done with extraConfig::auth.py")
