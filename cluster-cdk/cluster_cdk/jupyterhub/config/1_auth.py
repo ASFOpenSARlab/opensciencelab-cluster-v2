@@ -6,7 +6,7 @@ try:
     # If an error occurs with setting the auth but JupyterHub still starts, the dummy login will be the default.
     # This could lead to unauthorized entry. So disable login until the last needed moment.
     print("Disabling login temporarily...")
-    c.JupyterHub.authenticator_class = "nullauthenticator.NullAuthenticator"
+    c.JupyterHub.authenticator_class = "null"
 
     AWS_REGION = os.environ.get("AWS_REGION", "")
     SSO_TOKEN_ARN = os.environ.get("SSO_TOKEN_ARN", "")
