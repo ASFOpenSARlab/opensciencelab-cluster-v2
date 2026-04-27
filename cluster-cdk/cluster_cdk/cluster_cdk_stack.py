@@ -492,7 +492,8 @@ class ClusterCdkStack(Stack):
                         "AWS_REGION": self.region,
                         "SSO_TOKEN_ARN": self.sso_token.secret_arn,
                         "JUPYTERHUB_LAB_NAME": self.DEPLOY_PREFIX,
-                        "OPENSCIENCELAB_PORTAL_DOMAIN": "https://opensciencelab-test.asf.alaska.edu",
+                        "JUPYTERHUB_LAB_PREFIX": f"/lab/{self.DEPLOY_PREFIX}",
+                        "OPENSCIENCELAB_PORTAL_DOMAIN": "https://drgbh3hrliz1t.cloudfront.net",
                     },
                     "extraFiles": (
                         {}

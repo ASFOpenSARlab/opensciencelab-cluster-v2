@@ -6,7 +6,7 @@ import boto3
 try:
     AWS_REGION = os.environ.get("AWS_REGION", "")
     SSO_TOKEN_ARN = os.environ.get("SSO_TOKEN_ARN", "")
-    LAB_PREFIX = os.environ.get("JUPYTERHUB_SERVICE_PREFIX", "")
+    LAB_PREFIX = os.environ.get("JUPYTERHUB_LAB_PREFIX", "")
 
     ## Set SSO token to secrets path
     secrets_manager = boto3.client("secretsmanager", region_name=AWS_REGION)

@@ -22,7 +22,7 @@ class PortalAuthLoginHandler(BaseHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.lab_prefix = os.environ.get("JUPYTERHUB_SERVICE_PREFIX", "")
+        self.lab_prefix = os.environ.get("JUPYTERHUB_LAB_PREFIX", "")
         if not self.lab_prefix:
             raise My401Exception("No lab prefix")
 

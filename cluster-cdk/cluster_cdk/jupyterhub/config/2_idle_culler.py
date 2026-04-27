@@ -1,7 +1,7 @@
 import sys
 import os
 
-LAB_PREFIX = os.environ.get("JUPYTERHUB_SERVICE_PREFIX", "")
+LAB_PREFIX = os.environ.get("JUPYTERHUB_LAB_PREFIX", "")
 
 c.JupyterHub.services.append(
     {
