@@ -487,6 +487,13 @@ class ClusterCdkStack(Stack):
                             "storageClassName": "gp3",
                         }
                     },
+                    "baseUrl": f"/lab/{self.DEPLOY_PREFIX}",
+                    "extraEnv": {
+                        "AWS_REGION": self.region,
+                        "SSO_TOKEN_ARN": self.self.sso_token.secret_arn,
+                        "JUPYTERHUB_LAB_NAME": self.DEPLOY_PREFIX,
+                        "OPENSCIENCELAB_PORTAL_DOMAIN": "https://opensciencelab-test.asf.alaska.edu",
+                    },
                     "extraFiles": (
                         {}
                         | self._set_extra_file(
@@ -503,7 +510,6 @@ class ClusterCdkStack(Stack):
                             "jupyterhub/config/2_idle_culler.py",
                             "python",
                             "/usr/local/etc/jupyterhub/jupyterhub_config.d/2_idle_culler.py",
-                            extra_args={"LAB_SHORT_NAME": self.DEPLOY_PREFIX},
                         )
                     ),
                 },

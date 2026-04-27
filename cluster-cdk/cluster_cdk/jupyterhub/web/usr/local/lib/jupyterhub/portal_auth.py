@@ -22,10 +22,9 @@ class PortalAuthLoginHandler(BaseHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.lab_name = os.environ.get("JUPYTERHUB_LAB_NAME", "")
-        if not self.lab_name:
-            self.log.error("PortalAuth Login lab name not found")
-            raise My401Exception("No lab name")
+        self.lab_prefix = os.environ.get("JUPYTERHUB_SERVICE_PREFIX", "")
+        if not self.lab_prefix:
+            raise My401Exception("No lab prefix")
 
         self.portal_domain = os.environ.get("OPENSCIENCELAB_PORTAL_DOMAIN", "")
         if not self.portal_domain:
@@ -58,7 +57,7 @@ class PortalAuthLoginHandler(BaseHandler):
 
         except My401Exception as e:
             self.log.error(f"PortalAuth Login 401 error: {e}")
-            next = self.get_argument("next", default=f"/lab/{self.lab_name}/hub/login")
+            next = self.get_argument("next", default=f"{self.lab_prefix}/hub/login")
             next = web.escape.url_escape(next)
 
             self.redirect(f"{self.portal_domain}/portal/hub/auth?next_url={next}")
@@ -82,11 +81,6 @@ class PortalAuthLogoutHandler(BaseHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.lab_name = os.environ.get("JUPYTERHUB_LAB_NAME", "")
-        if not self.lab_name:
-            self.log.error("PortalAuth Login lab name not found")
-            raise My401Exception("No lab name")
-
         self.portal_domain = os.environ.get("OPENSCIENCELAB_PORTAL_DOMAIN", "")
         if not self.portal_domain:
             raise My401Exception("No portal domain")
@@ -99,9 +93,9 @@ class PortalAuthenticator(Authenticator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.lab_name = os.environ.get("JUPYTERHUB_LAB_NAME", "")
-        if not self.lab_name:
-            raise My401Exception("No lab name")
+        self.JUPYTERHUB_LAB_NAME = os.environ.get("JUPYTERHUB_LAB_NAME", "")
+        if not self.JUPYTERHUB_LAB_NAME:
+            raise My401Exception("No lab name provided")
 
         self.portal_domain = os.environ.get("OPENSCIENCELAB_PORTAL_DOMAIN", "")
         if not self.portal_domain:
@@ -167,7 +161,7 @@ class PortalAuthenticator(Authenticator):
             )
             try:
                 user_data_access_for_lab: dict = user_data.get("lab_access", {}).get(
-                    self.lab_name, {}
+                    self.JUPYTERHUB_LAB_NAME, {}
                 )
                 if not user_data_access_for_lab:
                     return None
@@ -176,12 +170,8 @@ class PortalAuthenticator(Authenticator):
                     user_data_access_for_lab.get("can_user_access_lab", False)
                 )
 
-                user_data_groups: list = user_data.get("groups", [])
                 user_data_roles: list = user_data.get("roles", [])
-                is_admin: bool = (
-                    "admin" in user_data_roles
-                    or f"admin-{self.lab_name}" in user_data_groups
-                )
+                is_admin: bool = "admin" in user_data_roles
 
                 if can_user_access_lab:
                     return {"name": username, "admin": is_admin}

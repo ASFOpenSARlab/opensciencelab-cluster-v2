@@ -1,4 +1,7 @@
 import sys
+import os
+
+LAB_PREFIX = os.environ.get("JUPYTERHUB_SERVICE_PREFIX", "")
 
 c.JupyterHub.services.append(
     {
@@ -9,7 +12,7 @@ c.JupyterHub.services.append(
             "jupyterhub_idle_culler",
             "--timeout=3600",
             "--cull-every=300",
-            "--url=http://127.0.0.1:8081/lab/$LAB_SHORT_NAME/hub/api",
+            f"--url=http://127.0.0.1:8081/{LAB_PREFIX}/hub/api",
         ],
     }
 )

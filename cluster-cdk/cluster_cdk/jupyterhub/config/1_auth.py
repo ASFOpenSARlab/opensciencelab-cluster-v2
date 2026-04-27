@@ -1,18 +1,17 @@
 import os
 
 import boto3
-import z2jh
 
 # This try/except is needed for debugging if a problem occurs. AWS Codebuild doesn't allow for useful error messaging.
 try:
+    AWS_REGION = os.environ.get("AWS_REGION", "")
+    SSO_TOKEN_ARN = os.environ.get("SSO_TOKEN_ARN", "")
+    LAB_PREFIX = os.environ.get("JUPYTERHUB_SERVICE_PREFIX", "")
+
     ## Set SSO token to secrets path
-    secrets_manager = boto3.client(
-        "secretsmanager", region_name=f"{z2jh.get_config('custom.AWS_REGION')}"
-    )
-    _sso_token = secrets_manager.get_secret_value(
-        SecretId=f"sso-token/{z2jh.get_config('custom.AWS_REGION')}-{z2jh.get_config('custom.CLUSTER_NAME')}"
-    )
-    sso_token_path = os.environ.get("OPENSARLAB_SSO_TOKEN_PATH", "")
+    secrets_manager = boto3.client("secretsmanager", region_name=AWS_REGION)
+    _sso_token = secrets_manager.get_secret_value(SecretId=SSO_TOKEN_ARN)
+    sso_token_path = "/run/secrets/sso_token"
     with open(sso_token_path, "w") as file:
         file.write(_sso_token["SecretString"])
 
@@ -23,12 +22,10 @@ try:
         "nullauthenticator.NullAuthenticator"
     )
 
-    LAB_SHORTNAME = os.environ["JUPYTERHUB_LAB_NAME"]
-    c.JupyterHub.default_url = f"/lab/{LAB_SHORTNAME}/hub/home"  # noqa: F821
+    c.JupyterHub.default_url = f"{LAB_PREFIX}/hub/home"  # noqa: F821
 
     c.JupyterHub.tornado_settings = {  # noqa: F821
         "cookie_options": {"expires_days": 7.0},
-        "headers": {"x-jupyterhub-lab": LAB_SHORTNAME},
     }
 
     print("All good so far. Setting login to Portal Auth...")
