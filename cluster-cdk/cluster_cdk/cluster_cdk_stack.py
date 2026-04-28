@@ -284,7 +284,7 @@ class ClusterCdkStack(Stack):
             if node_type == "core":
                 node_labels["hub.jupyter.org/node-purpose"] = "core"
                 node_labels["opensciencelab.local/node-type"] = "core"
-            if node_type == "user":
+            elif node_type == "user":
                 node_labels["hub.jupyter.org/node-purpose"] = "user"
                 node_labels["opensciencelab.local/node-type"] = "user"
 
@@ -294,6 +294,10 @@ class ClusterCdkStack(Stack):
                 self,
                 f"{node['name']}-LaunchTemplate-{self.DEPLOY_PREFIX}",
                 launch_template_data=ec2.CfnLaunchTemplate.LaunchTemplateDataProperty(
+                    metadata_options=ec2.CfnLaunchTemplate.MetadataOptionsProperty(
+                        http_put_response_hop_limit=2,  # Set hop limit here
+                        http_tokens="required",  # Recommended for IMDSv2
+                    ),
                     tag_specifications=[
                         ec2.CfnLaunchTemplate.TagSpecificationProperty(
                             resource_type="instance",
@@ -301,7 +305,7 @@ class ClusterCdkStack(Stack):
                                 CfnTag(key="osl-billing", value=self.DEPLOY_PREFIX),
                                 CfnTag(
                                     key="Name",
-                                    value=f"jupyterhub-core-{self.DEPLOY_PREFIX}",
+                                    value=f"jupyterhub-{node['name']}-{self.DEPLOY_PREFIX}",
                                 ),
                             ],
                         ),
@@ -311,11 +315,11 @@ class ClusterCdkStack(Stack):
                                 CfnTag(key="osl-billing", value=self.DEPLOY_PREFIX),
                                 CfnTag(
                                     key="Name",
-                                    value=f"jupyterhub-core-root-{self.DEPLOY_PREFIX}",
+                                    value=f"jupyterhub-{node['name']}-root-{self.DEPLOY_PREFIX}",
                                 ),
                             ],
                         ),
-                    ]
+                    ],
                 ),
             )
 
