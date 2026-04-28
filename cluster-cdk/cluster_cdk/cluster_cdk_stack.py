@@ -355,9 +355,6 @@ class ClusterCdkStack(Stack):
                 )
 
             if node_type == "core":
-                # Make sure the core node groups can read the sso token for auth purposes
-                self.sso_token.grant_read(node_group)
-
                 node_group.role.add_to_policy(
                     self._get_policy_from_file("hub_node_policies.json")
                 )
