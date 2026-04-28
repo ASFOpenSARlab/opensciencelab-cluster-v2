@@ -355,9 +355,7 @@ class ClusterCdkStack(Stack):
                 )
 
             if node_type == "core":
-                node_group.role.add_to_policy(
-                    self._get_policy_from_file("hub_node_policies.json")
-                )
+                self._add_policy_from_file(node_group.role, "hub_node_policies.json")
 
                 # Needed so we can make a dependency later
                 self.core_nodegroup = node_group
@@ -686,12 +684,17 @@ class ClusterCdkStack(Stack):
 
         return merged
 
-    def _get_policy_from_file(self, file_name: str) -> dict:
+    def _add_policy_from_file(self, the_role: iam.Role, file_name: str) -> None:
 
         with open(self.HOME_DIR / "manifests/policies" / pathlib.Path(file_name)) as f:
-            policy_data = json.load(f)
+            policy_data: dict | list = json.load(f)
 
-        return iam.PolicyStatement.from_json(policy_data)
+        if policy_data is list:
+            for policy in policy_data:
+                the_role.add_to_policy(iam.PolicyStatement.from_json(policy))
+
+        elif policy_data is dict:
+            the_role.add_to_policy(iam.PolicyStatement.from_json(policy))
 
     def _set_extra_file(
         self,
