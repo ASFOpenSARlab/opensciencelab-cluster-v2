@@ -689,12 +689,19 @@ class ClusterCdkStack(Stack):
         with open(self.HOME_DIR / "manifests/policies" / pathlib.Path(file_name)) as f:
             policy_data: dict | list = json.load(f)
 
+        print(f"{the_role=}, {policy_data=}")
+
         if policy_data is list:
             for policy in policy_data:
+                print(f"{policy=}")
                 the_role.add_to_policy(iam.PolicyStatement.from_json(policy))
 
         elif policy_data is dict:
+            print(f"{policy=}")
             the_role.add_to_policy(iam.PolicyStatement.from_json(policy))
+
+        else:
+            print(f"Policy for {file_name} in wrong format?")
 
     def _set_extra_file(
         self,
