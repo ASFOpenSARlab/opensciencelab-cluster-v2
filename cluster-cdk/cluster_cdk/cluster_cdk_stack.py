@@ -2,6 +2,7 @@ import os
 import tomllib  # type: ignore
 import pathlib
 from string import Template
+import json
 
 import requests
 
@@ -221,6 +222,53 @@ class ClusterCdkStack(Stack):
 
         #####################################################################
         #
+        #    Setup Secret Manager values
+        #
+        #####################################################################
+
+        sso_token_secret_name = f"sso-token/eks-cluster-{self.DEPLOY_PREFIX}"
+
+        self.sso_token = secretsmanager.Secret(
+            self,
+            "SSOTokenSecret",
+            secret_name=sso_token_secret_name,
+            description="SSO Token to communicate with the Portal",
+            secret_string_value=SecretValue.unsafe_plain_text(
+                "ReplaceMeOrYouWillAlwaysFail"
+            ),
+            # removal_policy=None  # Don't set removal policy so that the following custom resource can delete the secret
+        )
+
+        ####
+        #  Make sure that the SSO Token secret is destroyed immediately instead of waiting days
+        #
+        cr.AwsCustomResource(
+            self,
+            "DeleteSSOSecretCR",
+            on_delete=cr.AwsSdkCall(
+                service="SecretsManager",
+                action="deleteSecret",
+                parameters={
+                    "SecretId": self.sso_token.secret_arn,
+                    "ForceDeleteWithoutRecovery": True,  # Optional: Deletes immediately
+                },
+                physical_resource_id=cr.PhysicalResourceId.of(
+                    self.sso_token.secret_arn
+                ),
+            ),
+            policy=cr.AwsCustomResourcePolicy.from_statements(
+                [
+                    iam.PolicyStatement(
+                        actions=["secretsmanager:DeleteSecret"],
+                        resources=[self.sso_token.secret_arn],
+                        effect=iam.Effect.ALLOW,
+                    )
+                ]
+            ),
+        )
+
+        #####################################################################
+        #
         #    Setup Nodegroups
         #
         #    These are paired 1-to-1 with auto scaling groups but are better managed by k8s.
@@ -296,7 +344,7 @@ class ClusterCdkStack(Stack):
                 labels=node_labels,
             )
 
-            # SMCE required observability policies
+            # SMCE required observability policies for all nodes
             for managed_policy in [
                 "AmazonSSMManagedInstanceCore",
                 "CloudWatchAgentAdminPolicy",
@@ -307,6 +355,14 @@ class ClusterCdkStack(Stack):
                 )
 
             if node_type == "core":
+                # Make sure the core node groups can read the sso token for auth purposes
+                self.sso_token.grant_read(node_group)
+
+                node_group.role.add_to_policy(
+                    self._get_policy_from_file("hub_node_policies.json")
+                )
+
+                # Needed so we can make a dependency later
                 self.core_nodegroup = node_group
 
         #####################################################################
@@ -392,53 +448,6 @@ class ClusterCdkStack(Stack):
                     },
                 },
             },
-        )
-
-        #####################################################################
-        #
-        #    Setup Secret Manager values
-        #
-        #####################################################################
-
-        sso_token_secret_name = f"sso-token/eks-cluster-{self.DEPLOY_PREFIX}"
-
-        self.sso_token = secretsmanager.Secret(
-            self,
-            "SSOTokenSecret",
-            secret_name=sso_token_secret_name,
-            description="SSO Token to communicate with the Portal",
-            secret_string_value=SecretValue.unsafe_plain_text(
-                "ReplaceMeOrYouWillAlwaysFail"
-            ),
-            # removal_policy=None  # Don't set removal policy so that the following custom resource can delete the secret
-        )
-
-        ####
-        #  Make sure that the SSO Token secret is destroyed immediately instead of waiting days
-        #
-        cr.AwsCustomResource(
-            self,
-            "DeleteSSOSecretCR",
-            on_delete=cr.AwsSdkCall(
-                service="SecretsManager",
-                action="deleteSecret",
-                parameters={
-                    "SecretId": self.sso_token.secret_arn,
-                    "ForceDeleteWithoutRecovery": True,  # Optional: Deletes immediately
-                },
-                physical_resource_id=cr.PhysicalResourceId.of(
-                    self.sso_token.secret_arn
-                ),
-            ),
-            policy=cr.AwsCustomResourcePolicy.from_statements(
-                [
-                    iam.PolicyStatement(
-                        actions=["secretsmanager:DeleteSecret"],
-                        resources=[self.sso_token.secret_arn],
-                        effect=iam.Effect.ALLOW,
-                    )
-                ]
-            ),
         )
 
         #####################################################################
@@ -679,6 +688,13 @@ class ClusterCdkStack(Stack):
             merged[lab_name] = lab
 
         return merged
+
+    def _get_policy_from_file(self, file_name: str) -> dict:
+
+        with open(self.HOME_DIR / "manifests/policies" / pathlib.Path(file_name)) as f:
+            policy_data = json.load(f)
+
+        return iam.PolicyStatement.from_json(policy_data)
 
     def _set_extra_file(
         self,
