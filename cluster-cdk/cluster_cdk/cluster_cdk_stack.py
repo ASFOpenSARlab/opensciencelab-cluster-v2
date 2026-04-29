@@ -514,11 +514,7 @@ class ClusterCdkStack(Stack):
                             "jupyterhub/config/1_auth.py",
                             "python",
                             "/usr/local/etc/jupyterhub/jupyterhub_config.d/1_auth.py",
-                        )
-                        | self._set_extra_file(
-                            "jupyterhub/config/2_idle_culler.py",
-                            "python",
-                            "/usr/local/etc/jupyterhub/jupyterhub_config.d/2_idle_culler.py",
+                            mode="0664",
                         )
                     ),
                 },
@@ -708,6 +704,7 @@ class ClusterCdkStack(Stack):
         file_path: str,
         file_type: str,
         mount_path: str,
+        mode: str = "0644",
         extra_args: dict = {},
     ) -> dict[str, dict[str, str | bytes | dict]]:
         """
@@ -752,4 +749,10 @@ class ClusterCdkStack(Stack):
 
         key_name = full_file_path.name
 
-        return {key_name: {"mountPath": mount_path, file_category: file_contents}}
+        return {
+            key_name: {
+                "mountPath": mount_path,
+                file_category: file_contents,
+                "mode": mode,
+            }
+        }
