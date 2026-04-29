@@ -136,7 +136,7 @@ class PortalAuthenticator(Authenticator):
         encrypted_username: str = handler.get_cookie("portal-username")
         username = encryptedjwt.decrypt(encrypted_username)
 
-        self.log.info("Username '{username}' got from 'portal-username' cookie.")
+        self.log.info(f"Username '{username}' got from 'portal-username' cookie.")
 
         if not username:
             return {}

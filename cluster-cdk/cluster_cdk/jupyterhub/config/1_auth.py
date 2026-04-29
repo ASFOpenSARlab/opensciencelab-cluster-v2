@@ -37,6 +37,10 @@ try:
     # How often (seconds) should the JH auth info be refreshed.
     c.Authenticator.auth_refresh_age = 60  # noqa: F821
 
+    # Needed to allow all authenticated users without a explicit whitelist
+    # https://jupyterhub.readthedocs.io/en/latest/tutorial/getting-started/authenticators-users-basics.html#add-or-remove-users-from-the-hub
+    c.Authenticator.allow_all = True  # noqa: F821
+
 except Exception as e:
     print(f"Something went wrong with auth... {e}")
 
