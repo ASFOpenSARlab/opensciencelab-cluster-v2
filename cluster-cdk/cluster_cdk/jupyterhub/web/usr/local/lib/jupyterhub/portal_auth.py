@@ -68,6 +68,7 @@ class PortalAuthLoginHandler(BaseHandler):
 
         except Exception as e:
             self.log.error(f"PortalAuth Login 500 error: {e}")
+            self.log.error(f"PortalAuth: Traceback: {traceback.format_exc()}")
             raise web.HTTPError(500)
 
 
