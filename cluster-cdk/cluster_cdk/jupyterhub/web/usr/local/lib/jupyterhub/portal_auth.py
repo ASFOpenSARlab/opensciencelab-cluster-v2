@@ -125,25 +125,25 @@ class PortalAuthenticator(Authenticator):
             raise My401Exception()
 
         try:
-            user_data = encryptedjwt.decrypt(response["data"])
+            return encryptedjwt.decrypt(response["data"])
         except Exception as e:
             self.log.error(f"PortalAuth Login JWT decryption went wrong: {e}")
             raise My401Exception(
                 "Something went wrong with jwt authentication. Contact the administrator."
             )
 
-        return user_data
-
     async def _get_username_from_username_cookie(self, handler) -> dict:
         encrypted_username: str = handler.get_cookie("portal-username")
         username = encryptedjwt.decrypt(encrypted_username)
 
+        self.log.info("Username '{username}' got from 'portal-username' cookie.")
+
         if not username:
-            return None
+            return {}
 
         return {"name": username}
 
-    async def _get_auth_data(self, handler, data: dict = None) -> dict | None:
+    async def _get_auth_data(self, handler, data: dict = {}) -> dict | None:
         if not data:
             data = await self._get_username_from_username_cookie(handler)
 
@@ -151,7 +151,7 @@ class PortalAuthenticator(Authenticator):
             username = str(data["name"])
 
             # Get updated user data from portal
-            user_data = await self._get_user_data_from_auth_api(username=username)
+            user_data: dict = await self._get_user_data_from_auth_api(username=username)
 
             if user_data is None:
                 self.log.error("No JWT data found")
@@ -167,12 +167,22 @@ class PortalAuthenticator(Authenticator):
                 if not user_data_access_for_lab:
                     return None
 
+                self.log.info(
+                    f"User data access for lab '{self.JUPYTERHUB_LAB_NAME}': {user_data_access_for_lab}"
+                )
+
                 can_user_access_lab: bool = bool(
                     user_data_access_for_lab.get("can_user_access_lab", False)
                 )
 
+                self.log.info(
+                    f"Can user access lab '{self.JUPYTERHUB_LAB_NAME}'? {can_user_access_lab}"
+                )
+
                 user_data_roles: list = user_data.get("roles", [])
                 is_admin: bool = "admin" in user_data_roles
+
+                self.log.info(f"Does user '{username}' have admin access? {is_admin}")
 
                 if can_user_access_lab:
                     return {"name": username, "admin": is_admin}
@@ -182,7 +192,7 @@ class PortalAuthenticator(Authenticator):
 
         return None
 
-    async def authenticate(self, handler, data: dict = None) -> dict | None:
+    async def authenticate(self, handler, data: dict = {}) -> dict | None:
         self.log.error("Inside authenticate")
         return await self._get_auth_data(handler, data)
 
