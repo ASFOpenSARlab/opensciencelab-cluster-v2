@@ -514,7 +514,7 @@ class ClusterCdkStack(Stack):
                             "jupyterhub/config/1_auth.py",
                             "python",
                             "/usr/local/etc/jupyterhub/jupyterhub_config.d/1_auth.py",
-                            mode="0664",
+                            file_mode="0664",
                         )
                     ),
                 },
@@ -704,9 +704,9 @@ class ClusterCdkStack(Stack):
         file_path: str,
         file_type: str,
         mount_path: str,
-        mode: str = "0644",
+        file_mode: str = "0644",
         extra_args: dict = {},
-    ) -> dict[str, dict[str, str | bytes | dict]]:
+    ) -> dict[str, dict[str, str | bytes | dict | int]]:
         """
         Helper function to get files and setup for helm chart injection
 
@@ -752,7 +752,7 @@ class ClusterCdkStack(Stack):
         return {
             key_name: {
                 "mountPath": mount_path,
+                "mode": int(file_mode, 8),
                 file_category: file_contents,
-                "mode": mode,
             }
         }
