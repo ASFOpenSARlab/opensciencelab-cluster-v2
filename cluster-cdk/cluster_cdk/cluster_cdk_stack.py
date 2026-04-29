@@ -685,7 +685,6 @@ class ClusterCdkStack(Stack):
         return merged
 
     def _add_policy_from_file(self, the_role: iam.Role, file_name: str) -> None:
-
         with open(self.HOME_DIR / "manifests/policies" / pathlib.Path(file_name)) as f:
             policy_data: dict | list = json.load(f)
 

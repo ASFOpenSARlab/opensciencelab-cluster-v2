@@ -2,11 +2,16 @@ import os
 
 import boto3
 
+# The variable "c" is a global variable representing the Config instance.
+# This code will be appended to the end of the jupyterhub config.
+# Linters like Flake8 often fail to recognize "magic" variables like "c".
+# Therefore we apply "noqa: F821"
+
 try:
     # If an error occurs with setting the auth but JupyterHub still starts, the dummy login will be the default.
     # This could lead to unauthorized entry. So disable login until the last needed moment.
     print("Disabling login temporarily...")
-    c.JupyterHub.authenticator_class = "null"
+    c.JupyterHub.authenticator_class = "null"  # noqa: F821
 
     AWS_REGION = os.environ.get("AWS_REGION", "")
     SSO_TOKEN_ARN = os.environ.get("SSO_TOKEN_ARN", "")

@@ -22,7 +22,7 @@ jobs:
     uses: ASFOpenSARlab/osl-utils/.github/workflows/reusable-setup-env.yaml@v1.1.2
     with:
       tagname: ${{ inputs.tagname || github.ref_name }}
-  
+
   build-and-deploy-cluster:
     runs-on: ubuntu-latest
     needs:
