@@ -499,6 +499,7 @@ class ClusterCdkStack(Stack):
                     "extraEnv": {
                         "AWS_REGION": self.region,
                         "SSO_TOKEN_ARN": self.sso_token.secret_arn,
+                        "OPENSARLAB_SSO_TOKEN_PATH": "/tmp/sso_token",
                         "JUPYTERHUB_LAB_NAME": self.DEPLOY_PREFIX,
                         "JUPYTERHUB_LAB_PREFIX": f"/lab/{self.DEPLOY_PREFIX}",
                         "OPENSCIENCELAB_PORTAL_DOMAIN": "https://drgbh3hrliz1t.cloudfront.net",
@@ -514,7 +515,6 @@ class ClusterCdkStack(Stack):
                             "jupyterhub/config/1_auth.py",
                             "python",
                             "/usr/local/etc/jupyterhub/jupyterhub_config.d/1_auth.py",
-                            file_mode="0664",
                         )
                     ),
                 },
