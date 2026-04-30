@@ -45,28 +45,29 @@ class ClusterCdkStack(Stack):
             "JUPYTER_HUB_DOCKER_TAG", self.DEPLOY_PREFIX
         )
         self.UI_IAM_USER = os.getenv("UI_IAM_USER", None)
-        self.CLUSTER_SHORT_NAME = str(os.getenv("CLUSTER_SHORT_NAME", "")).lower()
+        self.LAB_SHORT_NAME = str(os.getenv("LAB_SHORT_NAME", "")).lower()
 
-        if not self.CLUSTER_SHORT_NAME:
-            raise Exception(
-                "Cluster short name (usually the cluster env name) is not defined"
-            )
+        if not self.LAB_SHORT_NAME:
+            raise Exception("Lab short name is not defined")
 
         self.OPENSCIENCELAB_CONFIG_FILE = self.HOME_DIR / "opensciencelab.toml"
 
         # The section of the config is the cluster env name
         osl_config_with_defaults = self._get_osl_config_with_defaults()
-        self.osl_config = osl_config_with_defaults.get(self.CLUSTER_SHORT_NAME, None)
+        self.osl_config = osl_config_with_defaults.get(self.LAB_SHORT_NAME, None)
 
         if not self.osl_config:
             raise Exception(
-                f"Cluster {self.CLUSTER_SHORT_NAME} doesn't have a section in osl toml"
+                f"Lab '{self.LAB_SHORT_NAME}' doesn't have a section in osl toml"
             )
 
-        if self.CLUSTER_SHORT_NAME == "dev":
+        # The lab short name is usually unique enough that is can be used as part of the naming of aws resources
+        # However, if multiple dev cluster are present, it will be more difficult to distiguish.
+        # Therefore, for "dev" labs, we will use the DEPLOY_PREFIX as part of the naming of AWS resources.
+        if self.LAB_SHORT_NAME == "dev":
             self.DEPLOY_TAG = self.DEPLOY_PREFIX
         else:
-            self.DEPLOY_TAG = self.CLUSTER_SHORT_NAME
+            self.DEPLOY_TAG = self.LAB_SHORT_NAME
 
         # All resources in this specific stack will get this tag
         Tags.of(self).add("osl-billing", f"eks-cluster-{self.DEPLOY_TAG}")  # type: ignore
@@ -509,10 +510,10 @@ class ClusterCdkStack(Stack):
                             "storageClassName": "gp3",
                         }
                     },
-                    "baseUrl": f"/lab/{self.CLUSTER_SHORT_NAME}",
+                    "baseUrl": f"/lab/{self.LAB_SHORT_NAME}",
                     "config": {
                         "JupyterHub": {
-                            "default_url": f"/lab/{self.CLUSTER_SHORT_NAME}/hub/home",
+                            "default_url": f"/lab/{self.LAB_SHORT_NAME}/hub/home",
                             "tornado_settings": {
                                 "cookie_options": {"expires_days": 7.0},
                             },
@@ -527,8 +528,8 @@ class ClusterCdkStack(Stack):
                         "AWS_REGION": self.region,
                         "SSO_TOKEN_ARN": self.sso_token.secret_arn,
                         "OPENSARLAB_SSO_TOKEN_PATH": "/tmp/sso_token",
-                        "JUPYTERHUB_LAB_NAME": self.CLUSTER_SHORT_NAME,
-                        "JUPYTERHUB_LAB_PREFIX": f"/lab/{self.CLUSTER_SHORT_NAME}",
+                        "JUPYTERHUB_LAB_NAME": self.LAB_SHORT_NAME,
+                        "JUPYTERHUB_LAB_PREFIX": f"/lab/{self.LAB_SHORT_NAME}",
                         "OPENSCIENCELAB_PORTAL_DOMAIN": self.osl_config[
                             "portal_domain"
                         ],
