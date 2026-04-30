@@ -1,13 +1,15 @@
 # Lab sections can be empty. They will inherit the "defaults" section.
-[lab-name-1]
+[lab-short-name]
 
-[lab-name-2]
-# This environment will override the default environment
-environment = "lab-env-1"
+# The lab section will be named after the GitHub environment (which is nominally named after the lab short name)
+[lab-short-name-2]
+portal_domain = "https://my-real-domain.ai"
+admin_users = ['username1', 'username2']
 
 # The "defaults" lab is required. All labs inherit the following values unless overriden in their own sections.
 [defaults]
-environment = ""  # The name of the GitHub environment that contains AWS account numbers and other info. This is currently just descruptive
+portal_domain = "https://localhost"
+admin_users = ['nobody']
 
   # TOML is not whitespace sensitive. The tabbing here is simply for readability.
 

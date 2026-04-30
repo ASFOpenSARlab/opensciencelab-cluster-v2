@@ -134,6 +134,9 @@ class PortalAuthenticator(Authenticator):
 
     async def _get_username_from_username_cookie(self, handler) -> dict:
         encrypted_username: str = handler.get_cookie("portal-username")
+        if not encrypted_username:
+            raise ValueError("'encrypted_username' is not defined")
+
         username = encryptedjwt.decrypt(encrypted_username)
 
         self.log.info(f"Username '{username}' got from 'portal-username' cookie.")

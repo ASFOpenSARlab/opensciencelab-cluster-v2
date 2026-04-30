@@ -510,13 +510,28 @@ class ClusterCdkStack(Stack):
                         }
                     },
                     "baseUrl": f"/lab/{self.CLUSTER_SHORT_NAME}",
+                    "config": {
+                        "JupyterHub": {
+                            "default_url": f"/lab/{self.CLUSTER_SHORT_NAME}",
+                            "tornado_settings": {
+                                "cookie_options": {"expires_days": 7.0},
+                            },
+                        },
+                        "Authenticator": {
+                            "admin_users": self.osl_config["admin_users"],
+                            "auth_refresh_age": 60,
+                            "allow_all": True,
+                        },
+                    },
                     "extraEnv": {
                         "AWS_REGION": self.region,
                         "SSO_TOKEN_ARN": self.sso_token.secret_arn,
                         "OPENSARLAB_SSO_TOKEN_PATH": "/tmp/sso_token",
                         "JUPYTERHUB_LAB_NAME": self.CLUSTER_SHORT_NAME,
                         "JUPYTERHUB_LAB_PREFIX": f"/lab/{self.CLUSTER_SHORT_NAME}",
-                        "OPENSCIENCELAB_PORTAL_DOMAIN": "https://drgbh3hrliz1t.cloudfront.net",
+                        "OPENSCIENCELAB_PORTAL_DOMAIN": self.osl_config[
+                            "portal_domain"
+                        ],
                     },
                     "extraFiles": (
                         {}
@@ -684,7 +699,11 @@ class ClusterCdkStack(Stack):
         for lab_name, lab_config in config.items():
             lab = {}
 
-            lab["environment"] = lab_config.get("environment", defaults["environment"])
+            lab["portal_domain"] = lab_config.get(
+                "portal_domain", defaults["portal_domain"]
+            )
+
+            lab["admin_users"] = lab_config.get("admin_users", defaults["admin_users"])
 
             # Replace of all nodes if lab nodes are defined
             lab["nodes"] = lab_config.get("nodes", defaults["nodes"])

@@ -16,7 +16,6 @@ try:
     AWS_REGION = os.environ.get("AWS_REGION", "")
     SSO_TOKEN_ARN = os.environ.get("SSO_TOKEN_ARN", "")
     OPENSARLAB_SSO_TOKEN_PATH = os.environ.get("OPENSARLAB_SSO_TOKEN_PATH", "")
-    LAB_PREFIX = os.environ.get("JUPYTERHUB_LAB_PREFIX", "")
 
     ## Set SSO token to secrets path
     secrets_manager = boto3.client("secretsmanager", region_name=AWS_REGION)
@@ -24,22 +23,9 @@ try:
     with open(OPENSARLAB_SSO_TOKEN_PATH, "w") as file:
         file.write(_sso_token["SecretString"])
 
-    c.JupyterHub.default_url = f"{LAB_PREFIX}/hub/home"  # noqa: F821
-
-    c.JupyterHub.tornado_settings = {  # noqa: F821
-        "cookie_options": {"expires_days": 7.0},
-    }
-
     from jupyterhub.portal_auth import PortalAuthenticator
 
     c.JupyterHub.authenticator_class = PortalAuthenticator  # noqa: F821
-
-    # How often (seconds) should the JH auth info be refreshed.
-    c.Authenticator.auth_refresh_age = 60  # noqa: F821
-
-    # Needed to allow all authenticated users without a explicit whitelist
-    # https://jupyterhub.readthedocs.io/en/latest/tutorial/getting-started/authenticators-users-basics.html#add-or-remove-users-from-the-hub
-    c.Authenticator.allow_all = True  # noqa: F821
 
 except Exception as e:
     print(f"Something went wrong with auth... {e}")
