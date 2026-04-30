@@ -686,6 +686,7 @@ class ClusterCdkStack(Stack):
         )
 
     def _get_osl_config_with_defaults(self) -> dict:
+
         with open(self.OPENSCIENCELAB_CONFIG_FILE, "rb") as f:
             config: dict = tomllib.load(f)
 
@@ -718,6 +719,52 @@ class ClusterCdkStack(Stack):
         return merged
 
     def _add_policy_from_file(self, the_role: iam.Role, file_name: str) -> None:
+        """
+        Predefined roles sometimes need addtional custom policies applied (especially for node roles).
+        This method attaches a policy defined in a specially formatted file.
+
+        The policy in the files must be in one of two formats: a json list
+
+        ```
+            [
+                {
+                    "Sid": "MySid",
+                    "Effect": "Allow",
+                    "Action": [
+                        "ec2:DescribeSnapshots",
+                        "ec2:CreateVolume",
+                        "ec2:CreateTags"
+                    ],
+                    "Resource": "*"
+                },
+                {
+                    "Sid": "AnotherSid",
+                    "Effect": "Allow",
+                    "Action": [
+                        "ec2:DescribeVolumes",
+                        "ec2:CreateTags"
+                    ],
+                    "Resource": "*"
+                }
+            ]
+        ```
+
+        or just json
+
+        ```
+            {
+                "Sid": "MySid",
+                "Effect": "Allow",
+                "Action": [
+                    "ec2:DescribeSnapshots",
+                    "ec2:CreateVolume",
+                    "ec2:CreateTags"
+                ],
+                "Resource": "*"
+            }
+        ```
+        """
+
         with open(self.HOME_DIR / "manifests/policies" / pathlib.Path(file_name)) as f:
             policy_data: dict | list = json.load(f)
 
@@ -746,7 +793,16 @@ class ClusterCdkStack(Stack):
         https://z2jh.jupyter.org/en/stable/resources/reference.html#hub-extrafiles
 
 
-        extra_args: A dicionary of string values to be subsituted into stringData file
+        extra_args: A dicionary of string values to be subsituted into stringData file.
+
+            ```
+                extra_args = { "var1": "hello", "var2": "world" }
+            ```
+
+            will be subsituted into string "The developer said $var1 $var2".
+
+            When possible, it is preferred that environment varibales be used to subsitute values.
+            This is easier to keep track and allows for cleaner code.
 
         """
         full_file_path = self.HOME_DIR / file_path
