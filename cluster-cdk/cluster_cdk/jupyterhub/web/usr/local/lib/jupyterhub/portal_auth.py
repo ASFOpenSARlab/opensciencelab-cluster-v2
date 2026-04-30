@@ -104,7 +104,9 @@ class PortalAuthenticator(Authenticator):
 
     async def _get_user_data_from_auth_api(self, username: str) -> dict:
         try:
-            body = json.dumps({"username": f"{username}"})
+            body = json.dumps(
+                {"username": f"{username}", "lab_short_name": self.JUPYTERHUB_LAB_NAME}
+            )
             response = await AsyncHTTPClient().fetch(
                 f"{self.portal_domain}/portal/hub/auth", body=body, method="POST"
             )
