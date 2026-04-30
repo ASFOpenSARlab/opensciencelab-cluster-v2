@@ -512,7 +512,7 @@ class ClusterCdkStack(Stack):
                     "baseUrl": f"/lab/{self.CLUSTER_SHORT_NAME}",
                     "config": {
                         "JupyterHub": {
-                            "default_url": f"/lab/{self.CLUSTER_SHORT_NAME}",
+                            "default_url": f"/lab/{self.CLUSTER_SHORT_NAME}/hub/home",
                             "tornado_settings": {
                                 "cookie_options": {"expires_days": 7.0},
                             },
