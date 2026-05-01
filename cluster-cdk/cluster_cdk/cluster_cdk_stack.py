@@ -704,10 +704,10 @@ class ClusterCdkStack(Stack):
             raise Exception("No nodes found in the osl toml config")
 
         try:
-            selected_lab_profiles = [
-                possible_lab_profiles.get(lab_profile)
+            selected_lab_profiles = {
+                lab_profile: possible_lab_profiles.get(lab_profile)
                 for lab_profile in self.SELECTED_LAB_PROFILES
-            ]
+            }
         except Exception:
             print(
                 f"Some SELECTED_LAB_PROFILES for lab '{self.LAB_SHORT_NAME}' do not exist"
@@ -715,10 +715,10 @@ class ClusterCdkStack(Stack):
             raise
 
         try:
-            selected_nodes = [
+            selected_nodes = {
                 possible_nodes.get(profile.get("node"))
-                for profile in selected_lab_profiles
-            ]
+                for profile in selected_lab_profiles.values()
+            }
 
         except Exception:
             print(f"Some desired nodes for lab '{self.LAB_SHORT_NAME}' do not exist")
