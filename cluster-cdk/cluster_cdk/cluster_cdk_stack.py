@@ -692,7 +692,6 @@ class ClusterCdkStack(Stack):
         )
 
     def _get_reduced_osl_config(self) -> dict:
-
         with open(self.OPENSCIENCELAB_CONFIG_FILE, "rb") as f:
             osl_config: dict = tomllib.load(f)
 
