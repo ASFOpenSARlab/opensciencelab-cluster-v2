@@ -50,6 +50,13 @@ class ClusterCdkStack(Stack):
         if not self.LAB_SHORT_NAME:
             raise Exception("Lab short name is not defined")
 
+        self.SELECTED_LAB_PROFILES = [
+            profile.strip()
+            for profile in os.getenv("SELECTED_LAB_PROFILES", "").split(",")
+        ]
+        if self.SELECTED_LAB_PROFILES == [""]:
+            raise Exception("Selected Lab Profiles are not defined")
+
         self.ADMIN_USERS = os.getenv("ADMIN_USERS", "").split(",")
 
         self.PORTAL_DOMAIN = os.getenv("PORTAL_DOMAIN", None)
@@ -58,14 +65,8 @@ class ClusterCdkStack(Stack):
 
         self.OPENSCIENCELAB_CONFIG_FILE = self.HOME_DIR / "opensciencelab.toml"
 
-        # The section of the config is the cluster env name
-        osl_config_with_defaults = self._get_osl_config_with_defaults()
-        self.osl_config = osl_config_with_defaults.get(self.LAB_SHORT_NAME, None)
-
-        if not self.osl_config:
-            raise Exception(
-                f"Lab '{self.LAB_SHORT_NAME}' doesn't have a section in osl toml"
-            )
+        # Determine the selected lab config values
+        self.osl_config = self._get_reduced_osl_config()
 
         # The lab short name is usually unique enough that is can be used as part of the naming of aws resources
         # However, if multiple dev cluster are present, it will be more difficult to distiguish.
@@ -690,31 +691,41 @@ class ClusterCdkStack(Stack):
             description="The version of the JupyterHub Helm Chart version",
         )
 
-    def _get_osl_config_with_defaults(self) -> dict:
+    def _get_reduced_osl_config(self) -> dict:
+
         with open(self.OPENSCIENCELAB_CONFIG_FILE, "rb") as f:
-            config: dict = tomllib.load(f)
+            osl_config: dict = tomllib.load(f)
 
-        defaults: dict = config.get("defaults", {})
+        possible_lab_profiles = osl_config.get("lab_profiles", None)
+        if not possible_lab_profiles:
+            raise Exception("No lab profiles found in the osl toml config")
 
-        merged = {}
+        possible_nodes = osl_config.get("nodes", None)
+        if not possible_nodes:
+            raise Exception("No nodes found in the osl toml config")
 
-        merged["defaults"] = defaults
-
-        # Cycle through all the labs
-        for lab_name, lab_config in config.items():
-            lab = {}
-
-            # Replace of all nodes if lab nodes are defined
-            lab["nodes"] = lab_config.get("nodes", defaults["nodes"])
-
-            # Replace of all nodes if lab nodes are defined
-            lab["lab_profiles"] = lab_config.get(
-                "lab_profiles", defaults["lab_profiles"]
+        try:
+            selected_lab_profiles = [
+                possible_lab_profiles.get(lab_profile)
+                for lab_profile in self.SELECTED_LAB_PROFILES
+            ]
+        except Exception:
+            print(
+                f"Some SELECTED_LAB_PROFILES for lab '{self.LAB_SHORT_NAME}' do not exist"
             )
+            raise
 
-            merged[lab_name] = lab
+        try:
+            selected_nodes = [
+                possible_nodes.get(profile.get("node"))
+                for profile in selected_lab_profiles
+            ]
 
-        return merged
+        except Exception:
+            print(f"Some desired nodes for lab '{self.LAB_SHORT_NAME}' do not exist")
+            raise
+
+        return {"lab_profiles": selected_lab_profiles, "nodes": selected_nodes}
 
     def _add_policy_from_file(self, the_role: iam.Role, file_name: str) -> None:
         """

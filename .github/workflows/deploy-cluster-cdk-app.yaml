@@ -46,6 +46,7 @@ jobs:
       UI_IAM_USER: ${{ vars.UI_IAM_USER }}
       ADMIN_USERS: ${{ vars.ADMIN_USERS }}
       PORTAL_DOMAIN: ${{ vars.PORTAL_DOMAIN }}
+      SELECTED_LAB_PROFILES: ${{ vars.SELECTED_LAB_PROFILES }}
       LAB_SHORT_NAME: ${{ inputs.envOverride || needs.setup.outputs.environment }}
     steps:
       - name: Log Environment

@@ -1,29 +1,53 @@
 
 
-  [[defaults.lab_profiles]]
-  name = "m5a.xlarge"
-  description = "Hello"
-  image_url = "localhost"
-  node = "m5a.xlarge"
+#
+# Lab Profiles
+#
+# Possible profiles that a user can select to start a lab for all labs.
+# The actual profiles available to the lab is determined by the LAB_PROFILES GitHub environment var
+# Among those profiles available to the lab, the user will get those assigned from within the Portal
+# 
+# [ lab_profiles."my_profile_name" ]  # The profile name should be in quotes if it contains a decimal
+# description = "Hello world"
+# image_url = "http://..."  # FQDN path to JupyterLab image that will be started"
+# node = ""  # Name of the node that the image will be starting on. Needs to match any defined below."
+#
 
-  [[defaults.lab_profiles]]
-  name = "m5a.large"
-  description = "Hello, there"
-  image_url = "localhost"
-  node = "m5a.large"
+[ lab_profiles."m5a.xlarge" ]
+description = "Hello"
+image_url = "localhost"
+node = "m5a.xlarge"
 
-  [[defaults.nodes]]
-  name = "core"
-  node_type = "core"
-  instance = ["t3a.medium"]
-  group_desired_size = 1
-  group_min_size = 1
-  group_max_size = 1
+[ lab_profiles."m5a.large" ]
+description = "Hello, there"
+image_url = "localhost"
+node = "m5a.large"
 
-  [[defaults.nodes]]
-  name = "sar"
-  node_type = "user"
-  instance = ["m5a.large", "m6a.large"]
-  group_desired_size = 0
-  group_min_size = 0
-  group_max_size = 5
+#
+# Nodes
+#
+# Possible k8s nodes that jupyterlab servers can start on for all labs.
+# Nodes are selected based on the lab profile as defined above.
+# 
+#
+# [ lab_profiles."my-url-friendly-node-name" ]  # Note that the node name must be url friendly since nodes are assigned domain paths by k8s
+# node_type = "core | user"
+# instance = ["t3a.medium", "other_instance_size"]  # The first instance size in the instance list will be the first to be tried, followed by any others in that order.
+# group_desired_size = number
+# group_min_size = number  # Defaults to zero
+# group_max_size = number  # Must be greater than one
+#
+
+[ nodes.core ]
+node_type = "core"
+instance = ["t3a.medium"]
+group_desired_size = 1
+group_min_size = 1
+group_max_size = 1
+
+[ nodes.sar ]
+node_type = "user"
+instance = ["m5a.large", "m6a.large"]
+group_desired_size = 0
+group_min_size = 0
+group_max_size = 5
