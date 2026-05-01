@@ -68,16 +68,8 @@ class ClusterCdkStack(Stack):
         # Determine the selected lab config values
         self.osl_config = self._get_reduced_osl_config()
 
-        # The lab short name is usually unique enough that is can be used as part of the naming of aws resources
-        # However, if multiple dev cluster are present, it will be more difficult to distiguish.
-        # Therefore, for "dev" labs, we will use the DEPLOY_PREFIX as part of the naming of AWS resources.
-        if self.LAB_SHORT_NAME == "dev":
-            self.DEPLOY_TAG = self.DEPLOY_PREFIX
-        else:
-            self.DEPLOY_TAG = self.LAB_SHORT_NAME
-
         # All resources in this specific stack will get this tag
-        Tags.of(self).add("osl-billing", f"eks-cluster-{self.DEPLOY_TAG}")  # type: ignore
+        Tags.of(self).add("osl-billing", f"eks-cluster-{self.LAB_SHORT_NAME}")  # type: ignore
 
         kubectl_layer = lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl")
 
@@ -122,7 +114,7 @@ class ClusterCdkStack(Stack):
             self,
             "EksCluster",
             vpc=self.vpc,
-            cluster_name=f"eks-cluster-{self.DEPLOY_TAG}",
+            cluster_name=f"eks-cluster-{self.LAB_SHORT_NAME}",
             version=eks.KubernetesVersion.V1_34,
             kubectl_provider_options=eks.KubectlProviderOptions(
                 kubectl_layer=kubectl_layer,
@@ -137,7 +129,7 @@ class ClusterCdkStack(Stack):
             assumed_by=iam.ArnPrincipal(
                 f"arn:aws:iam::{self.account}:root"  # Security issue?
             ),
-            role_name=f"eks-cluster-user-full-access-{self.DEPLOY_TAG}",
+            role_name=f"eks-cluster-user-full-access-{self.LAB_SHORT_NAME}",
             description="IAM Role for user accessing the eks cluster",
             inline_policies={
                 "Document1": iam.PolicyDocument(
@@ -248,7 +240,7 @@ class ClusterCdkStack(Stack):
         #
         #####################################################################
 
-        sso_token_secret_name = f"sso-token/eks-cluster-{self.DEPLOY_TAG}"
+        sso_token_secret_name = f"sso-token/eks-cluster-{self.LAB_SHORT_NAME}"
 
         self.sso_token = secretsmanager.Secret(
             self,
@@ -314,7 +306,7 @@ class ClusterCdkStack(Stack):
             # These tags will be applied to the EC2 instances when they are launched by the Auto Scaling Group
             launch_template = ec2.CfnLaunchTemplate(
                 self,
-                f"{node['name']}-LaunchTemplate-{self.DEPLOY_TAG}",
+                f"{node['name']}-LaunchTemplate-{self.LAB_SHORT_NAME}",
                 launch_template_data=ec2.CfnLaunchTemplate.LaunchTemplateDataProperty(
                     metadata_options=ec2.CfnLaunchTemplate.MetadataOptionsProperty(
                         http_put_response_hop_limit=2,  # Set hop limit here
@@ -324,20 +316,20 @@ class ClusterCdkStack(Stack):
                         ec2.CfnLaunchTemplate.TagSpecificationProperty(
                             resource_type="instance",
                             tags=[
-                                CfnTag(key="osl-billing", value=self.DEPLOY_TAG),
+                                CfnTag(key="osl-billing", value=self.LAB_SHORT_NAME),
                                 CfnTag(
                                     key="Name",
-                                    value=f"jupyterhub-{node['name']}-{self.DEPLOY_TAG}",
+                                    value=f"jupyterhub-{node['name']}-{self.LAB_SHORT_NAME}",
                                 ),
                             ],
                         ),
                         ec2.CfnLaunchTemplate.TagSpecificationProperty(
                             resource_type="volume",
                             tags=[
-                                CfnTag(key="osl-billing", value=self.DEPLOY_TAG),
+                                CfnTag(key="osl-billing", value=self.LAB_SHORT_NAME),
                                 CfnTag(
                                     key="Name",
-                                    value=f"jupyterhub-{node['name']}-root-{self.DEPLOY_TAG}",
+                                    value=f"jupyterhub-{node['name']}-root-{self.LAB_SHORT_NAME}",
                                 ),
                             ],
                         ),
@@ -348,7 +340,7 @@ class ClusterCdkStack(Stack):
             # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/NodegroupOptions.html
             node_group = self.cluster.add_nodegroup_capacity(
                 node["name"],
-                nodegroup_name=f"{node['name']}-NodeGroup-{self.DEPLOY_TAG}",
+                nodegroup_name=f"{node['name']}-NodeGroup-{self.LAB_SHORT_NAME}",
                 ami_type=eks.NodegroupAmiType.AL2023_X86_64_STANDARD,
                 capacity_type=eks.CapacityType.ON_DEMAND,
                 desired_size=node.get("group_desired_size", 0),
@@ -451,7 +443,7 @@ class ClusterCdkStack(Stack):
             repository="https://kubernetes-sigs.github.io/aws-ebs-csi-driver",
             atomic=True,
             chart="aws-ebs-csi-driver",
-            release=f"osl-ebs-driver-{self.DEPLOY_TAG}",  # type: ignore
+            release=f"osl-ebs-driver-{self.LAB_SHORT_NAME}",  # type: ignore
             namespace="kube-system",
             version=self.csi_driver_version,
             wait=True,
@@ -461,7 +453,7 @@ class ClusterCdkStack(Stack):
                     "extraCreateMetadata": True,
                     "k8sTagClusterId": self.cluster.cluster_name,
                     "extraVolumeTags": {
-                        "osl-billing": self.DEPLOY_TAG,
+                        "osl-billing": self.LAB_SHORT_NAME,
                     },
                     "serviceAccount": {
                         "create": False,
@@ -487,7 +479,7 @@ class ClusterCdkStack(Stack):
             repository="https://jupyterhub.github.io/helm-chart/",
             atomic=False,
             chart="jupyterhub",
-            release=f"osl-jupyterhub-{self.DEPLOY_TAG}",  # type: ignore
+            release=f"osl-jupyterhub-{self.LAB_SHORT_NAME}",  # type: ignore
             version=self.jupyterhub_helm_version,
             namespace="jupyter",
             wait=True,
@@ -626,7 +618,7 @@ class ClusterCdkStack(Stack):
                         "opensciencelab.local/node-type": "core",
                     },
                     "annotations": {
-                        "service.beta.kubernetes.io/aws-load-balancer-name": f"eks-cluster-{self.DEPLOY_TAG}",
+                        "service.beta.kubernetes.io/aws-load-balancer-name": f"eks-cluster-{self.LAB_SHORT_NAME}",
                         "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type": "ip",
                         "service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
                         "service.beta.kubernetes.io/aws-load-balancer-type": "external",
