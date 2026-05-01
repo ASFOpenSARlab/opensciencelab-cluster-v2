@@ -15,12 +15,12 @@ try:
 
     AWS_REGION = os.environ.get("AWS_REGION", "")
     SSO_TOKEN_ARN = os.environ.get("SSO_TOKEN_ARN", "")
-    OPENSARLAB_SSO_TOKEN_PATH = os.environ.get("OPENSARLAB_SSO_TOKEN_PATH", "")
+    SSO_TOKEN_PATH = os.environ.get("SSO_TOKEN_PATH", "")
 
     ## Set SSO token to secrets path
     secrets_manager = boto3.client("secretsmanager", region_name=AWS_REGION)
     _sso_token = secrets_manager.get_secret_value(SecretId=SSO_TOKEN_ARN)
-    with open(OPENSARLAB_SSO_TOKEN_PATH, "w") as file:
+    with open(SSO_TOKEN_PATH, "w") as file:
         file.write(_sso_token["SecretString"])
 
     from jupyterhub.portal_auth import PortalAuthenticator

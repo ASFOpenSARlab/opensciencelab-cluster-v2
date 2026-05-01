@@ -527,7 +527,7 @@ class ClusterCdkStack(Stack):
                     "extraEnv": {
                         "AWS_REGION": self.region,
                         "SSO_TOKEN_ARN": self.sso_token.secret_arn,
-                        "OPENSARLAB_SSO_TOKEN_PATH": "/tmp/sso_token",
+                        "SSO_TOKEN_PATH": "/tmp/sso_token",
                         "JUPYTERHUB_LAB_NAME": self.LAB_SHORT_NAME,
                         "JUPYTERHUB_LAB_PREFIX": f"/lab/{self.LAB_SHORT_NAME}",
                         "OPENSCIENCELAB_PORTAL_DOMAIN": self.osl_config[
