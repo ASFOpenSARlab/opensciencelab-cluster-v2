@@ -537,12 +537,12 @@ class ClusterCdkStack(Stack):
                     "extraFiles": (
                         {}
                         | self._set_extra_file(
-                            "jupyterhub/web/usr/local/lib/jupyterhub/portal_auth.py",
+                            "jupyterhub/portal_auth.py",
                             "python",
                             "/usr/local/lib/python3.12/site-packages/jupyterhub/portal_auth.py",
                         )
                         | self._set_extra_file(
-                            "jupyterhub/config/1_auth.py",
+                            "jupyterhub/config.d/1_auth.py",
                             "python",
                             "/usr/local/etc/jupyterhub/jupyterhub_config.d/1_auth.py",
                         )
