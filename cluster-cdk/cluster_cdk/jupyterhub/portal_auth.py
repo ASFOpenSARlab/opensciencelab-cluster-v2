@@ -26,7 +26,7 @@ class PortalAuthLoginHandler(BaseHandler):
         if not self.lab_prefix:
             raise My401Exception("No lab prefix")
 
-        self.portal_domain = os.environ.get("OPENSCIENCELAB_PORTAL_DOMAIN", "")
+        self.portal_domain = os.environ.get("PORTAL_DOMAIN", "")
         if not self.portal_domain:
             raise My401Exception("No portal domain")
 
@@ -82,7 +82,7 @@ class PortalAuthLogoutHandler(BaseHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.portal_domain = os.environ.get("OPENSCIENCELAB_PORTAL_DOMAIN", "")
+        self.portal_domain = os.environ.get("PORTAL_DOMAIN", "")
         if not self.portal_domain:
             raise My401Exception("No portal domain")
 
@@ -98,7 +98,7 @@ class PortalAuthenticator(Authenticator):
         if not self.JUPYTERHUB_LAB_NAME:
             raise My401Exception("No lab name provided")
 
-        self.portal_domain = os.environ.get("OPENSCIENCELAB_PORTAL_DOMAIN", "")
+        self.portal_domain = os.environ.get("PORTAL_DOMAIN", "")
         if not self.portal_domain:
             raise My401Exception("No portal domain")
 

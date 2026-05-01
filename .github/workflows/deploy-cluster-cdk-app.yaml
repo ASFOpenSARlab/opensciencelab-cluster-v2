@@ -10,9 +10,15 @@ on: # yamllint disable-line rule:truthy
         default: ""
 
       envOverride:
-        description: "Environment override"
+        description: "Environment override / Lab short name"
         type: environment
-        default: "dev"
+        default: ""
+
+      runTestSuite:
+        description: "Run test suite on build"
+        type: environment
+        default: false
+
   push:
     branches:
       - main
@@ -38,6 +44,8 @@ jobs:
       JUPYTER_HUB_DOCKER_TAG: ${{ github.event.inputs.jupyterhub-image-tag || needs.setup.outputs.deploy_prefix }}
       AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       UI_IAM_USER: ${{ vars.UI_IAM_USER }}
+      ADMIN_USERS: ${{ vars.ADMIN_USERS }}
+      PORTAL_DOMAIN: ${{ vars.PORTAL_DOMAIN }}
       LAB_SHORT_NAME: ${{ inputs.envOverride || needs.setup.outputs.environment }}
     steps:
       - name: Log Environment
@@ -54,7 +62,7 @@ jobs:
           aws-region: ${{ vars.AWS_DEFAULT_REGION }}
 
       - name: Run Cluster Testsuite
-        if: contains(fromJSON('["dev", "test"]'), inputs.envOverride || needs.setup.outputs.environment )
+        if: contains(fromJSON('["test"]'), inputs.envOverride || needs.setup.outputs.environment ) || inputs.runTestSuite
         run: |
           make test
 

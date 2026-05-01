@@ -45,10 +45,16 @@ class ClusterCdkStack(Stack):
             "JUPYTER_HUB_DOCKER_TAG", self.DEPLOY_PREFIX
         )
         self.UI_IAM_USER = os.getenv("UI_IAM_USER", None)
-        self.LAB_SHORT_NAME = str(os.getenv("LAB_SHORT_NAME", "")).lower()
 
+        self.LAB_SHORT_NAME = str(os.getenv("LAB_SHORT_NAME", "")).lower()
         if not self.LAB_SHORT_NAME:
             raise Exception("Lab short name is not defined")
+
+        self.ADMIN_USERS = os.getenv("ADMIN_USERS", "").split(",")
+
+        self.PORTAL_DOMAIN = os.getenv("PORTAL_DOMAIN", None)
+        if not self.PORTAL_DOMAIN:
+            raise Exception("Portal domain is not defined")
 
         self.OPENSCIENCELAB_CONFIG_FILE = self.HOME_DIR / "opensciencelab.toml"
 
@@ -519,7 +525,7 @@ class ClusterCdkStack(Stack):
                             },
                         },
                         "Authenticator": {
-                            "admin_users": self.osl_config["admin_users"],
+                            "admin_users": self.ADMIN_USERS,
                             "auth_refresh_age": 60,
                             "allow_all": True,
                         },
@@ -530,9 +536,7 @@ class ClusterCdkStack(Stack):
                         "SSO_TOKEN_PATH": "/tmp/sso_token",
                         "JUPYTERHUB_LAB_NAME": self.LAB_SHORT_NAME,
                         "JUPYTERHUB_LAB_PREFIX": f"/lab/{self.LAB_SHORT_NAME}",
-                        "OPENSCIENCELAB_PORTAL_DOMAIN": self.osl_config[
-                            "portal_domain"
-                        ],
+                        "PORTAL_DOMAIN": self.PORTAL_DOMAIN,
                     },
                     "extraFiles": (
                         {}
@@ -699,12 +703,6 @@ class ClusterCdkStack(Stack):
         # Cycle through all the labs
         for lab_name, lab_config in config.items():
             lab = {}
-
-            lab["portal_domain"] = lab_config.get(
-                "portal_domain", defaults["portal_domain"]
-            )
-
-            lab["admin_users"] = lab_config.get("admin_users", defaults["admin_users"])
 
             # Replace of all nodes if lab nodes are defined
             lab["nodes"] = lab_config.get("nodes", defaults["nodes"])

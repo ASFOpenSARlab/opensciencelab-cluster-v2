@@ -1,10 +1,4 @@
-[dev]
-portal_domain = "https://drgbh3hrliz1t.cloudfront.net"
-admin_users = ['emlundell']
 
-[defaults]
-portal_domain = "localhost"
-admin_users = ['nobody']
 
   [[defaults.lab_profiles]]
   name = "m5a.xlarge"
