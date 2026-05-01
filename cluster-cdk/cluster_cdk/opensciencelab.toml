@@ -16,12 +16,12 @@
 [ lab_profiles."m5a.xlarge" ]
 description = "Hello"
 image_url = "localhost"
-node = "m5a.xlarge"
+node = "m6a-xlarge"
 
 [ lab_profiles."m5a.large" ]
 description = "Hello, there"
 image_url = "localhost"
-node = "m5a.large"
+node = "sar"
 
 #
 # Nodes
@@ -51,3 +51,10 @@ instance = ["m5a.large", "m6a.large"]
 group_desired_size = 0
 group_min_size = 0
 group_max_size = 5
+
+[ nodes.m6a-xlarge ]
+node_type = "user"
+instance = ["m6a.xlarge"]
+group_desired_size = 0
+group_min_size = 0
+group_max_size = 2

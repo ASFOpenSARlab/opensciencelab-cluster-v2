@@ -714,15 +714,11 @@ class ClusterCdkStack(Stack):
             )
             raise
 
-        try:
-            selected_nodes = {
-                possible_nodes.get(profile.get("node"))
-                for profile in selected_lab_profiles.values()
-            }
-
-        except Exception:
-            print(f"Some desired nodes for lab '{self.LAB_SHORT_NAME}' do not exist")
-            raise
+        # If a desired selected node is not among the possible nodes, the node will have a value of None
+        selected_nodes = {
+            profile.get("node"): possible_nodes.get(profile.get("node"))
+            for profile in selected_lab_profiles.values()
+        }
 
         return {"lab_profiles": selected_lab_profiles, "nodes": selected_nodes}
 
