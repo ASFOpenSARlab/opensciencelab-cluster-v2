@@ -12,11 +12,10 @@ on: # yamllint disable-line rule:truthy
       envOverride:
         description: "Environment override / Lab short name"
         type: environment
-        default: ""
+        default: dev
 
       runTestSuite:
         description: "Run test suite on build"
-        type: environment
         default: false
 
   push:
