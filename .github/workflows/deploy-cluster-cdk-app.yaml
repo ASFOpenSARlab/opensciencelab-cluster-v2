@@ -15,7 +15,8 @@ on: # yamllint disable-line rule:truthy
         default: test
 
       runTestSuite:
-        description: "Run test suite on build"
+        description: "Run test suite on build. Note that Test always runs tests."
+        tyoe: boolean
         default: false
 
   push:
@@ -62,7 +63,7 @@ jobs:
           aws-region: ${{ vars.AWS_DEFAULT_REGION }}
 
       - name: Run Cluster Testsuite
-        if: contains(fromJSON('["test"]'), inputs.envOverride || needs.setup.outputs.environment ) || inputs.runTestSuite == true
+        if: contains(fromJSON('["test"]'), inputs.envOverride || needs.setup.outputs.environment ) || inputs.runTestSuite
         run: |
           make test
 
