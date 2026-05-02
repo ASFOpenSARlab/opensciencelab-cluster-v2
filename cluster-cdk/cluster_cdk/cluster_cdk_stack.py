@@ -687,32 +687,46 @@ class ClusterCdkStack(Stack):
         with open(self.OPENSCIENCELAB_CONFIG_FILE, "rb") as f:
             osl_config: dict = tomllib.load(f)
 
-        possible_lab_profiles = osl_config.get("lab_profiles", None)
-        if not possible_lab_profiles:
+        possible_profiles = osl_config.get("lab_profiles", None)
+        if not possible_profiles:
             raise Exception("No lab profiles found in the osl toml config")
 
         possible_nodes = osl_config.get("nodes", None)
         if not possible_nodes:
             raise Exception("No nodes found in the osl toml config")
 
-        try:
-            selected_lab_profiles = {
-                lab_profile: possible_lab_profiles.get(lab_profile)
-                for lab_profile in self.SELECTED_LAB_PROFILES
-            }
-        except Exception:
-            print(
-                f"Some SELECTED_LAB_PROFILES for lab '{self.LAB_SHORT_NAME}' do not exist"
-            )
-            raise
+        # Put config data into a format better for code interactions
+        # { "name": "hello", "attr": "value", ... }
+        possible_profiles = [
+            {"name": name} | body for name, body in possible_profiles.items()
+        ]
 
-        # If a desired selected node is not among the possible nodes, the node will have a value of None
-        selected_nodes = {
-            profile.get("node"): possible_nodes.get(profile.get("node"))
-            for profile in selected_lab_profiles.values()
-        }
+        desired_profiles = []
+        desired_nodes = []
 
-        return {"lab_profiles": selected_lab_profiles, "nodes": selected_nodes}
+        for profile in possible_profiles:
+            if profile["name"] in self.SELECTED_LAB_PROFILES:
+                desired_profiles.append(profile)
+
+                # See if there is a proper node configuration
+                matched_node = None
+                for node_name, node_body in possible_nodes.items():
+                    if profile["node"] == node_name:
+                        matched_node = {"name": node_name} | node_body
+
+                if not matched_node:
+                    raise Exception(
+                        f"Desired node name '{profile['node']}' for '{self.LAB_SHORT_NAME}' does not match possible nodes."
+                    )
+
+                desired_nodes.append(matched_node)
+
+            else:
+                print(
+                    f"Desired lab profile name '{profile['name']}' for '{self.LAB_SHORT_NAME}' does not match previously selected names."
+                )
+
+        return {"lab_profiles": desired_profiles, "nodes": desired_nodes}
 
     def _add_policy_from_file(self, the_role: iam.Role, file_name: str) -> None:
         """
