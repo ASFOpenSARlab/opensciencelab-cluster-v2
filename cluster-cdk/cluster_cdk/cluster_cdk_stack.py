@@ -684,6 +684,12 @@ class ClusterCdkStack(Stack):
         )
 
     def _get_reduced_osl_config(self) -> dict:
+        """
+        Return a subset of profiles and nodes found in opensciencelab.toml based on list of lab profiles given in GitHub env.
+
+        Also include required nodes (like core) that don't match for any particular profile.
+
+        """
         with open(self.OPENSCIENCELAB_CONFIG_FILE, "rb") as f:
             osl_config: dict = tomllib.load(f)
 
@@ -691,8 +697,8 @@ class ClusterCdkStack(Stack):
         if not possible_profiles:
             raise Exception("No lab profiles found in the osl toml config")
 
-        possible_nodes = osl_config.get("nodes", None)
-        if not possible_nodes:
+        all_nodes = osl_config.get("nodes", None)
+        if not all_nodes:
             raise Exception("No nodes found in the osl toml config")
 
         # Put config data into a format better for code interactions
@@ -701,6 +707,8 @@ class ClusterCdkStack(Stack):
             {"name": name} | body for name, body in possible_profiles.items()
         ]
 
+        all_nodes = [{"name": name} | body for name, body in all_nodes.items()]
+
         desired_profiles = []
         desired_nodes = []
 
@@ -708,23 +716,40 @@ class ClusterCdkStack(Stack):
             if profile["name"] in self.SELECTED_LAB_PROFILES:
                 desired_profiles.append(profile)
 
-                # See if there is a proper node configuration
-                matched_node = None
-                for node_name, node_body in possible_nodes.items():
-                    if profile["node"] == node_name:
-                        matched_node = {"name": node_name} | node_body
+                # See if there is a proper node configuration for the profile
+                node_for_profile = None
+                for node_body in all_nodes:
+                    if profile["node"] == node_body["name"]:
+                        node_for_profile = node_body
 
-                if not matched_node:
+                if not node_for_profile:
                     raise Exception(
-                        f"Desired node name '{profile['node']}' for '{self.LAB_SHORT_NAME}' does not match possible nodes."
+                        f"Desired lab profile name '{profile['name']}' for '{self.LAB_SHORT_NAME}' does not have a valid node assigned."
                     )
 
-                desired_nodes.append(matched_node)
+                desired_nodes.append(node_for_profile)
 
             else:
                 print(
-                    f"Desired lab profile name '{profile['name']}' for '{self.LAB_SHORT_NAME}' does not match previously selected names."
+                    f"Desired lab profile name '{profile['name']}' for '{self.LAB_SHORT_NAME}' does not match any selected profile names."
                 )
+
+        # Add any required nodes (like core)
+        for node in all_nodes:
+            if node.get("required", False):
+                desired_nodes.append(node)
+
+        # Get rid of duplicates
+        desired_profiles = [
+            profile
+            for n, profile in enumerate(desired_profiles)
+            if desired_profiles.index(profile) == n
+        ]
+        desired_nodes = [
+            node
+            for n, node in enumerate(desired_nodes)
+            if desired_nodes.index(node) == n
+        ]
 
         return {"lab_profiles": desired_profiles, "nodes": desired_nodes}
 
