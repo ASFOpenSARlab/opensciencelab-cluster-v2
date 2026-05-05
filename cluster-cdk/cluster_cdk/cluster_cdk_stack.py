@@ -544,6 +544,16 @@ class ClusterCdkStack(Stack):
                             "python",
                             "/usr/local/etc/jupyterhub/jupyterhub_config.d/1_auth.py",
                         )
+                        | self._set_extra_file(
+                            "jupyterhub/config.d/0_extras.py",
+                            "python",
+                            "/usr/local/etc/jupyterhub/jupyterhub_config.d/0_extras.py",
+                        )
+                        | self._set_extra_file(
+                            "jupyterhub/hub_home.html.js",
+                            "html",
+                            "/usr/local/share/jupterhub/templates/custom/page.html",
+                        )
                     ),
                 },
                 "proxy": {
@@ -843,7 +853,7 @@ class ClusterCdkStack(Stack):
         """
         full_file_path = self.HOME_DIR / file_path
 
-        if file_type == "python":
+        if file_type in ["python", "html"]:
             file_category = "stringData"
 
             with open(full_file_path, "r") as f:
