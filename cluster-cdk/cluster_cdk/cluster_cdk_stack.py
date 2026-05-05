@@ -552,7 +552,7 @@ class ClusterCdkStack(Stack):
                         | self._set_extra_file(
                             "jupyterhub/hub_home.html.j2",
                             "html",
-                            "/usr/local/share/jupterhub/templates/custom/page.html",
+                            "/usr/local/share/jupyterhub/templates/custom/page.html",
                         )
                     ),
                 },
