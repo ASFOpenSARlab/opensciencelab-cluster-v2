@@ -1,0 +1,41 @@
+[
+    {
+        "Sid": "HubVolumeFromSnapshot",
+        "Effect": "Allow",
+        "Action": [
+            "ec2:DescribeSnapshots",
+            "ec2:CreateVolume",
+            "ec2:CreateTags"
+        ],
+        "Resource": "*"
+    },
+    {
+        "Sid": "HubVolumeStoppingTags",
+        "Effect": "Allow",
+        "Action": [
+            "ec2:DescribeVolumes",
+            "ec2:CreateTags"
+        ],
+        "Resource": "*"
+    },
+    {
+        "Sid": "HubSecretsManagerRead",
+        "Effect": "Allow",
+        "Action": [
+            "secretsmanager:GetSecretValue"
+        ],
+        "Resource": "*"
+    },
+    {
+        "Sid": "HubS3ReadOnly",
+        "Effect": "Allow",
+        "Action": [
+            "s3:ListAllMyBuckets",
+            "s3:ListBucket",
+            "s3:GetObject",
+            "s3:GetObjectAcl",
+            "s3:GetObjectVersion"
+        ],
+        "Resource": "*"
+    }
+]

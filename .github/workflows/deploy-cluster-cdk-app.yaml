@@ -7,12 +7,18 @@ on: # yamllint disable-line rule:truthy
       jupyterhub-image-tag:
         description: "image tag of `opensciencelab-jupyterhub` (ex. 'dp', 'v1.0.2', etc.)"
         required: false
-        default: ''
+        default: ""
 
       envOverride:
-        description: "Environment override"
+        description: "Environment override / Lab short name"
         type: environment
-        default: "dev"
+        default: test
+
+      runTestSuite:
+        description: "Run test suite on build. Note that Test always runs tests."
+        tyoe: boolean
+        default: false
+
   push:
     branches:
       - main
@@ -22,7 +28,7 @@ jobs:
     uses: ASFOpenSARlab/osl-utils/.github/workflows/reusable-setup-env.yaml@v1.1.2
     with:
       tagname: ${{ inputs.tagname || github.ref_name }}
-  
+
   build-and-deploy-cluster:
     runs-on: ubuntu-latest
     needs:
@@ -38,6 +44,10 @@ jobs:
       JUPYTER_HUB_DOCKER_TAG: ${{ github.event.inputs.jupyterhub-image-tag || needs.setup.outputs.deploy_prefix }}
       AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       UI_IAM_USER: ${{ vars.UI_IAM_USER }}
+      ADMIN_USERS: ${{ vars.ADMIN_USERS }}
+      PORTAL_DOMAIN: ${{ vars.PORTAL_DOMAIN }}
+      SELECTED_LAB_PROFILES: ${{ vars.SELECTED_LAB_PROFILES }}
+      LAB_SHORT_NAME: ${{ inputs.envOverride || needs.setup.outputs.environment }}
     steps:
       - name: Log Environment
         run: |
@@ -53,7 +63,7 @@ jobs:
           aws-region: ${{ vars.AWS_DEFAULT_REGION }}
 
       - name: Run Cluster Testsuite
-        if: contains(fromJSON('["dev", "test"]'), inputs.envOverride || needs.setup.outputs.environment )
+        if: contains(fromJSON('["test"]'), inputs.envOverride || needs.setup.outputs.environment ) || inputs.runTestSuite == true
         run: |
           make test
 

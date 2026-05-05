@@ -1,6 +1,8 @@
 import os
 import tomllib  # type: ignore
 import pathlib
+from string import Template
+import json
 
 import requests
 
@@ -33,27 +35,41 @@ class ClusterCdkStack(Stack):
         #
         #####################################################################
 
+        self.HOME_DIR = pathlib.Path(__file__).absolute().parent
+
         # CDK provides the AWS Account number via self.account # "233535791844"
         # CDK provides the AWS Region va self.region
+
         self.DEPLOY_PREFIX = str(os.getenv("DEPLOY_PREFIX")).lower()
         self.JUPYTER_HUB_DOCKER_TAG = os.getenv(
             "JUPYTER_HUB_DOCKER_TAG", self.DEPLOY_PREFIX
         )
         self.UI_IAM_USER = os.getenv("UI_IAM_USER", None)
 
-        self.OPENSCIENCELAB_CONFIG_FILE = (
-            pathlib.Path(__file__).absolute().parent / "opensciencelab.toml"
-        )
+        self.LAB_SHORT_NAME = str(os.getenv("LAB_SHORT_NAME", "")).lower()
+        if not self.LAB_SHORT_NAME:
+            raise Exception("Lab short name is not defined")
 
-        # If deploy_prefix not found in config sections, use defaults
-        # This allows for development using defaults
-        osl_config_with_defaults = self._get_osl_config_with_defaults()
-        self.osl_config = osl_config_with_defaults.get(
-            self.DEPLOY_PREFIX, osl_config_with_defaults.get("defaults", {})
-        )
+        self.SELECTED_LAB_PROFILES = [
+            profile.strip()
+            for profile in os.getenv("SELECTED_LAB_PROFILES", "").split(",")
+        ]
+        if self.SELECTED_LAB_PROFILES == [""]:
+            raise Exception("Selected Lab Profiles are not defined")
+
+        self.ADMIN_USERS = os.getenv("ADMIN_USERS", "").split(",")
+
+        self.PORTAL_DOMAIN = os.getenv("PORTAL_DOMAIN", None)
+        if not self.PORTAL_DOMAIN:
+            raise Exception("Portal domain is not defined")
+
+        self.OPENSCIENCELAB_CONFIG_FILE = self.HOME_DIR / "opensciencelab.toml"
+
+        # Determine the selected lab config values
+        self.osl_config = self._get_reduced_osl_config()
 
         # All resources in this specific stack will get this tag
-        Tags.of(self).add("osl-billing", f"eks-cluster-{self.DEPLOY_PREFIX}")  # type: ignore
+        Tags.of(self).add("osl-billing", f"eks-cluster-{self.LAB_SHORT_NAME}")  # type: ignore
 
         kubectl_layer = lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl")
 
@@ -98,7 +114,7 @@ class ClusterCdkStack(Stack):
             self,
             "EksCluster",
             vpc=self.vpc,
-            cluster_name=f"eks-cluster-{self.DEPLOY_PREFIX}",
+            cluster_name=f"eks-cluster-{self.LAB_SHORT_NAME}",
             version=eks.KubernetesVersion.V1_34,
             kubectl_provider_options=eks.KubectlProviderOptions(
                 kubectl_layer=kubectl_layer,
@@ -113,7 +129,7 @@ class ClusterCdkStack(Stack):
             assumed_by=iam.ArnPrincipal(
                 f"arn:aws:iam::{self.account}:root"  # Security issue?
             ),
-            role_name=f"eks-cluster-user-full-access-{self.DEPLOY_PREFIX}",
+            role_name=f"eks-cluster-user-full-access-{self.LAB_SHORT_NAME}",
             description="IAM Role for user accessing the eks cluster",
             inline_policies={
                 "Document1": iam.PolicyDocument(
@@ -220,6 +236,53 @@ class ClusterCdkStack(Stack):
 
         #####################################################################
         #
+        #    Setup Secret Manager values
+        #
+        #####################################################################
+
+        sso_token_secret_name = f"sso-token/eks-cluster-{self.LAB_SHORT_NAME}"
+
+        self.sso_token = secretsmanager.Secret(
+            self,
+            "SSOTokenSecret",
+            secret_name=sso_token_secret_name,
+            description="SSO Token to communicate with the Portal",
+            secret_string_value=SecretValue.unsafe_plain_text(
+                "ReplaceMeOrYouWillAlwaysFail"
+            ),
+            # removal_policy=None  # Don't set removal policy so that the following custom resource can delete the secret
+        )
+
+        ####
+        #  Make sure that the SSO Token secret is destroyed immediately instead of waiting days
+        #
+        cr.AwsCustomResource(
+            self,
+            "DeleteSSOSecretCR",
+            on_delete=cr.AwsSdkCall(
+                service="SecretsManager",
+                action="deleteSecret",
+                parameters={
+                    "SecretId": self.sso_token.secret_arn,
+                    "ForceDeleteWithoutRecovery": True,  # Optional: Deletes immediately
+                },
+                physical_resource_id=cr.PhysicalResourceId.of(
+                    self.sso_token.secret_arn
+                ),
+            ),
+            policy=cr.AwsCustomResourcePolicy.from_statements(
+                [
+                    iam.PolicyStatement(
+                        actions=["secretsmanager:DeleteSecret"],
+                        resources=[self.sso_token.secret_arn],
+                        effect=iam.Effect.ALLOW,
+                    )
+                ]
+            ),
+        )
+
+        #####################################################################
+        #
         #    Setup Nodegroups
         #
         #    These are paired 1-to-1 with auto scaling groups but are better managed by k8s.
@@ -235,7 +298,7 @@ class ClusterCdkStack(Stack):
             if node_type == "core":
                 node_labels["hub.jupyter.org/node-purpose"] = "core"
                 node_labels["opensciencelab.local/node-type"] = "core"
-            if node_type == "user":
+            elif node_type == "user":
                 node_labels["hub.jupyter.org/node-purpose"] = "user"
                 node_labels["opensciencelab.local/node-type"] = "user"
 
@@ -243,37 +306,41 @@ class ClusterCdkStack(Stack):
             # These tags will be applied to the EC2 instances when they are launched by the Auto Scaling Group
             launch_template = ec2.CfnLaunchTemplate(
                 self,
-                f"{node['name']}-LaunchTemplate-{self.DEPLOY_PREFIX}",
+                f"{node['name']}-LaunchTemplate-{self.LAB_SHORT_NAME}",
                 launch_template_data=ec2.CfnLaunchTemplate.LaunchTemplateDataProperty(
+                    metadata_options=ec2.CfnLaunchTemplate.MetadataOptionsProperty(
+                        http_put_response_hop_limit=2,  # Set hop limit here
+                        http_tokens="required",  # Recommended for IMDSv2
+                    ),
                     tag_specifications=[
                         ec2.CfnLaunchTemplate.TagSpecificationProperty(
                             resource_type="instance",
                             tags=[
-                                CfnTag(key="osl-billing", value=self.DEPLOY_PREFIX),
+                                CfnTag(key="osl-billing", value=self.LAB_SHORT_NAME),
                                 CfnTag(
                                     key="Name",
-                                    value=f"jupyterhub-core-{self.DEPLOY_PREFIX}",
+                                    value=f"jupyterhub-{node['name']}-{self.LAB_SHORT_NAME}",
                                 ),
                             ],
                         ),
                         ec2.CfnLaunchTemplate.TagSpecificationProperty(
                             resource_type="volume",
                             tags=[
-                                CfnTag(key="osl-billing", value=self.DEPLOY_PREFIX),
+                                CfnTag(key="osl-billing", value=self.LAB_SHORT_NAME),
                                 CfnTag(
                                     key="Name",
-                                    value=f"jupyterhub-core-root-{self.DEPLOY_PREFIX}",
+                                    value=f"jupyterhub-{node['name']}-root-{self.LAB_SHORT_NAME}",
                                 ),
                             ],
                         ),
-                    ]
+                    ],
                 ),
             )
 
             # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/NodegroupOptions.html
             node_group = self.cluster.add_nodegroup_capacity(
                 node["name"],
-                nodegroup_name=f"{node['name']}-NodeGroup-{self.DEPLOY_PREFIX}",
+                nodegroup_name=f"{node['name']}-NodeGroup-{self.LAB_SHORT_NAME}",
                 ami_type=eks.NodegroupAmiType.AL2023_X86_64_STANDARD,
                 capacity_type=eks.CapacityType.ON_DEMAND,
                 desired_size=node.get("group_desired_size", 0),
@@ -295,7 +362,7 @@ class ClusterCdkStack(Stack):
                 labels=node_labels,
             )
 
-            # SMCE required observability policies
+            # SMCE required observability policies for all nodes
             for managed_policy in [
                 "AmazonSSMManagedInstanceCore",
                 "CloudWatchAgentAdminPolicy",
@@ -306,6 +373,9 @@ class ClusterCdkStack(Stack):
                 )
 
             if node_type == "core":
+                self._add_policy_from_file(node_group.role, "hub_node_policies.json")
+
+                # Needed so we can make a dependency later
                 self.core_nodegroup = node_group
 
         #####################################################################
@@ -373,7 +443,7 @@ class ClusterCdkStack(Stack):
             repository="https://kubernetes-sigs.github.io/aws-ebs-csi-driver",
             atomic=True,
             chart="aws-ebs-csi-driver",
-            release=f"osl-ebs-driver-{self.DEPLOY_PREFIX}",  # type: ignore
+            release=f"osl-ebs-driver-{self.LAB_SHORT_NAME}",  # type: ignore
             namespace="kube-system",
             version=self.csi_driver_version,
             wait=True,
@@ -383,7 +453,7 @@ class ClusterCdkStack(Stack):
                     "extraCreateMetadata": True,
                     "k8sTagClusterId": self.cluster.cluster_name,
                     "extraVolumeTags": {
-                        "osl-billing": self.DEPLOY_PREFIX,
+                        "osl-billing": self.LAB_SHORT_NAME,
                     },
                     "serviceAccount": {
                         "create": False,
@@ -391,53 +461,6 @@ class ClusterCdkStack(Stack):
                     },
                 },
             },
-        )
-
-        #####################################################################
-        #
-        #    Setup Secret Manager values
-        #
-        #####################################################################
-
-        sso_token_secret_name = f"sso-token/eks-cluster-{self.DEPLOY_PREFIX}"
-
-        self.sso_token = secretsmanager.Secret(
-            self,
-            "SSOTokenSecret",
-            secret_name=sso_token_secret_name,
-            description="SSO Token to communicate with the Portal",
-            secret_string_value=SecretValue.unsafe_plain_text(
-                "ReplaceMeOrYouWillAlwaysFail"
-            ),
-            # removal_policy=None  # Don't set removal policy so that the following custom resource can delete the secret
-        )
-
-        ####
-        #  Make sure that the SSO Token secret is destroyed immediately instead of waiting days
-        #
-        cr.AwsCustomResource(
-            self,
-            "DeleteSSOSecretCR",
-            on_delete=cr.AwsSdkCall(
-                service="SecretsManager",
-                action="deleteSecret",
-                parameters={
-                    "SecretId": self.sso_token.secret_arn,
-                    "ForceDeleteWithoutRecovery": True,  # Optional: Deletes immediately
-                },
-                physical_resource_id=cr.PhysicalResourceId.of(
-                    self.sso_token.secret_arn
-                ),
-            ),
-            policy=cr.AwsCustomResourcePolicy.from_statements(
-                [
-                    iam.PolicyStatement(
-                        actions=["secretsmanager:DeleteSecret"],
-                        resources=[self.sso_token.secret_arn],
-                        effect=iam.Effect.ALLOW,
-                    )
-                ]
-            ),
         )
 
         #####################################################################
@@ -456,7 +479,7 @@ class ClusterCdkStack(Stack):
             repository="https://jupyterhub.github.io/helm-chart/",
             atomic=False,
             chart="jupyterhub",
-            release=f"osl-jupyterhub-{self.DEPLOY_PREFIX}",  # type: ignore
+            release=f"osl-jupyterhub-{self.LAB_SHORT_NAME}",  # type: ignore
             version=self.jupyterhub_helm_version,
             namespace="jupyter",
             wait=True,
@@ -486,6 +509,42 @@ class ClusterCdkStack(Stack):
                             "storageClassName": "gp3",
                         }
                     },
+                    "baseUrl": f"/lab/{self.LAB_SHORT_NAME}",
+                    "config": {
+                        "JupyterHub": {
+                            "default_url": f"/lab/{self.LAB_SHORT_NAME}/hub/home",
+                            "tornado_settings": {
+                                "cookie_options": {"expires_days": 7.0},
+                            },
+                        },
+                        "Authenticator": {
+                            "admin_users": self.ADMIN_USERS,
+                            "auth_refresh_age": 60,
+                            "allow_all": True,
+                        },
+                    },
+                    "extraEnv": {
+                        "AWS_REGION": self.region,
+                        "SSO_TOKEN_ARN": self.sso_token.secret_arn,
+                        "SSO_TOKEN_PATH": "/tmp/sso_token",
+                        "OPENSARLAB_SSO_TOKEN_PATH": "/tmp/sso_token",
+                        "JUPYTERHUB_LAB_NAME": self.LAB_SHORT_NAME,
+                        "JUPYTERHUB_LAB_PREFIX": f"/lab/{self.LAB_SHORT_NAME}",
+                        "PORTAL_DOMAIN": self.PORTAL_DOMAIN,
+                    },
+                    "extraFiles": (
+                        {}
+                        | self._set_extra_file(
+                            "jupyterhub/portal_auth.py",
+                            "python",
+                            "/usr/local/lib/python3.12/site-packages/jupyterhub/portal_auth.py",
+                        )
+                        | self._set_extra_file(
+                            "jupyterhub/config.d/1_auth.py",
+                            "python",
+                            "/usr/local/etc/jupyterhub/jupyterhub_config.d/1_auth.py",
+                        )
+                    ),
                 },
                 "proxy": {
                     "https": {"enabled": False},
@@ -560,7 +619,7 @@ class ClusterCdkStack(Stack):
                         "opensciencelab.local/node-type": "core",
                     },
                     "annotations": {
-                        "service.beta.kubernetes.io/aws-load-balancer-name": f"eks-cluster-{self.DEPLOY_PREFIX}",
+                        "service.beta.kubernetes.io/aws-load-balancer-name": f"eks-cluster-{self.LAB_SHORT_NAME}",
                         "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type": "ip",
                         "service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
                         "service.beta.kubernetes.io/aws-load-balancer-type": "external",
@@ -625,30 +684,199 @@ class ClusterCdkStack(Stack):
             description="The version of the JupyterHub Helm Chart version",
         )
 
-    def _get_osl_config_with_defaults(self) -> dict:
+    def _get_reduced_osl_config(self) -> dict:
+        """
+        Return a subset of profiles and nodes found in opensciencelab.toml based on list of lab profiles given in GitHub env.
+
+        Also include required nodes (like core) that don't match for any particular profile.
+
+        """
         with open(self.OPENSCIENCELAB_CONFIG_FILE, "rb") as f:
-            config: dict = tomllib.load(f)
+            osl_config: dict = tomllib.load(f)
 
-        defaults: dict = config.get("defaults", {})
+        possible_profiles = osl_config.get("lab_profiles", None)
+        if not possible_profiles:
+            raise Exception("No lab profiles found in the osl toml config")
 
-        merged = {}
+        all_nodes = osl_config.get("nodes", None)
+        if not all_nodes:
+            raise Exception("No nodes found in the osl toml config")
 
-        merged["defaults"] = defaults
+        # Put config data into a format better for code interactions
+        # { "name": "hello", "attr": "value", ... }
+        possible_profiles = [
+            {"name": name} | body for name, body in possible_profiles.items()
+        ]
 
-        # Cycle through all the labs
-        for lab_name, lab_config in config.items():
-            lab = {}
+        all_nodes = [{"name": name} | body for name, body in all_nodes.items()]
 
-            lab["environment"] = lab_config.get("environment", defaults["environment"])
+        desired_profiles = []
+        desired_nodes = []
 
-            # Replace of all nodes if lab nodes are defined
-            lab["nodes"] = lab_config.get("nodes", defaults["nodes"])
+        for profile in possible_profiles:
+            if profile["name"] in self.SELECTED_LAB_PROFILES:
+                desired_profiles.append(profile)
 
-            # Replace of all nodes if lab nodes are defined
-            lab["lab_profiles"] = lab_config.get(
-                "lab_profiles", defaults["lab_profiles"]
+                # See if there is a proper node configuration for the profile
+                node_for_profile = None
+                for node_body in all_nodes:
+                    if profile["node"] == node_body["name"]:
+                        node_for_profile = node_body
+
+                if not node_for_profile:
+                    raise Exception(
+                        f"Desired lab profile name '{profile['name']}' for '{self.LAB_SHORT_NAME}' does not have a valid node assigned."
+                    )
+
+                desired_nodes.append(node_for_profile)
+
+            else:
+                print(
+                    f"Desired lab profile name '{profile['name']}' for '{self.LAB_SHORT_NAME}' does not match any selected profile names."
+                )
+
+        # Add any required nodes (like core)
+        for node in all_nodes:
+            if node.get("required", False):
+                desired_nodes.append(node)
+
+        # Get rid of duplicates
+        desired_profiles = [
+            profile
+            for n, profile in enumerate(desired_profiles)
+            if desired_profiles.index(profile) == n
+        ]
+        desired_nodes = [
+            node
+            for n, node in enumerate(desired_nodes)
+            if desired_nodes.index(node) == n
+        ]
+
+        return {"lab_profiles": desired_profiles, "nodes": desired_nodes}
+
+    def _add_policy_from_file(self, the_role: iam.Role, file_name: str) -> None:
+        """
+        Predefined roles sometimes need addtional custom policies applied (especially for node roles).
+        This method attaches a policy defined in a specially formatted file.
+
+        The policy in the files must be in one of two formats: a json list
+
+        ```
+            [
+                {
+                    "Sid": "MySid",
+                    "Effect": "Allow",
+                    "Action": [
+                        "ec2:DescribeSnapshots",
+                        "ec2:CreateVolume",
+                        "ec2:CreateTags"
+                    ],
+                    "Resource": "*"
+                },
+                {
+                    "Sid": "AnotherSid",
+                    "Effect": "Allow",
+                    "Action": [
+                        "ec2:DescribeVolumes",
+                        "ec2:CreateTags"
+                    ],
+                    "Resource": "*"
+                }
+            ]
+        ```
+
+        or just json
+
+        ```
+            {
+                "Sid": "MySid",
+                "Effect": "Allow",
+                "Action": [
+                    "ec2:DescribeSnapshots",
+                    "ec2:CreateVolume",
+                    "ec2:CreateTags"
+                ],
+                "Resource": "*"
+            }
+        ```
+        """
+
+        with open(self.HOME_DIR / "manifests/policies" / pathlib.Path(file_name)) as f:
+            policy_data: dict | list = json.load(f)
+
+        if isinstance(policy_data, list):
+            for policy in policy_data:
+                the_role.add_to_policy(iam.PolicyStatement.from_json(policy))
+
+        elif isinstance(policy_data, dict):
+            the_role.add_to_policy(iam.PolicyStatement.from_json(policy_data))
+
+        else:
+            print(f"Policy for {file_name} in wrong format?")
+
+    def _set_extra_file(
+        self,
+        file_path: str,
+        file_type: str,
+        mount_path: str,
+        file_mode: str = "0644",
+        extra_args: dict = {},
+    ) -> dict[str, dict[str, str | bytes | dict | int]]:
+        """
+        Helper function to get files and setup for helm chart injection
+
+        https://z2jh.jupyter.org/en/stable/resources/reference.html#singleuser-extrafiles
+        https://z2jh.jupyter.org/en/stable/resources/reference.html#hub-extrafiles
+
+
+        extra_args: A dicionary of string values to be subsituted into stringData file.
+
+            ```
+                extra_args = { "var1": "hello", "var2": "world" }
+            ```
+
+            will be subsituted into string "The developer said $var1 $var2".
+
+            When possible, it is preferred that environment varibales be used to subsitute values.
+            This is easier to keep track and allows for cleaner code.
+
+        """
+        full_file_path = self.HOME_DIR / file_path
+
+        if file_type == "python":
+            file_category = "stringData"
+
+            with open(full_file_path, "r") as f:
+                contents: str = f.read()
+                templ = Template(contents)
+                file_contents = templ.safe_substitute(**extra_args)
+
+            print(
+                f"Rendering {full_file_path} of file_type 'python' using extra_args '{extra_args}'"
             )
 
-            merged[lab_name] = lab
+        elif file_type == "toml":
+            file_category = "data"
 
-        return merged
+            with open(full_file_path, "rb") as f:
+                file_contents: dict = tomllib.load(f)
+
+        elif file_type == "binary":
+            file_category = "binaryData"
+            with open(full_file_path, "rb") as f:
+                file_contents: bytes = f.read()
+
+        else:
+            raise ValueError(
+                f"Argument file_type of {file_path} needs to be set as python, json, toml, or binary."
+            )
+
+        key_name = full_file_path.name
+
+        return {
+            key_name: {
+                "mountPath": mount_path,
+                "mode": int(file_mode, 8),
+                file_category: file_contents,
+            }
+        }
