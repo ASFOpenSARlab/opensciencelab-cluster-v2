@@ -7,7 +7,7 @@ on: # yamllint disable-line rule:truthy
       jupyterhub-image-tag:
         description: "image tag of `opensciencelab-jupyterhub` (ex. 'dp', 'v1.0.2', etc.)"
         required: false
-        default: ""
+        default: test
 
       envOverride:
         description: "Environment override / Lab short name"

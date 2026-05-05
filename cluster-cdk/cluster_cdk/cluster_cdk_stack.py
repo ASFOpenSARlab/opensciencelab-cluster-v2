@@ -550,7 +550,7 @@ class ClusterCdkStack(Stack):
                             "/usr/local/etc/jupyterhub/jupyterhub_config.d/0_extras.py",
                         )
                         | self._set_extra_file(
-                            "jupyterhub/hub_home.html.js",
+                            "jupyterhub/hub_home.html.j2",
                             "html",
                             "/usr/local/share/jupterhub/templates/custom/page.html",
                         )
