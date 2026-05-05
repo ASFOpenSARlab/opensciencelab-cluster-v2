@@ -862,7 +862,7 @@ class ClusterCdkStack(Stack):
                 file_contents = templ.safe_substitute(**extra_args)
 
             print(
-                f"Rendering {full_file_path} of file_type 'python' using extra_args '{extra_args}'"
+                f"Rendering {full_file_path} of file_type '{file_type}' using extra_args '{extra_args}'"
             )
 
         elif file_type == "toml":

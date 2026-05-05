@@ -87,7 +87,7 @@ class PortalAuthLogoutHandler(BaseHandler):
             raise My401Exception("No portal domain")
 
     async def render_logout_page(self):
-        self.redirect(f"{self.portal_domain}/portal/hub/logout", permanent=True)
+        self.redirect(f"{self.portal_domain}/logout", permanent=True)
 
 
 class PortalAuthenticator(Authenticator):
