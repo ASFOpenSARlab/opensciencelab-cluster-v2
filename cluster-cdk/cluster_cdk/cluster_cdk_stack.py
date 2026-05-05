@@ -568,6 +568,12 @@ class ClusterCdkStack(Stack):
 
         self.jupyerhub_helm_chart.node.add_dependency(self.ebs_csi_driver_helm_chart)
 
+        # It's important that these are helm chart dependencies. They need to be created first so that
+        # we get visibility with any helm chart installation problems
+        self.jupyerhub_helm_chart.node.add_dependency(self.user_cloudshell_entry)
+        if self.UI_IAM_USER:
+            self.jupyerhub_helm_chart.node.add_dependency(self.user_access_ui_entry)
+
         #####################################################################
         #
         #    Setup Load Balancer
