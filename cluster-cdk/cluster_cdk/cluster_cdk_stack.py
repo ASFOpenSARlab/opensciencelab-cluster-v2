@@ -559,7 +559,7 @@ class ClusterCdkStack(Stack):
             "custom": {"COST_TAG_KEY": "hello", "COST_TAG_VALUE": "world"},
         }
 
-        print(json.dumps(jupyterhub_helm_values))
+        # print(json.dumps(jupyterhub_helm_values))
 
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#helm-charts
         # https://artifacthub.io/packages/helm/jupyterhub/jupyterhub?modal=values-schema
