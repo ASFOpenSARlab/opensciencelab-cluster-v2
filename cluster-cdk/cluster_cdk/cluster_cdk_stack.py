@@ -3,12 +3,14 @@ import tomllib  # type: ignore
 import pathlib
 from string import Template
 import json
+import textwrap
 
 import requests
 
 from aws_cdk import (  # type: ignore
     CfnTag,
     CfnOutput,
+    CustomResource,
     custom_resources as cr,
     Tags,
     RemovalPolicy,
@@ -18,6 +20,7 @@ from aws_cdk import (  # type: ignore
     aws_eks_v2 as eks,
     aws_ec2 as ec2,
     aws_iam as iam,
+    aws_lambda as lambda_,
     aws_secretsmanager as secretsmanager,
     lambda_layer_kubectl_v34,
 )
@@ -57,7 +60,9 @@ class ClusterCdkStack(Stack):
         if self.SELECTED_LAB_PROFILES == [""]:
             raise Exception("Selected Lab Profiles are not defined")
 
-        self.ADMIN_USERS = os.getenv("ADMIN_USERS", "").split(",")
+        self.ADMIN_USERS = [
+            username.strip() for username in os.getenv("ADMIN_USERS", "").split(",")
+        ]
 
         self.PORTAL_DOMAIN = os.getenv("PORTAL_DOMAIN", None)
         if not self.PORTAL_DOMAIN:
@@ -677,6 +682,53 @@ class ClusterCdkStack(Stack):
             namespace="jupyter",
             timeout=Duration.minutes(15),
         )
+
+        # Delete load balancer resources before deletion of manifest
+        load_balancer_resources_on_event = textwrap.dedent("""
+            def handler(event, context):
+                if event["RequestType"] == "Create":
+                    print("Inside Load Balancer Resources Create")
+
+                elif event["RequestType"] == "Update":
+                    print("Inside Load Balancer Resources Update")
+
+                elif event["RequestType"] == "Delete":
+                    try:
+                        print("Inside Load Balancer Resources Delete")
+
+                    # Safely handle deletion, allowing it to succeed even if
+                    # the resource is already gone.
+                    except Exception as e:
+                        print("{e=}")
+
+                return {"RequestId": event["RequestId"]}
+        """)
+
+        load_balancer_resources_event_handler = lambda_.Function(
+            self,
+            "LoadBalancerResourcesEventHandler",
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            handler="index.handler",
+            code=lambda_.Code.from_inline(load_balancer_resources_on_event),
+            # layers=[my_layer],
+            timeout=Duration.minutes(4),
+        )
+
+        # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.custom_resources/Provider.html
+        delete_load_balancer_resources_provider = cr.Provider(
+            self,
+            "DeleteLoadBalancerResourcesProvider",
+            on_event_handler=load_balancer_resources_event_handler,
+        )
+
+        delete_load_balancer_resources = CustomResource(
+            self,
+            "DeleteLoadBalancerResourcesCustomResource",
+            service_token=delete_load_balancer_resources_provider.service_token,
+            service_timeout=Duration.minutes(5),
+        )
+
+        delete_load_balancer_resources.node.add_dependency(load_balancer_manifest)
 
         #####################################################################
         #
