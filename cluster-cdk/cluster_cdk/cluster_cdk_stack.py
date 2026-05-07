@@ -57,7 +57,12 @@ class ClusterCdkStack(Stack):
         if self.SELECTED_LAB_PROFILES == [""]:
             raise Exception("Selected Lab Profiles are not defined")
 
-        self.ADMIN_USERS = os.getenv("ADMIN_USERS", "").split(",")
+        self.ADMIN_USERS = [
+            username.strip()
+            for username in os.getenv("ADMIN_USERS", "").split(",")
+        ]
+        if self.ADMIN_USERS == [""]:
+            raise Exception("Admin users are not defined")
 
         self.PORTAL_DOMAIN = os.getenv("PORTAL_DOMAIN", None)
         if not self.PORTAL_DOMAIN:
