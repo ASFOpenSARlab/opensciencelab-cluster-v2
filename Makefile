@@ -91,6 +91,10 @@ cdk-shell:
 		-e DEPLOY_PREFIX \
 		-e JUPYTER_HUB_DOCKER_TAG \
 		-e UI_IAM_USER \
+		-e ADMIN_USERS \
+		-e PORTAL_DOMAIN \
+		-e SELECTED_LAB_PROFILES \
+		-e LAB_SHORT_NAME \
 		-w /code/ \
 		--pull always \
 		${IMAGE_NAME} || \
