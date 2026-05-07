@@ -171,7 +171,7 @@ class ClusterCdkStack(Stack):
             removal_policy=RemovalPolicy.DESTROY,
         )
 
-        self.user_cloudshell_entry.node.add_dependency(self.cluster)
+        # self.user_cloudshell_entry.node.add_dependency(self.cluster)
 
         if self.UI_IAM_USER:
             # Access Entry for EKS UI
@@ -190,7 +190,7 @@ class ClusterCdkStack(Stack):
                 removal_policy=RemovalPolicy.DESTROY,
             )
 
-            self.user_access_ui_entry.node.add_dependency(self.cluster)
+            # self.user_access_ui_entry.node.add_dependency(self.cluster)
 
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#add-ons
         eks.Addon(
@@ -463,6 +463,13 @@ class ClusterCdkStack(Stack):
             },
         )
 
+        # By being dependecies of the csi driver, they will be created before jupyterhub without any circular dependencies.
+        self.ebs_csi_driver_helm_chart.node.add_dependency(self.user_cloudshell_entry)
+        if self.UI_IAM_USER:
+            self.ebs_csi_driver_helm_chart.node.add_dependency(
+                self.user_access_ui_entry
+            )
+
         #####################################################################
         #
         #    Setup JupyterHub
@@ -470,6 +477,89 @@ class ClusterCdkStack(Stack):
         #####################################################################
 
         self.jupyterhub_helm_version = "4.3.2"
+
+        jupyterhub_helm_values = {
+            "prePuller": {
+                "continuous": {"enabled": False},
+                "hook": {"enabled": False},
+            },
+            "scheduling": {
+                "userPlaceholder": {"enabled": False},
+                "userScheduler": {
+                    "enabled": True,
+                    "labels": {"sidecar.istio.io/inject": "false"},
+                },
+                "corePods": {"nodeAffinity": {"matchNodePurpose": "require"}},
+                "userPods": {"nodeAffinity": {"matchNodePurpose": "require"}},
+            },
+            "hub": {
+                "image": {
+                    "name": "ghcr.io/asfopensarlab/opensciencelab-jupyterhub",
+                    "tag": self.JUPYTER_HUB_DOCKER_TAG,
+                    "pullPolicy": "Always",
+                },
+                "db": {
+                    "pvc": {
+                        "storageClassName": "gp3",
+                    }
+                },
+                "baseUrl": f"/lab/{self.LAB_SHORT_NAME}",
+                "config": {
+                    "JupyterHub": {
+                        "default_url": f"/lab/{self.LAB_SHORT_NAME}/hub/home",
+                        "tornado_settings": {
+                            "cookie_options": {"expires_days": 7.0},
+                        },
+                    },
+                    "Authenticator": {
+                        "admin_users": self.ADMIN_USERS,
+                        "auth_refresh_age": 60,
+                        "allow_all": True,
+                    },
+                },
+                "extraEnv": {
+                    "AWS_REGION": self.region,
+                    "SSO_TOKEN_ARN": self.sso_token.secret_arn,
+                    "SSO_TOKEN_PATH": "/tmp/sso_token",
+                    "OPENSARLAB_SSO_TOKEN_PATH": "/tmp/sso_token",
+                    "JUPYTERHUB_LAB_NAME": self.LAB_SHORT_NAME,
+                    "JUPYTERHUB_LAB_PREFIX": f"/lab/{self.LAB_SHORT_NAME}",
+                    "PORTAL_DOMAIN": self.PORTAL_DOMAIN,
+                },
+                "extraFiles": (
+                    {}
+                    | self._set_extra_file(
+                        "jupyterhub/portal_auth.py",
+                        "python",
+                        "/usr/local/lib/python3.12/site-packages/jupyterhub/portal_auth.py",
+                    )
+                    | self._set_extra_file(
+                        "jupyterhub/config.d/1_auth.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/1_auth.py",
+                    )
+                    | self._set_extra_file(
+                        "jupyterhub/config.d/0_extras.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/0_extras.py",
+                    )
+                    | self._set_extra_file(
+                        "jupyterhub/hub_home.html.j2",
+                        "html",
+                        "/usr/local/share/jupyterhub/templates/custom/page.html",
+                    )
+                ),
+            },
+            "proxy": {
+                "https": {"enabled": False},
+                "service": {
+                    "type": "ClusterIP",
+                },
+            },
+            "custom": {"COST_TAG_KEY": "hello", "COST_TAG_VALUE": "world"},
+        }
+
+        # print(json.dumps(jupyterhub_helm_values))
 
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#helm-charts
         # https://artifacthub.io/packages/helm/jupyterhub/jupyterhub?modal=values-schema
@@ -484,76 +574,7 @@ class ClusterCdkStack(Stack):
             namespace="jupyter",
             wait=True,
             timeout=Duration.minutes(10),
-            values={
-                "prePuller": {
-                    "continuous": {"enabled": False},
-                    "hook": {"enabled": False},
-                },
-                "scheduling": {
-                    "userPlaceholder": {"enabled": False},
-                    "userScheduler": {
-                        "enabled": True,
-                        "labels": {"sidecar.istio.io/inject": "false"},
-                    },
-                    "corePods": {"nodeAffinity": {"matchNodePurpose": "require"}},
-                    "userPods": {"nodeAffinity": {"matchNodePurpose": "require"}},
-                },
-                "hub": {
-                    "image": {
-                        "name": "ghcr.io/asfopensarlab/opensciencelab-jupyterhub",
-                        "tag": self.JUPYTER_HUB_DOCKER_TAG,
-                        "pullPolicy": "Always",
-                    },
-                    "db": {
-                        "pvc": {
-                            "storageClassName": "gp3",
-                        }
-                    },
-                    "baseUrl": f"/lab/{self.LAB_SHORT_NAME}",
-                    "config": {
-                        "JupyterHub": {
-                            "default_url": f"/lab/{self.LAB_SHORT_NAME}/hub/home",
-                            "tornado_settings": {
-                                "cookie_options": {"expires_days": 7.0},
-                            },
-                        },
-                        "Authenticator": {
-                            "admin_users": self.ADMIN_USERS,
-                            "auth_refresh_age": 60,
-                            "allow_all": True,
-                        },
-                    },
-                    "extraEnv": {
-                        "AWS_REGION": self.region,
-                        "SSO_TOKEN_ARN": self.sso_token.secret_arn,
-                        "SSO_TOKEN_PATH": "/tmp/sso_token",
-                        "OPENSARLAB_SSO_TOKEN_PATH": "/tmp/sso_token",
-                        "JUPYTERHUB_LAB_NAME": self.LAB_SHORT_NAME,
-                        "JUPYTERHUB_LAB_PREFIX": f"/lab/{self.LAB_SHORT_NAME}",
-                        "PORTAL_DOMAIN": self.PORTAL_DOMAIN,
-                    },
-                    "extraFiles": (
-                        {}
-                        | self._set_extra_file(
-                            "jupyterhub/portal_auth.py",
-                            "python",
-                            "/usr/local/lib/python3.12/site-packages/jupyterhub/portal_auth.py",
-                        )
-                        | self._set_extra_file(
-                            "jupyterhub/config.d/1_auth.py",
-                            "python",
-                            "/usr/local/etc/jupyterhub/jupyterhub_config.d/1_auth.py",
-                        )
-                    ),
-                },
-                "proxy": {
-                    "https": {"enabled": False},
-                    "service": {
-                        "type": "ClusterIP",
-                    },
-                },
-                "custom": {"COST_TAG_KEY": "hello", "COST_TAG_VALUE": "world"},
-            },
+            values=jupyterhub_helm_values,
         )
 
         self.jupyerhub_helm_chart.node.add_dependency(self.ebs_csi_driver_helm_chart)
@@ -843,7 +864,7 @@ class ClusterCdkStack(Stack):
         """
         full_file_path = self.HOME_DIR / file_path
 
-        if file_type == "python":
+        if file_type in ["python", "html"]:
             file_category = "stringData"
 
             with open(full_file_path, "r") as f:
@@ -852,7 +873,7 @@ class ClusterCdkStack(Stack):
                 file_contents = templ.safe_substitute(**extra_args)
 
             print(
-                f"Rendering {full_file_path} of file_type 'python' using extra_args '{extra_args}'"
+                f"Rendering {full_file_path} of file_type '{file_type}' using extra_args '{extra_args}'"
             )
 
         elif file_type == "toml":
