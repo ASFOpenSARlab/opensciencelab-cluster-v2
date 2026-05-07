@@ -171,7 +171,7 @@ class ClusterCdkStack(Stack):
             removal_policy=RemovalPolicy.DESTROY,
         )
 
-        self.user_cloudshell_entry.node.add_dependency(self.cluster)
+        # self.user_cloudshell_entry.node.add_dependency(self.cluster)
 
         if self.UI_IAM_USER:
             # Access Entry for EKS UI
@@ -190,7 +190,7 @@ class ClusterCdkStack(Stack):
                 removal_policy=RemovalPolicy.DESTROY,
             )
 
-            self.user_access_ui_entry.node.add_dependency(self.cluster)
+            # self.user_access_ui_entry.node.add_dependency(self.cluster)
 
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#add-ons
         eks.Addon(
