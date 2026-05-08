@@ -23,6 +23,7 @@ from aws_cdk import (  # type: ignore
     aws_lambda as lambda_,
     aws_secretsmanager as secretsmanager,
     lambda_layer_kubectl_v34,
+    lambda_layer_awscli,
 )
 
 from constructs import Construct  # type: ignore
@@ -76,7 +77,11 @@ class ClusterCdkStack(Stack):
         # All resources in this specific stack will get this tag
         Tags.of(self).add("osl-billing", f"eks-cluster-{self.LAB_SHORT_NAME}")  # type: ignore
 
+        # Get kubectl lambda layer
         kubectl_layer = lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl")
+
+        # Get AWS CLI v1 lambda layer
+        aws_cli_layer = lambda_layer_awscli.AwsCliLayer(self, "AwsCliLayer")
 
         print(vars(self))
 
@@ -683,25 +688,90 @@ class ClusterCdkStack(Stack):
             timeout=Duration.minutes(15),
         )
 
+        #####################################################################
+        #
+        #    Setup Custom Resource to Delete NLB on Deletion
+        #
+        #####################################################################
+
         # Delete load balancer resources before deletion of manifest
+        # Use custom resource since the load balancer resources are independent of cdk
         load_balancer_resources_on_event = textwrap.dedent("""
+            import os
+            import subprocess
+            import logging
+
+            logger = logging.getLogger()
+            logger.setLevel(logging.DEBUG)
+
+            # these are coming from the kubectl layer
+            os.environ['PATH'] = '/opt/kubectl:/opt/awscli:' + os.environ['PATH']
+
+            outdir = os.environ.get('TEST_OUTDIR', '/tmp')
+            kubeconfig = os.path.join(outdir, 'kubeconfig')
+                                                           
+            CLUSTER_NAME = os.environ.get('CLUSTER_NAME')
+
             def handler(event, context):
+                logger.debug(event)
+                logger.debug(context)
+
+                setup_env()
+
                 if event["RequestType"] == "Create":
-                    print("Inside Load Balancer Resources Create")
+                    logger.info("Inside Load Balancer Resources Create")
 
                 elif event["RequestType"] == "Update":
-                    print("Inside Load Balancer Resources Update")
+                    logger.info("Inside Load Balancer Resources Update")
+                    kubectl('get', 'pods', '-A')
 
                 elif event["RequestType"] == "Delete":
                     try:
-                        print("Inside Load Balancer Resources Delete")
+                        logger.info("Inside Load Balancer Resources Delete")
+                        # kubectl -n jupyter delete svc proxy-public-loadbalancer
+                        # kubectl('delete', 'svc', 'proxy-public-loadbalancer', '-n', 'jupyter', '--dry-run')
 
                     # Safely handle deletion, allowing it to succeed even if
                     # the resource is already gone.
                     except Exception as e:
-                        print("{e=}")
+                        logger.error("{e=}")
 
                 return {"RequestId": event["RequestId"]}
+
+            def setup_env() -> None:
+                try:
+                    # "log in" to the cluster
+                    cmd = [ 'aws', 'eks', 'update-kubeconfig',
+                        '--name', CLUSTER_NAME,
+                        '--kubeconfig', kubeconfig
+                    ]
+                    logger.info(f'Running command: {cmd}')
+                    subprocess.check_call(cmd)
+
+                    if os.path.isfile(kubeconfig):
+                        os.chmod(kubeconfig, 0o600)
+                except Exception as e:
+                    logger.error(f"{e=}")
+
+            def kubectl(*opts) -> None:
+                maxAttempts = 3
+                retry = maxAttempts
+                while retry > 0:
+                    try:
+                        cmd = ['kubectl', '--kubeconfig', kubeconfig] + list(opts)
+                        logger.info(f'Running command: {cmd}')
+                        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+                    except subprocess.CalledProcessError as exc:
+                        output = exc.output
+                        if b'i/o timeout' in output and retry > 0:
+                            retry = retry - 1
+                            logger.info("kubectl timed out")
+                        else:
+                            raise Exception(output)
+                    else:
+                        logger.info(output)
+                        return
+                raise Exception(f'Operation failed after {maxAttempts} attempts: {output}')
         """)
 
         load_balancer_resources_event_handler = lambda_.Function(
@@ -710,8 +780,35 @@ class ClusterCdkStack(Stack):
             runtime=lambda_.Runtime.PYTHON_3_12,
             handler="index.handler",
             code=lambda_.Code.from_inline(load_balancer_resources_on_event),
-            # layers=[my_layer],
-            timeout=Duration.minutes(4),
+            layers=[
+                kubectl_layer,
+                aws_cli_layer,
+            ],
+            timeout=Duration.minutes(1),
+            environment={"CLUSTER_NAME": self.cluster.cluster_name},
+        )
+
+        load_balancer_resources_event_handler.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["eks:DescribeCluster"],
+                resources=[self.cluster.cluster_arn],
+                effect=iam.Effect.ALLOW,
+            )
+        )
+
+        eks.AccessEntry(
+            self,
+            "LoadBalancerResourcesEntry",
+            access_policies=[
+                eks.AccessPolicy.from_access_policy_name(
+                    "AmazonEKSClusterAdminPolicy",
+                    access_scope_type=eks.AccessScopeType.CLUSTER,
+                ),
+            ],
+            cluster=self.cluster,
+            principal=load_balancer_resources_event_handler.role.role_arn,
+            access_entry_type=eks.AccessEntryType.STANDARD,
+            removal_policy=RemovalPolicy.DESTROY,
         )
 
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.custom_resources/Provider.html
