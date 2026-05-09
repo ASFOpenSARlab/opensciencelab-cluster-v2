@@ -718,6 +718,8 @@ class ClusterCdkStack(Stack):
             CLUSTER_NAME = os.environ.get('CLUSTER_NAME')
 
             def handler(event, context):
+                logger.info(f"{event=}")
+
                 setup_kubeconfig()
 
                 if event["RequestType"] == "Delete":
