@@ -781,7 +781,7 @@ class ClusterCdkStack(Stack):
             ],
             timeout=Duration.minutes(1),
             environment={"CLUSTER_NAME": self.cluster.cluster_name},
-            memory=2048,
+            memory_size=2048,
         )
 
         # Make sure the lambda can describe the cluster to get the needed metadata
