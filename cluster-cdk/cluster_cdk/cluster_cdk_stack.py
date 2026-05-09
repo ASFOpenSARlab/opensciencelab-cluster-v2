@@ -729,7 +729,7 @@ class ClusterCdkStack(Stack):
                     # Safely handle deletion, allowing it to succeed even if
                     # the resource is already gone.
                     except Exception as e:
-                        logger.error("{e=}")
+                        logger.error(f"{e=}")
 
                 return {"PhysicalResourceId": event.get('PhysicalResourceId', None)}
 
