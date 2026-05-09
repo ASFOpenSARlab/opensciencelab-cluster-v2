@@ -692,6 +692,11 @@ class ClusterCdkStack(Stack):
         #
         #    Setup Custom Resource to Delete NLB on Deletion
         #
+        #   The custom resource acts as a proxy for deleting the load balancer created via the ALB Controller in
+        #   the manifest. When the custom resource is deleted, the load balancer is deleted (by deleting in turn
+        #   the k8s load balancer service). As long as this occurs before the cluster and associated permissions are
+        #   destroyed, everything should work.
+        #
         #####################################################################
 
         # Delete load balancer resources before deletion of manifest
@@ -713,32 +718,22 @@ class ClusterCdkStack(Stack):
             CLUSTER_NAME = os.environ.get('CLUSTER_NAME')
 
             def handler(event, context):
-                logger.debug(event)
-                logger.debug(context)
+                setup_kubeconfig()
 
-                setup_env()
-
-                if event["RequestType"] == "Create":
-                    logger.info("Inside Load Balancer Resources Create")
-
-                elif event["RequestType"] == "Update":
-                    logger.info("Inside Load Balancer Resources Update")
-                    kubectl('get', 'pods', '-A')
-
-                elif event["RequestType"] == "Delete":
+                if event["RequestType"] == "Delete":
                     try:
                         logger.info("Inside Load Balancer Resources Delete")
                         # kubectl -n jupyter delete svc proxy-public-loadbalancer
-                        # kubectl('delete', 'svc', 'proxy-public-loadbalancer', '-n', 'jupyter', '--dry-run')
+                        kubectl('delete', 'svc', 'proxy-public-loadbalancer', '-n', 'jupyter')
 
                     # Safely handle deletion, allowing it to succeed even if
                     # the resource is already gone.
                     except Exception as e:
                         logger.error("{e=}")
 
-                return {"RequestId": event["RequestId"]}
+                return {"PhysicalResourceId": event.get('PhysicalResourceId', None)}
 
-            def setup_env() -> None:
+            def setup_kubeconfig() -> None:
                 try:
                     # "log in" to the cluster
                     cmd = [ 'aws', 'eks', 'update-kubeconfig',
@@ -786,8 +781,11 @@ class ClusterCdkStack(Stack):
             ],
             timeout=Duration.minutes(1),
             environment={"CLUSTER_NAME": self.cluster.cluster_name},
+            memory=2048,
         )
 
+        # Make sure the lambda can describe the cluster to get the needed metadata
+        # for `aws eks kubeconfig`
         load_balancer_resources_event_handler.add_to_role_policy(
             iam.PolicyStatement(
                 actions=["eks:DescribeCluster"],
@@ -796,6 +794,7 @@ class ClusterCdkStack(Stack):
             )
         )
 
+        # To manipulate eks via kubectl, the lambda needs permissions from the cluster
         eks.AccessEntry(
             self,
             "LoadBalancerResourcesEntry",
@@ -812,12 +811,15 @@ class ClusterCdkStack(Stack):
         )
 
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.custom_resources/Provider.html
+        # The provider links the custom resource below with the lambda event handler above
         delete_load_balancer_resources_provider = cr.Provider(
             self,
             "DeleteLoadBalancerResourcesProvider",
             on_event_handler=load_balancer_resources_event_handler,
         )
 
+        # Tbe service token here links this custom resource to the provider lambda
+        # When this custom resource is created, updated, or deleted, the linked lambda will run
         delete_load_balancer_resources = CustomResource(
             self,
             "DeleteLoadBalancerResourcesCustomResource",
@@ -825,6 +827,8 @@ class ClusterCdkStack(Stack):
             service_timeout=Duration.minutes(5),
         )
 
+        # This dependency ensures that the custom lambda is run before the manifest is deleted.
+        # This ensures that the load balancer resources are deleted before any dependencies like the cluster.
         delete_load_balancer_resources.node.add_dependency(load_balancer_manifest)
 
         #####################################################################
