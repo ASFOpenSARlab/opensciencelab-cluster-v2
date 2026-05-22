@@ -58,8 +58,7 @@ class ClusterCdkStack(Stack):
             raise Exception("Selected Lab Profiles are not defined")
 
         self.ADMIN_USERS = [
-            username.strip()
-            for username in os.getenv("ADMIN_USERS", "").split(",")
+            username.strip() for username in os.getenv("ADMIN_USERS", "").split(",")
         ]
         if self.ADMIN_USERS == [""]:
             raise Exception("Admin users are not defined")
@@ -552,6 +551,12 @@ class ClusterCdkStack(Stack):
                         "jupyterhub/hub_home.html.j2",
                         "html",
                         "/usr/local/share/jupyterhub/templates/custom/page.html",
+                    )
+                    | self._set_extra_file(
+                        "jupyterhub/config.d/2_profiles.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/2_profiles.py",
+                        extra_args=self.osl_config,
                     )
                 ),
             },

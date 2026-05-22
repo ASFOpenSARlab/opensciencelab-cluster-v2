@@ -14,19 +14,19 @@
 #
 
 [ lab_profiles."m5a.xlarge" ]
-description = "Hello"
-image_url = "localhost"
+description = "Hello m5a.xlarge"
+image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
 node = "m6a-xlarge"
 
 [ lab_profiles."m5a.large" ]
-description = "Hello, there"
-image_url = "localhost"
+description = "Hello, there sar"
+image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
 node = "sar"
 
 [ lab_profiles."server debug" ]
 description = "Debug"
-image_url = "localhost"
-node = "sar"
+image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
+node = "m6a-xlarge"
 
 #
 # Nodes
