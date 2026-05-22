@@ -77,7 +77,6 @@ async def _get_data_from_auth_api(username: str, portal_domain: str) -> dict:
 
 
 async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
-
     # If nothing has been assigned to the user, create a dummy noop option for the default.
     # This will attempt to find a "noop" node to spin up and obviously fail.
     # Otherwise, the default profile is to spin up a basic jupyterlab server on a randomly selected node.
