@@ -3,6 +3,7 @@ import tomllib  # type: ignore
 import pathlib
 from string import Template
 import json
+import re
 
 import requests
 
@@ -66,6 +67,8 @@ class ClusterCdkStack(Stack):
         self.PORTAL_DOMAIN = os.getenv("PORTAL_DOMAIN", None)
         if not self.PORTAL_DOMAIN:
             raise Exception("Portal domain is not defined")
+
+        self.PORTAL_DOMAINS = os.getenv("PORTAL_DOMAINS", None)
 
         self.OPENSCIENCELAB_CONFIG_FILE = self.HOME_DIR / "opensciencelab.toml"
 
@@ -296,6 +299,7 @@ class ClusterCdkStack(Stack):
         # https://github.com/aws/aws-cdk/issues/37012eks.Cluster
         for node in self.osl_config["nodes"]:
             node_type = node.get("node_type", "user")
+            node_name_escaped = re.sub(r"[^A-Za-z0-9]", "00", node["name"].strip())
 
             # Node labels to apply depending on node type
             node_labels = node.get("labels", {})
@@ -304,7 +308,9 @@ class ClusterCdkStack(Stack):
                 node_labels["opensciencelab.local/node-type"] = "core"
             elif node_type == "user":
                 node_labels["hub.jupyter.org/node-purpose"] = "user"
-                node_labels["opensciencelab.local/node-type"] = "user"
+                node_labels["opensciencelab.local/node-type"] = (
+                    f"user-{node_name_escaped}"
+                )
 
             # Define the Launch Template with the desired EC2 instance tags
             # These tags will be applied to the EC2 instances when they are launched by the Auto Scaling Group
@@ -556,7 +562,12 @@ class ClusterCdkStack(Stack):
                         "jupyterhub/config.d/2_profiles.py",
                         "python",
                         "/usr/local/etc/jupyterhub/jupyterhub_config.d/2_profiles.py",
-                        extra_args=self.osl_config,
+                        extra_args=self.osl_config
+                        | {
+                            "portal_domain": self.PORTAL_DOMAIN,
+                            "portal_domains": self.PORTAL_DOMAINS,
+                            "lab_short_name": self.LAB_SHORT_NAME,
+                        },
                     )
                 ),
             },
