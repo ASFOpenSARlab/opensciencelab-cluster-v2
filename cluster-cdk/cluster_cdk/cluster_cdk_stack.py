@@ -68,7 +68,7 @@ class ClusterCdkStack(Stack):
         if not self.PORTAL_DOMAIN:
             raise Exception("Portal domain is not defined")
 
-        self.PORTAL_DOMAINS = os.getenv("PORTAL_DOMAINS", None)
+        self.PORTAL_DOMAINS = os.getenv("PORTAL_DOMAINS", "")
 
         self.OPENSCIENCELAB_CONFIG_FILE = self.HOME_DIR / "opensciencelab.toml"
 
@@ -562,8 +562,9 @@ class ClusterCdkStack(Stack):
                         "jupyterhub/config.d/2_profiles.py",
                         "python",
                         "/usr/local/etc/jupyterhub/jupyterhub_config.d/2_profiles.py",
-                        extra_args=self.osl_config
-                        | {
+                        extra_args={
+                            "nodes": json.dumps(self.osl_config["nodes"]),
+                            "lab_profiles": json.dumps(self.osl_config["lab_profiles"]),
                             "portal_domain": self.PORTAL_DOMAIN,
                             "portal_domains": self.PORTAL_DOMAINS,
                             "lab_short_name": self.LAB_SHORT_NAME,
@@ -891,7 +892,7 @@ class ClusterCdkStack(Stack):
             with open(full_file_path, "r") as f:
                 contents: str = f.read()
                 templ = Template(contents)
-                file_contents = templ.safe_substitute(**extra_args)
+                file_contents = templ.safe_substitute(**extra_args)  # type: ignore
 
             print(
                 f"Rendering {full_file_path} of file_type '{file_type}' using extra_args '{extra_args}'"
@@ -901,7 +902,7 @@ class ClusterCdkStack(Stack):
             file_category = "data"
 
             with open(full_file_path, "rb") as f:
-                file_contents: dict = tomllib.load(f)
+                file_contents: dict = tomllib.load(f)  # type: ignore
 
         elif file_type == "binary":
             file_category = "binaryData"
