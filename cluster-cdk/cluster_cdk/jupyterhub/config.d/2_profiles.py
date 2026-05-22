@@ -8,7 +8,6 @@ from tornado.httpclient import AsyncHTTPClient, HTTPResponse
 
 from opensarlab.auth import encryptedjwt
 
-NODES: list = json.loads("$nodes")
 LAB_PROFILES: list = json.loads("$lab_profiles")
 LAB_SHORT_NAME: str = "$lab_short_name"
 PORTAL_DOMAIN: str = "$portal_domain"

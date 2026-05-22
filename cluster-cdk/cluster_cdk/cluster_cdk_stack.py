@@ -563,7 +563,6 @@ class ClusterCdkStack(Stack):
                         "python",
                         "/usr/local/etc/jupyterhub/jupyterhub_config.d/2_profiles.py",
                         extra_args={
-                            "nodes": json.dumps(self.osl_config["nodes"]),
                             "lab_profiles": json.dumps(self.osl_config["lab_profiles"]),
                             "portal_domain": self.PORTAL_DOMAIN,
                             "portal_domains": self.PORTAL_DOMAINS,
