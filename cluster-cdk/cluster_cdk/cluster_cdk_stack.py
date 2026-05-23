@@ -64,11 +64,9 @@ class ClusterCdkStack(Stack):
         if self.ADMIN_USERS == [""]:
             raise Exception("Admin users are not defined")
 
-        self.PORTAL_DOMAIN = os.getenv("PORTAL_DOMAIN", None)
-        if not self.PORTAL_DOMAIN:
-            raise Exception("Portal domain is not defined")
-
-        self.PORTAL_DOMAINS = os.getenv("PORTAL_DOMAINS", "")
+        self.PORTAL_DOMAINS = os.getenv("PORTAL_DOMAINS", None)
+        if not self.PORTAL_DOMAINS:
+            raise Exception("Portal domains is not defined")
 
         self.OPENSCIENCELAB_CONFIG_FILE = self.HOME_DIR / "opensciencelab.toml"
 
@@ -525,6 +523,7 @@ class ClusterCdkStack(Stack):
                         "admin_users": self.ADMIN_USERS,
                         "auth_refresh_age": 60,
                         "allow_all": True,
+                        "enable_auth_state": True,
                     },
                 },
                 "extraEnv": {
@@ -532,9 +531,10 @@ class ClusterCdkStack(Stack):
                     "SSO_TOKEN_ARN": self.sso_token.secret_arn,
                     "SSO_TOKEN_PATH": "/tmp/sso_token",
                     "OPENSARLAB_SSO_TOKEN_PATH": "/tmp/sso_token",
-                    "JUPYTERHUB_LAB_NAME": self.LAB_SHORT_NAME,
+                    "LAB_SHORT_NAME": self.LAB_SHORT_NAME,
                     "JUPYTERHUB_LAB_PREFIX": f"/lab/{self.LAB_SHORT_NAME}",
-                    "PORTAL_DOMAIN": self.PORTAL_DOMAIN,
+                    "PORTAL_DOMAINS": self.PORTAL_DOMAINS,
+                    "LAB_PROFILES": json.dumps(self.osl_config["lab_profiles"]),
                 },
                 "extraFiles": (
                     {}
@@ -562,12 +562,6 @@ class ClusterCdkStack(Stack):
                         "jupyterhub/config.d/2_profiles.py",
                         "python",
                         "/usr/local/etc/jupyterhub/jupyterhub_config.d/2_profiles.py",
-                        extra_args={
-                            "lab_profiles": json.dumps(self.osl_config["lab_profiles"]),
-                            "portal_domain": self.PORTAL_DOMAIN,
-                            "portal_domains": self.PORTAL_DOMAINS,
-                            "lab_short_name": self.LAB_SHORT_NAME,
-                        },
                     )
                 ),
             },

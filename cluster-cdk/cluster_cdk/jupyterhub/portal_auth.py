@@ -26,9 +26,12 @@ class PortalAuthLoginHandler(BaseHandler):
         if not self.lab_prefix:
             raise My401Exception("No lab prefix")
 
-        self.portal_domain = os.environ.get("PORTAL_DOMAIN", "")
-        if not self.portal_domain:
-            raise My401Exception("No portal domain")
+        portal_domains = os.environ.get("PORTAL_DOMAINS", "")
+        if not portal_domains:
+            raise My401Exception("No portal domains")
+
+        # Assume logging out of the primary portal since we don't know which portal was used to login
+        self.primary_portal_domain = portal_domains.split(",")[0].strip()
 
     async def post(self):
         raise My401Exception("Not allowed")
@@ -60,7 +63,9 @@ class PortalAuthLoginHandler(BaseHandler):
             next = self.get_argument("next", default=f"{self.lab_prefix}/hub/login")
             next = web.escape.url_escape(next)
 
-            self.redirect(f"{self.portal_domain}/portal/hub/auth?next_url={next}")
+            self.redirect(
+                f"{self.self.primary_portal_domain}/portal/hub/auth?next_url={next}"
+            )
 
         except My403Exception as e:
             self.log.error(f"PortalAuth Login 403 error: {e}")
@@ -82,33 +87,40 @@ class PortalAuthLogoutHandler(BaseHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.portal_domain = os.environ.get("PORTAL_DOMAIN", "")
-        if not self.portal_domain:
-            raise My401Exception("No portal domain")
+        portal_domains = os.environ.get("PORTAL_DOMAINS", "")
+        if not portal_domains:
+            raise My401Exception("No portal domains")
+
+        # Assume logging out of the primary portal since we don't know which portal was used to login
+        self.primary_portal_domain = portal_domains.split(",")[0].strip()
 
     async def render_logout_page(self):
-        self.redirect(f"{self.portal_domain}/logout", permanent=True)
+        self.redirect(f"{self.primary_portal_domain}/logout", permanent=True)
 
 
 class PortalAuthenticator(Authenticator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.JUPYTERHUB_LAB_NAME = os.environ.get("JUPYTERHUB_LAB_NAME", "")
-        if not self.JUPYTERHUB_LAB_NAME:
+        self.LAB_SHORT_NAME = os.environ.get("LAB_SHORT_NAME", "")
+        if not self.LAB_SHORT_NAME:
             raise My401Exception("No lab name provided")
 
-        self.portal_domain = os.environ.get("PORTAL_DOMAIN", "")
-        if not self.portal_domain:
-            raise My401Exception("No portal domain")
+        portal_domains = os.environ.get("PORTAL_DOMAINS", "")
+        if not portal_domains:
+            raise My401Exception("No portal domains")
+
+        self.primary_portal_domain = portal_domains.split(",")[0].strip()
 
     async def _get_user_data_from_auth_api(self, username: str) -> dict:
         try:
             body = json.dumps(
-                {"username": f"{username}", "lab_short_name": self.JUPYTERHUB_LAB_NAME}
+                {"username": f"{username}", "lab_short_name": self.LAB_SHORT_NAME}
             )
             response = await AsyncHTTPClient().fetch(
-                f"{self.portal_domain}/portal/hub/auth", body=body, method="POST"
+                f"{self.primary_portal_domain}/portal/hub/auth",
+                body=body,
+                method="POST",
             )
 
             if not response.code == 200:
@@ -167,13 +179,13 @@ class PortalAuthenticator(Authenticator):
             )
             try:
                 user_data_access_for_lab: dict = user_data.get("lab_access", {}).get(
-                    self.JUPYTERHUB_LAB_NAME, {}
+                    self.LAB_SHORT_NAME, {}
                 )
                 if not user_data_access_for_lab:
                     return None
 
                 self.log.info(
-                    f"User data access for lab '{self.JUPYTERHUB_LAB_NAME}': {user_data_access_for_lab}"
+                    f"User data access for lab '{self.LAB_SHORT_NAME}': {user_data_access_for_lab}"
                 )
 
                 can_user_access_lab: bool = bool(
@@ -181,7 +193,7 @@ class PortalAuthenticator(Authenticator):
                 )
 
                 self.log.info(
-                    f"Can user access lab '{self.JUPYTERHUB_LAB_NAME}'? {can_user_access_lab}"
+                    f"Can user access lab '{self.LAB_SHORT_NAME}'? {can_user_access_lab}"
                 )
 
                 user_data_roles: list = user_data.get("roles", [])
@@ -190,7 +202,14 @@ class PortalAuthenticator(Authenticator):
                 self.log.info(f"Does user '{username}' have admin access? {is_admin}")
 
                 if can_user_access_lab:
-                    return {"name": username, "admin": is_admin}
+                    return_path = handler.request.headers.get("return-path", None)
+                    return {
+                        "name": username,
+                        "admin": is_admin,
+                        "auth_state": {
+                            "return_portal": return_path,
+                        },
+                    }
 
             except Exception:
                 self.log.error(f"Portal Auth: Traceback: {traceback.format_exc()}")

@@ -3,15 +3,16 @@ import logging
 import json
 import traceback
 import re
+import os
 
 from tornado.httpclient import AsyncHTTPClient, HTTPResponse
 
 from opensarlab.auth import encryptedjwt
 
-LAB_PROFILES: list = json.loads("$lab_profiles")
-LAB_SHORT_NAME: str = "$lab_short_name"
-PORTAL_DOMAIN: str = "$portal_domain"
-PORTAL_DOMAINS: str = "$portal_domains"
+# What is happening here
+LAB_PROFILES: list = json.loads(os.environ.get("LAB_PROFILES", "[]"))
+LAB_SHORT_NAME: str | None = os.environ.get("LAB_SHORT_NAME", None)
+PORTAL_DOMAINS: str = os.environ.get("PORTAL_DOMAINS", "")
 
 
 class My401Exception(Exception):
@@ -40,7 +41,9 @@ async def _get_portal_host(auth_state: dict) -> str:
     else:
         logging.debug("auth_state not provided")
 
-    return PORTAL_DOMAIN
+    primary_portal_domain = PORTAL_DOMAINS.split(",")[0].strip()
+
+    return primary_portal_domain
 
 
 async def _get_data_from_auth_api(username: str, portal_domain: str) -> dict:
@@ -85,7 +88,7 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
                 "display_name": "noop",
                 "slug": "noop",
                 "description": "You don't have access to any lab profiles. If you feel this is in error, please contact OSL Admin.",
-                "default": True,
+                "default": False,  # Setting to False will ensure that the profile option is shown and not automatically started
                 "kubespawner_override": {
                     "node_selector": {"opensciencelab.local/node-type": "noop"},
                 },
@@ -150,6 +153,15 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
                 lifecycle_hook_cmd = "echo No hook script ran."
 
             if lab_profile["name"] in lab_profiles_for_user:
+                server_app_vars = json.dumps(
+                    {
+                        "PROFILE_NAME": lab_profile["name"],
+                        "LAB_SHORT_NAME": LAB_SHORT_NAME,
+                    }
+                )
+
+                escaped_lab_profile_name = lab_profile["name"].replace(" ", "_")
+
                 kubespawner_profile_dict = {
                     "display_name": lab_profile["name"],
                     "slug": "{{ lab_profile.name | urlencode }}",
@@ -158,9 +170,7 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
                     "kubespawner_override": {
                         "extra_labels": {
                             "opensciencelab.local/node-type": f"user-{node_name_escaped}",
-                            "opensciencelab.local/user-profile-name": lab_profile[
-                                "name"
-                            ].replace(" ", "_"),
+                            "opensciencelab.local/user-profile-name": escaped_lab_profile_name,
                             "sidecar.istio.io/inject": "false",
                             "opensciencelab.local/egress-profile": "none",
                         },
@@ -176,7 +186,7 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
                             }
                         },
                         "args": [
-                            "--ServerApp.jinja_template_vars={'PROFILE_NAME': lab_profile['name'], 'LAB_SHORT_NAME': LAB_SHORT_NAME}",
+                            "--ServerApp.jinja_template_vars=" + server_app_vars,
                             "--YDocExtension.disable_rtc=True",
                             "--FileContentsManager.always_delete_dir=True",
                             "--FileContentsManager.delete_to_trash=False",
