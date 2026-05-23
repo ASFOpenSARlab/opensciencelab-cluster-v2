@@ -51,12 +51,12 @@ class ClusterCdkStack(Stack):
         if not self.LAB_SHORT_NAME:
             raise Exception("Lab short name is not defined")
 
-        self.SELECTED_LAB_PROFILES = [
+        self.ALLOWED_LAB_PROFILES = [
             profile.strip()
-            for profile in os.getenv("SELECTED_LAB_PROFILES", "").split(",")
+            for profile in os.getenv("ALLOWED_LAB_PROFILES", "").split(",")
         ]
-        if self.SELECTED_LAB_PROFILES == [""]:
-            raise Exception("Selected Lab Profiles are not defined")
+        if self.ALLOWED_LAB_PROFILES == [""]:
+            raise Exception("Allowed Lab Profiles are not defined")
 
         self.ADMIN_USERS = [
             username.strip() for username in os.getenv("ADMIN_USERS", "").split(",")
@@ -750,7 +750,7 @@ class ClusterCdkStack(Stack):
         desired_nodes = []
 
         for profile in possible_profiles:
-            if profile["name"] in self.SELECTED_LAB_PROFILES:
+            if profile["name"] in self.ALLOWED_LAB_PROFILES:
                 desired_profiles.append(profile)
 
                 # See if there is a proper node configuration for the profile

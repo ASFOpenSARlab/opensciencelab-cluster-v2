@@ -4,7 +4,7 @@
 # Lab Profiles
 #
 # Possible profiles that a user can select to start a lab for all labs.
-# The actual profiles available to the lab is determined by the LAB_PROFILES GitHub environment var
+# The actual profiles available to the lab is determined by the AVAILABLE_LAB_PROFILES GitHub environment var
 # Among those profiles available to the lab, the user will get those assigned from within the Portal
 # 
 # [ lab_profiles."my_profile_name" ]  # The profile name should be in quotes if it contains a decimal
@@ -18,7 +18,7 @@ description = "Hello m6a.xlarge"
 image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
 node = "m6a-xlarge"
 
-[ lab_profiles."m6a.large" ]
+[ lab_profiles."sar" ]
 description = "Hello, there sar"
 image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
 node = "sar"

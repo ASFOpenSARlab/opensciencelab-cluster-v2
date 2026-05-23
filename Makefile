@@ -93,7 +93,7 @@ cdk-shell:
 		-e UI_IAM_USER \
 		-e ADMIN_USERS \
 		-e PORTAL_DOMAINS \
-		-e SELECTED_LAB_PROFILES \
+		-e ALLOWED_LAB_PROFILES \
 		-e LAB_SHORT_NAME \
 		-w /code/ \
 		--pull always \
