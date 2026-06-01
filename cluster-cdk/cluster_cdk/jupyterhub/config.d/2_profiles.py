@@ -4,6 +4,7 @@ import json
 import traceback
 import re
 import os
+import urllib
 
 from tornado.httpclient import AsyncHTTPClient, HTTPResponse
 
@@ -79,18 +80,18 @@ async def _get_data_from_auth_api(username: str, portal_domain: str) -> dict:
 
 
 async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
-    # If nothing has been assigned to the user, create a dummy noop option for the default.
-    # This will attempt to find a "noop" node to spin up and obviously fail.
+    # If nothing has been assigned to the user, create a dummy no_profiles option for the default.
+    # This will attempt to find a "no_profiles" node to spin up and obviously fail.
     # Otherwise, the default profile is to spin up a basic jupyterlab server on a randomly selected node.
-    def noop():
+    def no_profiles():
         return [
             {
-                "display_name": "noop",
-                "slug": "noop",
+                "display_name": "No Profiles",
+                "slug": "noprofiles",
                 "description": "You don't have access to any lab profiles. If you feel this is in error, please contact OSL Admin.",
                 "default": False,  # Setting to False will ensure that the profile option is shown and not automatically started
                 "kubespawner_override": {
-                    "node_selector": {"opensciencelab.local/node-type": "noop"},
+                    "node_selector": {"opensciencelab.local/node-type": "no_profiles"},
                 },
             }
         ]
@@ -99,30 +100,31 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
         username: str = spawner.user.name
         auth_state: dict = await spawner.user.get_auth_state()
         portal_domain: str = await _get_portal_host(auth_state)
+
         user_data: dict = await _get_data_from_auth_api(username, portal_domain)
+        # user_data Schema
+        # 
+        # {
+        #     'groups': [], 
+        #     'roles': ['user'], 
+        #     'name': 'username', 
+        #     'kind': 'user', 
+        #     'admin': False, 
+        #     'has_2fa': 1, 
+        #     'force_user_profile_update': False, 
+        #     'country_code': 'US', 
+        #     'lab_access': {
+        #         'asfe-temp': {
+        #             'lab_profiles': ['m6a.large'], 
+        #             'lab_country_status': 'unrestricted', 
+        #             'can_user_access_lab': False, 
+        #             'can_user_see_lab_card': False, 
+        #             'time_quota': None
+        #         }, 
+        #     },
+        # }
 
         logging.warning(f">>>>>> Auth API data: {user_data}")
-        """
-        {
-            'groups': [], 
-            'roles': ['user'], 
-            'name': 'username', 
-            'kind': 'user', 
-            'admin': False, 
-            'has_2fa': 1, 
-            'force_user_profile_update': False, 
-            'country_code': 'US', 
-            'lab_access': {
-                'asfe-temp': {
-                    'lab_profiles': ['m6a.large'], 
-                    'lab_country_status': 'unrestricted', 
-                    'can_user_access_lab': False, 
-                    'can_user_see_lab_card': False, 
-                    'time_quota': None
-                }, 
-            },
-        }
-        """
 
         lab_access_for_user: dict = user_data.get("lab_access", {}).get(
             LAB_SHORT_NAME, {}
@@ -137,7 +139,7 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
         )
 
         if not can_user_access or len(lab_profiles_for_user) == 0:
-            return noop()
+            return no_profiles()
 
         kubespawner_profile_list = []
 
@@ -153,18 +155,12 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
                 lifecycle_hook_cmd = "echo No hook script ran."
 
             if lab_profile["name"] in lab_profiles_for_user:
-                server_app_vars = json.dumps(
-                    {
-                        "PROFILE_NAME": lab_profile["name"],
-                        "LAB_SHORT_NAME": LAB_SHORT_NAME,
-                    }
-                )
 
                 escaped_lab_profile_name = lab_profile["name"].replace(" ", "_")
 
                 kubespawner_profile_dict = {
                     "display_name": lab_profile["name"],
-                    "slug": "{{ lab_profile.name | urlencode }}",
+                    "slug": urllib.parse.urlencode(lab_profile["name"]),
                     "description": lab_profile["description"],
                     "default": lab_profile.get("default", None),
                     "kubespawner_override": {
@@ -186,7 +182,6 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
                             }
                         },
                         "args": [
-                            "--ServerApp.jinja_template_vars=" + server_app_vars,
                             "--YDocExtension.disable_rtc=True",
                             "--FileContentsManager.always_delete_dir=True",
                             "--FileContentsManager.delete_to_trash=False",
@@ -209,7 +204,7 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
                 kubespawner_profile_list.append(kubespawner_profile_dict)
 
         if kubespawner_profile_list == []:
-            return noop()
+            return no_profiles()
 
         # This clause for sudo should always be last
         if "sudo" in lab_profiles_for_user:
@@ -232,7 +227,7 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
     except Exception as e:
         print("Something went wrong with the lab profiles list...")
         print(e, traceback.print_exc())
-        return noop()
+        return no_profiles()
 
 
 c.KubeSpawner.profile_list = lab_profile_list_hook  # noqa: F821
