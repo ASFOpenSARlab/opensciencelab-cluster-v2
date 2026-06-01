@@ -103,24 +103,24 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
 
         user_data: dict = await _get_data_from_auth_api(username, portal_domain)
         # user_data Schema
-        # 
+        #
         # {
-        #     'groups': [], 
-        #     'roles': ['user'], 
-        #     'name': 'username', 
-        #     'kind': 'user', 
-        #     'admin': False, 
-        #     'has_2fa': 1, 
-        #     'force_user_profile_update': False, 
-        #     'country_code': 'US', 
+        #     'groups': [],
+        #     'roles': ['user'],
+        #     'name': 'username',
+        #     'kind': 'user',
+        #     'admin': False,
+        #     'has_2fa': 1,
+        #     'force_user_profile_update': False,
+        #     'country_code': 'US',
         #     'lab_access': {
         #         'asfe-temp': {
-        #             'lab_profiles': ['m6a.large'], 
-        #             'lab_country_status': 'unrestricted', 
-        #             'can_user_access_lab': False, 
-        #             'can_user_see_lab_card': False, 
+        #             'lab_profiles': ['m6a.large'],
+        #             'lab_country_status': 'unrestricted',
+        #             'can_user_access_lab': False,
+        #             'can_user_see_lab_card': False,
         #             'time_quota': None
-        #         }, 
+        #         },
         #     },
         # }
 
@@ -155,7 +155,6 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
                 lifecycle_hook_cmd = "echo No hook script ran."
 
             if lab_profile["name"] in lab_profiles_for_user:
-
                 escaped_lab_profile_name = lab_profile["name"].replace(" ", "_")
 
                 kubespawner_profile_dict = {
