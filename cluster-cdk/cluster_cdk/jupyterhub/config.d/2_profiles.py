@@ -159,7 +159,7 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
 
                 kubespawner_profile_dict = {
                     "display_name": lab_profile["name"],
-                    "slug": urllib.parse.urlencode(lab_profile["name"]),
+                    "slug": urllib.parse.quote(lab_profile["name"]),
                     "description": lab_profile["description"],
                     "default": lab_profile.get("default", None),
                     "kubespawner_override": {
