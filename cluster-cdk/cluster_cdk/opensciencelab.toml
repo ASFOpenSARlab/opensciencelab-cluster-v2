@@ -13,6 +13,11 @@
 # node = ""  # Name of the node that the image will be starting on. Needs to match any defined below."
 #
 
+[ lab_profiles."m6a.large" ]
+description = "Hello m6a.large"
+image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
+node = "m6a-large"
+
 [ lab_profiles."m6a.xlarge" ]
 description = "Hello m6a.xlarge"
 image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
@@ -55,6 +60,13 @@ group_max_size = 1
 [ nodes.sar ]
 node_type = "user"
 instance = ["m5a.large", "m6a.large"]
+group_desired_size = 0
+group_min_size = 0
+group_max_size = 5
+
+[ nodes.m6a-large ]
+node_type = "user"
+instance = ["m6a.large"]
 group_desired_size = 0
 group_min_size = 0
 group_max_size = 5
