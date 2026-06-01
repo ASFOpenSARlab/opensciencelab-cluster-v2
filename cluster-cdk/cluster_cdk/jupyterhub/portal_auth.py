@@ -64,7 +64,7 @@ class PortalAuthLoginHandler(BaseHandler):
             next = web.escape.url_escape(next)
 
             self.redirect(
-                f"{self.self.primary_portal_domain}/portal/hub/auth?next_url={next}"
+                f"{self.primary_portal_domain}/portal/hub/auth?next_url={next}"
             )
 
         except My403Exception as e:
