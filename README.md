@@ -20,7 +20,7 @@ a CDK + Actions pipeline.
 
 ## Deployments
 
-#### AWS Accounts
+### AWS Accounts
 
 | Maturity | Environment | AWS Account      |
 | -------- | ----------- | ---------------- |
@@ -40,8 +40,7 @@ a CDK + Actions pipeline.
 
 ### Deploying the Cluster
 
-
-##### Ensure AWS credentials are present
+#### Ensure AWS credentials are present
 
 The Makefile + Docker process will need to communicate with AWS. In actions, this is done through an
 OIDC Provider in AWS and requires no authentication. Locally however, a profile must be present in
@@ -49,7 +48,7 @@ OIDC Provider in AWS and requires no authentication. Locally however, a profile 
 `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` must be set. Either solution works, and will get
 automagically populated into the dockerized build/deploy environment.
 
-###### `~/.aws` configuration
+##### `~/.aws` configuration
 
 You will need a section in `~/.aws/credentials` like
 
@@ -82,7 +81,8 @@ nano .env
 ```
 
 `.env`:
-```
+
+```bash
 export AWS_PROFILE=<AWS PROFILE>
 export DEPLOY_PREFIX=<YOUR INITIALS>
 

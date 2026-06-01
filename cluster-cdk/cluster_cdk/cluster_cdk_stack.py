@@ -58,8 +58,7 @@ class ClusterCdkStack(Stack):
             raise Exception("Selected Lab Profiles are not defined")
 
         self.ADMIN_USERS = [
-            username.strip()
-            for username in os.getenv("ADMIN_USERS", "").split(",")
+            username.strip() for username in os.getenv("ADMIN_USERS", "").split(",")
         ]
         if self.ADMIN_USERS == [""]:
             raise Exception("Admin users are not defined")
