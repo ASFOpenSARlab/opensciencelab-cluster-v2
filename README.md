@@ -83,16 +83,16 @@ nano .env
 
 `.env`:
 ```
-AWS_PROFILE=<AWS PROFILE>
-DEPLOY_PREFIX=<YOUR INITIALS>
+export AWS_PROFILE=<AWS PROFILE>
+export DEPLOY_PREFIX=<YOUR INITIALS>
 
-JUPYTER_HUB_DOCKER_TAG=<OPENSCIENCELAB JUPYTERHUB IMAGE TAG>
-UI_IAM_USER=<AWS CONSOLE USER ROLE>
+export JUPYTER_HUB_DOCKER_TAG=<OPENSCIENCELAB JUPYTERHUB IMAGE TAG>
+export UI_IAM_USER=<AWS CONSOLE USER ROLE>
 
-LAB_SHORT_NAME=<LAB SHORT NAME>
-ALLOWED_LAB_PROFILES=<LIST OF PROFILES>
-ADMIN_USERS=<JUPYTERHUB ADMIN USERNAME>
-PORTAL_DOMAINS=<PORTAL CALLBACK CLOUDFRONT DOMAIN(S)>
+export LAB_SHORT_NAME=<LAB SHORT NAME>
+export ALLOWED_LAB_PROFILES=<LIST OF PROFILES>
+export ADMIN_USERS=<JUPYTERHUB ADMIN USERNAME>
+export PORTAL_DOMAINS=<PORTAL CALLBACK CLOUDFRONT DOMAIN(S)>
 ```
 
 For example configurations, see the [GitHub Environments](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/settings/environments)
@@ -102,7 +102,7 @@ Once you've updated the values of the variables in your `.env`, load them into y
 environment:
 
 ```bash
-set -a && source .env && set +a
+source .env
 ```
 
 ##### Start CDK Shell
