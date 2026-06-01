@@ -3,6 +3,7 @@ import tomllib  # type: ignore
 import pathlib
 from string import Template
 import json
+import re
 
 import requests
 
@@ -50,23 +51,22 @@ class ClusterCdkStack(Stack):
         if not self.LAB_SHORT_NAME:
             raise Exception("Lab short name is not defined")
 
-        self.SELECTED_LAB_PROFILES = [
+        self.ALLOWED_LAB_PROFILES = [
             profile.strip()
-            for profile in os.getenv("SELECTED_LAB_PROFILES", "").split(",")
+            for profile in os.getenv("ALLOWED_LAB_PROFILES", "").split(",")
         ]
-        if self.SELECTED_LAB_PROFILES == [""]:
-            raise Exception("Selected Lab Profiles are not defined")
+        if self.ALLOWED_LAB_PROFILES == [""]:
+            raise Exception("Allowed Lab Profiles are not defined")
 
         self.ADMIN_USERS = [
-            username.strip()
-            for username in os.getenv("ADMIN_USERS", "").split(",")
+            username.strip() for username in os.getenv("ADMIN_USERS", "").split(",")
         ]
         if self.ADMIN_USERS == [""]:
             raise Exception("Admin users are not defined")
 
-        self.PORTAL_DOMAIN = os.getenv("PORTAL_DOMAIN", None)
-        if not self.PORTAL_DOMAIN:
-            raise Exception("Portal domain is not defined")
+        self.PORTAL_DOMAINS = os.getenv("PORTAL_DOMAINS", None)
+        if not self.PORTAL_DOMAINS:
+            raise Exception("Portal domains is not defined")
 
         self.OPENSCIENCELAB_CONFIG_FILE = self.HOME_DIR / "opensciencelab.toml"
 
@@ -297,6 +297,7 @@ class ClusterCdkStack(Stack):
         # https://github.com/aws/aws-cdk/issues/37012eks.Cluster
         for node in self.osl_config["nodes"]:
             node_type = node.get("node_type", "user")
+            node_name_escaped = re.sub(r"[^A-Za-z0-9]", "00", node["name"].strip())
 
             # Node labels to apply depending on node type
             node_labels = node.get("labels", {})
@@ -305,7 +306,9 @@ class ClusterCdkStack(Stack):
                 node_labels["opensciencelab.local/node-type"] = "core"
             elif node_type == "user":
                 node_labels["hub.jupyter.org/node-purpose"] = "user"
-                node_labels["opensciencelab.local/node-type"] = "user"
+                node_labels["opensciencelab.local/node-type"] = (
+                    f"user-{node_name_escaped}"
+                )
 
             # Define the Launch Template with the desired EC2 instance tags
             # These tags will be applied to the EC2 instances when they are launched by the Auto Scaling Group
@@ -520,6 +523,7 @@ class ClusterCdkStack(Stack):
                         "admin_users": self.ADMIN_USERS,
                         "auth_refresh_age": 60,
                         "allow_all": True,
+                        "enable_auth_state": True,
                     },
                 },
                 "extraEnv": {
@@ -527,9 +531,10 @@ class ClusterCdkStack(Stack):
                     "SSO_TOKEN_ARN": self.sso_token.secret_arn,
                     "SSO_TOKEN_PATH": "/tmp/sso_token",
                     "OPENSARLAB_SSO_TOKEN_PATH": "/tmp/sso_token",
-                    "JUPYTERHUB_LAB_NAME": self.LAB_SHORT_NAME,
+                    "LAB_SHORT_NAME": self.LAB_SHORT_NAME,
                     "JUPYTERHUB_LAB_PREFIX": f"/lab/{self.LAB_SHORT_NAME}",
-                    "PORTAL_DOMAIN": self.PORTAL_DOMAIN,
+                    "PORTAL_DOMAINS": self.PORTAL_DOMAINS,
+                    "LAB_PROFILES": json.dumps(self.osl_config["lab_profiles"]),
                 },
                 "extraFiles": (
                     {}
@@ -552,6 +557,11 @@ class ClusterCdkStack(Stack):
                         "jupyterhub/hub_home.html.j2",
                         "html",
                         "/usr/local/share/jupyterhub/templates/custom/page.html",
+                    )
+                    | self._set_extra_file(
+                        "jupyterhub/config.d/2_profiles.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/2_profiles.py",
                     )
                 ),
             },
@@ -740,7 +750,7 @@ class ClusterCdkStack(Stack):
         desired_nodes = []
 
         for profile in possible_profiles:
-            if profile["name"] in self.SELECTED_LAB_PROFILES:
+            if profile["name"] in self.ALLOWED_LAB_PROFILES:
                 desired_profiles.append(profile)
 
                 # See if there is a proper node configuration for the profile
@@ -875,7 +885,7 @@ class ClusterCdkStack(Stack):
             with open(full_file_path, "r") as f:
                 contents: str = f.read()
                 templ = Template(contents)
-                file_contents = templ.safe_substitute(**extra_args)
+                file_contents = templ.safe_substitute(**extra_args)  # type: ignore
 
             print(
                 f"Rendering {full_file_path} of file_type '{file_type}' using extra_args '{extra_args}'"
@@ -885,7 +895,7 @@ class ClusterCdkStack(Stack):
             file_category = "data"
 
             with open(full_file_path, "rb") as f:
-                file_contents: dict = tomllib.load(f)
+                file_contents: dict = tomllib.load(f)  # type: ignore
 
         elif file_type == "binary":
             file_category = "binaryData"

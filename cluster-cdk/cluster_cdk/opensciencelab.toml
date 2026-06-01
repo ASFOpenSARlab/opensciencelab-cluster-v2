@@ -4,7 +4,7 @@
 # Lab Profiles
 #
 # Possible profiles that a user can select to start a lab for all labs.
-# The actual profiles available to the lab is determined by the LAB_PROFILES GitHub environment var
+# The actual profiles available to the lab is determined by the AVAILABLE_LAB_PROFILES GitHub environment var
 # Among those profiles available to the lab, the user will get those assigned from within the Portal
 # 
 # [ lab_profiles."my_profile_name" ]  # The profile name should be in quotes if it contains a decimal
@@ -13,20 +13,25 @@
 # node = ""  # Name of the node that the image will be starting on. Needs to match any defined below."
 #
 
-[ lab_profiles."m5a.xlarge" ]
-description = "Hello"
-image_url = "localhost"
+[ lab_profiles."m6a.large" ]
+description = "Hello m6a.large"
+image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
+node = "m6a-large"
+
+[ lab_profiles."m6a.xlarge" ]
+description = "Hello m6a.xlarge"
+image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
 node = "m6a-xlarge"
 
-[ lab_profiles."m5a.large" ]
-description = "Hello, there"
-image_url = "localhost"
+[ lab_profiles."sar" ]
+description = "Hello, there sar"
+image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
 node = "sar"
 
 [ lab_profiles."server debug" ]
 description = "Debug"
-image_url = "localhost"
-node = "sar"
+image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
+node = "m6a-xlarge"
 
 #
 # Nodes
@@ -55,6 +60,13 @@ group_max_size = 1
 [ nodes.sar ]
 node_type = "user"
 instance = ["m5a.large", "m6a.large"]
+group_desired_size = 0
+group_min_size = 0
+group_max_size = 5
+
+[ nodes.m6a-large ]
+node_type = "user"
+instance = ["m6a.large"]
 group_desired_size = 0
 group_min_size = 0
 group_max_size = 5
