@@ -151,7 +151,7 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
             lab_hook_script = lab_profile.get("hook_script", None)
             if lab_hook_script:
                 lifecycle_hook_cmd = (
-                    f"/etc/user_server_includes/hooks/{lab_hook_script}"
+                    f"bash /etc/user_server_includes/hooks/{lab_hook_script}"
                 )
             else:
                 lifecycle_hook_cmd = "echo No hook script ran."
@@ -161,7 +161,7 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
 
                 kubespawner_profile_dict = {
                     "display_name": lab_profile["name"],
-                    "slug": urllib.parse.quote(lab_profile["name"]),
+                    "slug": urllib.parse.quote(lab_profile["name"]),  # type: ignore
                     "description": lab_profile["description"],
                     "default": lab_profile.get("default", None),
                     "kubespawner_override": {
