@@ -31,10 +31,10 @@ image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
 node = "sar"
 hook_script = "default.sh"
 
-[ lab_profiles."server debug" ]
+[ lab_profiles."Debug Server Profile" ]
 description = "Debug"
 image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
-node = "m6a-xlarge"
+node = "m6a-large"
 
 #
 # Nodes
