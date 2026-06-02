@@ -56,7 +56,7 @@ jupyter labextension disable @jupyterhub/jupyter-server-proxy
 # 	jq 'del(.CondaKernelSpecManager)' "$JN_CONFIG" >temp && mv temp "$JN_CONFIG"
 # fi
 
-conda init
+# conda init
 
 BASH_PROFILE=$HOME/.bash_profile
 if ! test -f "$BASH_PROFILE"; then
