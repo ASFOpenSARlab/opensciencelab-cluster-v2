@@ -1,0 +1,99 @@
+{
+  "@jupyterlab/mainmenu-extension:plugin": {
+    "menus": [
+      {
+        "id": "jp-mainmenu-file",
+        "items": [
+          {
+            "command": "hub:logout",
+            "disabled": true
+          }
+        ]
+      },
+      {
+        "id": "jp-mainmenu-help",
+        "items": [
+          {
+            "command": "help:launch-classic-notebook",
+            "disabled": true
+          }
+        ]
+      }
+    ]
+  },
+  "@jupyterlab/application-extension:context-menu": {
+    "contextMenu": [
+      {
+        "command": "filebrowser:share-main",
+        "selector": ".jp-DirListing-item[data-isdir]",
+        "disabled": true
+      }
+    ]
+  },
+  "opensarlab_frontend:plugin": {
+    "controlbtn": {
+      "enabled": true,
+      "rank": 1110
+    },
+    "doc_link": {
+      "enabled": true,
+      "rank": 1100
+    },
+    "gifcap_btn": {
+      "enabled": true,
+      "rank": 1025
+    },
+    "oslnotify": {
+      "enabled": true,
+      "note_type": "calendar"
+    },
+    "profile_label": {
+      "enabled": true,
+      "rank": 1050
+    }
+  },
+  "nbgitpuller-jl-interface:plugin": {
+    "repos": [
+      {
+        "repoUrl": "https://github.com/ASFOpenSARlab/opensarlab-notebooks.git",
+        "branch": "master",
+        "destPath": "notebooks"
+      },
+      {
+        "repoUrl": "https://github.com/ASFOpenSARlab/opensarlab_MintPy_Recipe_Book.git",
+        "branch": "main",
+        "destPath": "Data_Recipe_Jupyter_Books/opensarlab_MintPy_Recipe_Book"
+      },
+      {
+        "repoUrl": "https://github.com/ASFOpenSARlab/opensarlab_OPERA-RTC-S1_Recipe_Book.git",
+        "branch": "main",
+        "destPath": "Data_Recipe_Jupyter_Books/opensarlab_OPERA-RTC-S1_Recipe_Book"
+      },
+      {
+        "repoUrl": "https://github.com/ASFOpenSARlab/opensarlab_OPERA-CSLC_Recipe_Book.git",
+        "branch": "main",
+        "destPath": "Data_Recipe_Jupyter_Books/opensarlab_OPERA-CSLC_Recipe_Book"
+      },
+      {
+        "repoUrl": "https://github.com/ASFOpenSARlab/opensarlab-envs.git",
+        "branch": "main",
+        "destPath": "conda_environments"
+      },
+      {
+        "repoUrl": "https://github.com/uafgeoteach/GEOS657_MRS",
+        "branch": "main",
+        "destPath": "GEOS_657_Labs"
+      },
+      {
+        "repoUrl": "https://github.com/ASFOpenSARlab/opensarlab_NISAR_EA_Workshop_2024_1_Recipe_Book.git",
+        "branch": "main",
+        "destPath": "Workshop_Jupyter_Books/NISAR_EA_Workshop_2024_1_Recipe_Book"
+      },
+      {
+        "repoUrl": "https://github.com/ASFOpenSARlab/opensarlab-docs",
+        "branch": "main",
+        "destPath": "Documentation"
+      }
+    ]
+  }
+}

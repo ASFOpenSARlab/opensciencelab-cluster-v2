@@ -17,21 +17,24 @@
 description = "Hello m6a.large"
 image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
 node = "m6a-large"
+hook_script = "default.sh"
 
 [ lab_profiles."m6a.xlarge" ]
 description = "Hello m6a.xlarge"
 image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
 node = "m6a-xlarge"
+hook_script = "default.sh"
 
 [ lab_profiles."sar" ]
 description = "Hello, there sar"
 image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
 node = "sar"
+hook_script = "default.sh"
 
-[ lab_profiles."server debug" ]
+[ lab_profiles."Debug Server Profile" ]
 description = "Debug"
 image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
-node = "m6a-xlarge"
+node = "m6a-large"
 
 #
 # Nodes
