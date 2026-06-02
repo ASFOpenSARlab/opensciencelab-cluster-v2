@@ -58,14 +58,6 @@ aws_access_key_id = <YOUR KEY ID HERE>
 aws_secret_access_key = <YOUR KEY VALUE HERE>
 ```
 
-and a section in `~/.aws/config` like
-
-```txt
-[clusterv2]
-region = us-west-2
-output = json
-```
-
 You can generate AWS Access Keys from the IAM console:
 [AWS docs](https://docs.aws.amazon.com/IAM/latest/UserGuide/access-key-self-managed.html#Using_CreateAccessKey)
 
