@@ -500,6 +500,26 @@ class ClusterCdkStack(Stack):
                 "corePods": {"nodeAffinity": {"matchNodePurpose": "require"}},
                 "userPods": {"nodeAffinity": {"matchNodePurpose": "require"}},
             },
+            "singleuser": {
+                "extraFiles": (
+                    {}
+                    | self._set_extra_file(
+                        "user_server_includes/hooks/default.sh",
+                        "shell",
+                        "/etc/user_server_includes/hooks/default.sh",
+                    )
+                    | self._set_extra_file(
+                        "user_server_includes/overrides/default.json",
+                        "file",
+                        "/etc/user_server_includes/overrides/default.json",
+                    )
+                    | self._set_extra_file(
+                        "user_server_includes/scripts/pkg_clean.py",
+                        "python",
+                        "/etc/user_server_includes/scripts/pkg_clean.py",
+                    )
+                )
+            },
             "hub": {
                 "image": {
                     "name": "ghcr.io/asfopensarlab/opensciencelab-jupyterhub",
@@ -879,7 +899,7 @@ class ClusterCdkStack(Stack):
         """
         full_file_path = self.HOME_DIR / file_path
 
-        if file_type in ["python", "html"]:
+        if file_type in ["python", "html", "shell", "file"]:
             file_category = "stringData"
 
             with open(full_file_path, "r") as f:

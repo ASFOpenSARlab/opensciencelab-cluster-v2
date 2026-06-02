@@ -1,0 +1,323 @@
+{
+  "@jupyterlab/mainmenu-extension:plugin": {
+    "menus": [
+      {
+        "id": "jp-mainmenu-file",
+        "items": [
+          {
+            "command": "hub:logout",
+            "disabled": true
+          }
+        ]
+      },
+      {
+        "id": "jp-mainmenu-help",
+        "items": [
+          {
+            "command": "help:launch-classic-notebook",
+            "disabled": true
+          }
+        ]
+      }
+    ]
+  },
+  "@jupyterlab/application-extension:context-menu": {
+    "contextMenu": [
+      {
+        "command": "filebrowser:share-main",
+        "selector": ".jp-DirListing-item[data-isdir]",
+        "disabled": true
+      }
+    ]
+  },
+  "opensarlab_frontend:plugin": {
+    "controlbtn": {
+      "enabled": true,
+      "rank": 1110
+    },
+    "doc_link": {
+      "enabled": true,
+      "rank": 1100
+    },
+    "gifcap_btn": {
+      "enabled": true,
+      "rank": 1025
+    },
+    "oslnotify": {
+      "enabled": true,
+      "note_type": "calendar"
+    },
+    "profile_label": {
+      "enabled": true,
+      "rank": 1050
+    }
+  },
+  "nbgitpuller-jl-interface:plugin": {
+    "repos": [
+      {
+        "repoUrl": "https://github.com/ASFOpenSARlab/opensarlab-notebooks.git",
+        "branch": "master",
+        "destPath": "notebooks"
+      },
+      {
+        "repoUrl": "https://github.com/ASFOpenSARlab/opensarlab_MintPy_Recipe_Book.git",
+        "branch": "main",
+        "destPath": "Data_Recipe_Jupyter_Books/opensarlab_MintPy_Recipe_Book"
+      },
+      {
+        "repoUrl": "https://github.com/ASFOpenSARlab/opensarlab_OPERA-RTC-S1_Recipe_Book.git",
+        "branch": "main",
+        "destPath": "Data_Recipe_Jupyter_Books/opensarlab_OPERA-RTC-S1_Recipe_Book"
+      },
+      {
+        "repoUrl": "https://github.com/ASFOpenSARlab/opensarlab_OPERA-CSLC_Recipe_Book.git",
+        "branch": "main",
+        "destPath": "Data_Recipe_Jupyter_Books/opensarlab_OPERA-CSLC_Recipe_Book"
+      },
+      {
+        "repoUrl": "https://github.com/ASFOpenSARlab/opensarlab-envs.git",
+        "branch": "main",
+        "destPath": "conda_environments"
+      },
+      {
+        "repoUrl": "https://github.com/uafgeoteach/GEOS657_MRS",
+        "branch": "main",
+        "destPath": "GEOS_657_Labs"
+      },
+      {
+        "repoUrl": "https://github.com/ASFOpenSARlab/opensarlab_NISAR_EA_Workshop_2024_1_Recipe_Book.git",
+        "branch": "main",
+        "destPath": "Workshop_Jupyter_Books/NISAR_EA_Workshop_2024_1_Recipe_Book"
+      },
+      {
+        "repoUrl": "https://github.com/ASFOpenSARlab/opensarlab-docs",
+        "branch": "main",
+        "destPath": "docs"
+      }
+    ]
+  },
+  "jupyterlab-tour:user-tours": {
+    "tours": [
+      {
+        "steps": [
+          {
+            "content": "Welcome to OpenSARLab",
+            "target": "#main",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "center",
+            "showProgress": false
+          },
+          {
+            "content": "The JupyterLab top bar contains helpful menus,  tools, and information for your OpenSARLab session.",
+            "target": "#jp-top-panel",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "top",
+            "showProgress": false
+          },
+          {
+            "content": "The latest changes for your notebooks and other repositories can be pulled here.",
+            "target": "#nbgitpuller-jl-interface-update-btn",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "top",
+            "showProgress": false
+          },
+          {
+            "content": "This shows how much storage space has been used on your server. If this reaches 100%, your server may become inoperable.",
+            "target": "#opensarlab-diskspace-widget",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "top",
+            "showProgress": false
+          },
+          {
+            "content": "You can logout and shutdown your server here. Shutting down your server when not in use reduces OpenSARLab spending and allows us to support more users.",
+            "target": "#opensarlab-controlbtn",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "top",
+            "showProgress": false
+          },
+          {
+            "content": "This allows you to capture a GIF of your screen. Use this tool to record an issue when submitting a support request to the OpenScienceLab admin.",
+            "target": "#opensarlab-frontend-gitcap-btn",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "top",
+            "showProgress": false
+          },
+          {
+            "content": "You can find further documentation here.",
+            "target": "#opensarlab-doc-link-widget",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "top",
+            "showProgress": false
+          },
+          {
+            "content": "You can navigate your Jupyter Notebooks through the file browser. Follow the navigation directions to continue the tour.",
+            "target": "#main",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "center",
+            "showProgress": false
+          },
+          {
+            "content": "Click here to toggle your file browser. After the file browser is open, click the Next button",
+            "target": "[title^='File Browser']",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "right",
+            "showProgress": false,
+            "spotlightClicks": true
+          },
+          {
+            "content": "Click here to go to your root directory. After going to the root directory, hit the next button",
+            "target": "[data-path=\"/\"]",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "right",
+            "showProgress": false,
+            "spotlightClicks": true
+          },
+          {
+            "content": "Double click here to open notebooks. Afterwards, hit the next button",
+            "target": "[title^='Name: notebooks']",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "right",
+            "showProgress": false,
+            "spotlightClicks": true
+          },
+          {
+            "content": "Here you can find assorted notebooks. Explore the folders to find available notebooks.",
+            "target": ".lm-Widget.lm-Panel.jp-FileBrowser-Panel",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "right",
+            "showProgress": false,
+            "spotlightClicks": true
+          },
+          {
+            "content": "Go back to your root directory",
+            "target": "[data-path=\"/\"]",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "right",
+            "showProgress": false,
+            "spotlightClicks": true
+          },
+          {
+            "content": "There are cookbooks of data recipes located within the Data_Recipe_Jupyter_Books directory. Navigate to that directory and then hit the next button.",
+            "target": "[title^='Name: Data_Recipe_Jupyter_Books']",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "right",
+            "showProgress": false,
+            "spotlightClicks": true
+          },
+          {
+            "content": "Here you can find data recipe cookbooks, open a cookbook such as opensarlab_MintPy_Recipe_Book by double click on one before moving on to the next step",
+            "target": ".lm-Widget.lm-Panel.jp-FileBrowser-Panel",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "right",
+            "showProgress": false,
+            "spotlightClicks": true
+          },
+          {
+            "content": "You can explore a data recipe cookbook more easily using Jupyter-Book Table of Contents. Click here to explore.",
+            "target": "[title=\"Jupyter-Book Table of Contents\"]",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "right",
+            "showProgress": false,
+            "spotlightClicks": true
+          },
+          {
+            "content": "Here you can see the contents of the cookbook, you can click around to open the data recipes. Note that if you have not navigated to a Cookbook in the file browser, this will display an error stating that this is \"Not a Jupyter-Book\".",
+            "target": "[id='@jupyterlab-sidepanel/jb-toc'",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "right",
+            "showProgress": false,
+            "spotlightClicks": true
+          },
+          {
+            "content": "To delete a folder that is not empty, in a terminal run `rm -rf <Your Folder Path>`",
+            "target": "#main",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "center",
+            "showProgress": false,
+            "spotlightClicks": true
+          },
+          {
+            "content": "You can replay this tour from the Help menu under 'OpenScienceLab Intro'",
+            "target": ".lm-MenuBar-item:last-child",
+            "disableBeacon": false,
+            "disableOverlay": false,
+            "disableOverlayClose": false,
+            "locale": {},
+            "placement": "top",
+            "showProgress": false
+          }
+        ],
+        "id": "opensciencelab-intro",
+        "label": "OpenScienceLab Intro",
+        "hasHelpEntry": true,
+        "icon": "jupyterlab-tour:user-tour",
+        "version": 20260408,
+        "options": {
+          "spotlightClicks": false,
+          "locale": {
+            "back": "Back",
+            "close": "Close",
+            "last": "Done",
+            "next": "Next",
+            "open": "Open",
+            "skip": "Skip"
+          }
+        }
+      }
+    ]
+  }
+}

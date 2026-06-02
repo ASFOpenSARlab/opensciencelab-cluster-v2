@@ -150,7 +150,9 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
 
             lab_hook_script = lab_profile.get("hook_script", None)
             if lab_hook_script:
-                lifecycle_hook_cmd = f"/etc/singleuser/hooks/{lab_hook_script}"
+                lifecycle_hook_cmd = (
+                    f"/etc/user_server_includes/hooks/{lab_hook_script}"
+                )
             else:
                 lifecycle_hook_cmd = "echo No hook script ran."
 
