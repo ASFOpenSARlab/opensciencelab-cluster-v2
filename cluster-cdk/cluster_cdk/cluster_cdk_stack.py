@@ -501,6 +501,7 @@ class ClusterCdkStack(Stack):
                 "userPods": {"nodeAffinity": {"matchNodePurpose": "require"}},
             },
             "singleuser": {
+                "startTimeout": 600,
                 "extraFiles": (
                     {}
                     | self._set_extra_file(
@@ -518,7 +519,7 @@ class ClusterCdkStack(Stack):
                         "python",
                         "/etc/user_server_includes/scripts/pkg_clean.py",
                     )
-                )
+                ),
             },
             "hub": {
                 "image": {
