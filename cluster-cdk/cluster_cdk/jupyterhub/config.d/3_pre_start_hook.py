@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-
+import os
 import datetime
 import logging
 import traceback
 
 import boto3
-import z2jh
 
-CLUSTER_NAME = z2jh.get_config("custom.CLUSTER_NAME")
-REGION_NAME = z2jh.get_config("custom.AWS_REGION")
-AZ_NAME = z2jh.get_config("custom.AZ_NAME")
-COST_TAG_KEY = z2jh.get_config("custom.COST_TAG_KEY")
-COST_TAG_VALUE = z2jh.get_config("custom.COST_TAG_VALUE")
+CLUSTER_NAME = os.environ["CLUSTER_NAME"]
+REGION_NAME = os.environ["AWS_REGION"]
+AZ_NAME = os.environ["AZ_NAME"]
+COST_TAG_KEY = os.environ["COST_TAG_KEY"]
+COST_TAG_VALUE = os.environ["COST_TAG_VALUE"]
 
 
 logging.basicConfig(
@@ -41,7 +40,6 @@ def volume_from_snapshot(spawner):
     import re
 
     import boto3
-    import yaml
 
     from kubernetes import client as k8s_client
     from kubernetes import config as k8s_config

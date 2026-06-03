@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
+import os
 
 import boto3
 import datetime
 
 import logging
-import z2jh
 
-CLUSTER_NAME = z2jh.get_config("custom.CLUSTER_NAME")
-REGION_NAME = z2jh.get_config("custom.AWS_REGION")
-DAYS_TILL_VOLUME_DELETION = z2jh.get_config("custom.DAYS_TILL_VOLUME_DELETION")
-DAYS_TILL_SNAPSHOT_DELETION = z2jh.get_config("custom.DAYS_TILL_SNAPSHOT_DELETION")
+CLUSTER_NAME = os.environ["CLUSTER_NAME"]
+REGION_NAME = os.environ["AWS_REGION"]
+DAYS_TILL_VOLUME_DELETION = int(os.environ["DAYS_TILL_VOLUME_DELETION"])
+DAYS_TILL_SNAPSHOT_DELETION = int(os.environ["DAYS_TILL_SNAPSHOT_DELETION"])
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s (%(lineno)d) - %(message)s", level=logging.INFO

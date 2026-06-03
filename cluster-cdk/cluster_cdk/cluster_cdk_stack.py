@@ -68,13 +68,33 @@ class ClusterCdkStack(Stack):
         if not self.PORTAL_DOMAINS:
             raise Exception("Portal domains is not defined")
 
+        self.DAYS_TILL_VOLUME_DELETION = os.getenv("DAYS_TILL_VOLUME_DELETION", None)
+        if (
+            self.DAYS_TILL_VOLUME_DELETION is None
+            or self.DAYS_TILL_VOLUME_DELETION == "None"
+        ):
+            self.DAYS_TILL_VOLUME_DELETION = 3600
+
+        self.DAYS_TILL_SNAPSHOT_DELETION = os.getenv(
+            "DAYS_TILL_SNAPSHOT_DELETION", None
+        )
+        if (
+            self.DAYS_TILL_SNAPSHOT_DELETION is None
+            or self.DAYS_TILL_SNAPSHOT_DELETION == "None"
+        ):
+            self.DAYS_TILL_SNAPSHOT_DELETION = 3600
+
+        # Make sure everything happens in a particular AZ.
+        # This is normally 'a' but can be 'b' or 'c' if more than one cluster is deployed in an account and resources will be limited.
+        self.AZ_LETTER = "a"
+
         self.OPENSCIENCELAB_CONFIG_FILE = self.HOME_DIR / "opensciencelab.toml"
 
         # Determine the selected lab config values
         self.osl_config = self._get_reduced_osl_config()
 
         # All resources in this specific stack will get this tag
-        Tags.of(self).add("osl-billing", f"eks-cluster-{self.LAB_SHORT_NAME}")  # type: ignore
+        Tags.of(self).add("osl-billing", self.LAB_SHORT_NAME)  # type: ignore
 
         kubectl_layer = lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl")
 
@@ -102,7 +122,7 @@ class ClusterCdkStack(Stack):
         self.vpc = ec2.Vpc(
             self,
             "EksVPC",
-            availability_zones=[f"{self.region}a", f"{self.region}d"],
+            availability_zones=[f"{self.region}{self.AZ_LETTER}", f"{self.region}d"],
             ip_addresses=ec2.IpAddresses.cidr("10.0.0.0/16"),
             # Configure subnet types for EKS (e.g., Public and Private)
             subnet_configuration=[public_subnet, private_subnet],
@@ -365,7 +385,9 @@ class ClusterCdkStack(Stack):
                 # Force the compute in the public subnet, in a single AZ
                 subnets=ec2.SubnetSelection(
                     subnet_type=ec2.SubnetType.PUBLIC,
-                    availability_zones=[f"{self.region}a"],  # Force compute into UW2a
+                    availability_zones=[
+                        f"{self.region}{self.AZ_LETTER}"
+                    ],  # Force compute into one AZ
                 ),
                 labels=node_labels,
             )
@@ -598,6 +620,12 @@ class ClusterCdkStack(Stack):
                     "JUPYTERHUB_LAB_PREFIX": f"/lab/{self.LAB_SHORT_NAME}",
                     "PORTAL_DOMAINS": self.PORTAL_DOMAINS,
                     "LAB_PROFILES": json.dumps(self.osl_config["lab_profiles"]),
+                    "DAYS_TILL_VOLUME_DELETION": self.DAYS_TILL_VOLUME_DELETION,
+                    "DAYS_TILL_SNAPSHOT_DELETION": self.DAYS_TILL_SNAPSHOT_DELETION,
+                    "CLUSTER_NAME": self.cluster.cluster_name,
+                    "AZ_NAME": f"{self.region}{self.AZ_LETTER}",
+                    "COST_TAG_KEY": "osl-billing",
+                    "COST_TAG_VALUE": self.LAB_SHORT_NAME,
                 },
                 "extraFiles": (
                     {}
@@ -644,7 +672,6 @@ class ClusterCdkStack(Stack):
                     "type": "ClusterIP",
                 },
             },
-            "custom": {"COST_TAG_KEY": "hello", "COST_TAG_VALUE": "world"},
         }
 
         # print(json.dumps(jupyterhub_helm_values))
