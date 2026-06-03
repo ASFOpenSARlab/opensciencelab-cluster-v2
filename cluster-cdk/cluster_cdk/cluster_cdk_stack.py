@@ -626,6 +626,16 @@ class ClusterCdkStack(Stack):
                         "python",
                         "/usr/local/etc/jupyterhub/jupyterhub_config.d/2_profiles.py",
                     )
+                    | self._set_extra_file(
+                        "jupyterhub/config.d/3_pre_start_hook.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/3_pre_start_hook.py",
+                    )
+                    | self._set_extra_file(
+                        "jupyterhub/config.d/4_post_stop_hook.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/4_post_stop_hook.py",
+                    )
                 ),
             },
             "proxy": {
