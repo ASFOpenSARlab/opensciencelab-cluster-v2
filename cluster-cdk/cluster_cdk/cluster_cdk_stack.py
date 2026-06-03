@@ -500,7 +500,34 @@ class ClusterCdkStack(Stack):
                 "corePods": {"nodeAffinity": {"matchNodePurpose": "require"}},
                 "userPods": {"nodeAffinity": {"matchNodePurpose": "require"}},
             },
+            # https://z2jh.jupyter.org/en/stable/resources/reference.html#singleuser
+            # Usually, general and default pod, volume, and kubespawner settings should be set here.
+            # If profile specific settings are needed, set within `config.d/2_profiles.py`
             "singleuser": {
+                # This might not be needed anymore. Actually, not sure why this was added but something broke on upgrading to AL2023 and this fixed it at the time.
+                # "cloudMetadata": {
+                #     # For some reason IP Tables isn't working properly anymore on AL2023
+                #     # So disable blocking cloud metadata which uses IP Tables
+                #     # For safety, the metadata IP is blocked on the Istio level.
+                #     "blockWithIptables": False
+                # },
+                # https://z2jh.jupyter.org/en/stable/resources/reference.html#singleuser-storage
+                "storage": {
+                    "dynamic": {
+                        "storageClass": "gp3",
+                        # This {username} is a template used by jupyterhub and is not an f-string
+                        # Fpr possible template values: https://jupyterhub-kubespawner.readthedocs.io/en/latest/templates.html#templated-fields
+                        "pvcNameTemplate": "claim-{username}",
+                    },
+                },
+                "extraPodConfig": {
+                    # By default, Kubernetes recursively changes the ownership of every single file in a mounted volume to match the pod's fsGroup. On very large volumes, this chown operation can take 15–45+ minutes, causing the pod to hang in a ContainerCreating or initializing state.
+                    # When set to OnRootMismatch, Kubernetes will only change the file ownership and permissions if the root directory of the volume does not match the expected fsGroup. If the permissions on the root already match, it completely skips the slow recursive check.
+                    "securityContext": {
+                        "fsGroup": 100,
+                        "fsGroupChangePolicy": "OnRootMismatch",
+                    },
+                },
                 "startTimeout": 600,
                 "extraFiles": (
                     {}
@@ -545,6 +572,13 @@ class ClusterCdkStack(Stack):
                         "auth_refresh_age": 60,
                         "allow_all": True,
                         "enable_auth_state": True,
+                    },
+                    "KubeSpawner": {
+                        # https://jupyterhub-kubespawner.readthedocs.io/en/latest/spawner.html#kubespawner.KubeSpawner.http_timeout
+                        "http_timeout": 120,
+                        # https://jupyterhub-kubespawner.readthedocs.io/en/latest/spawner.html#kubespawner.KubeSpawner.pod_name_template
+                        # This is not an f-string but a templated string.
+                        "pod_name_template": "jupyter-{username}",
                     },
                 },
                 "extraEnv": {

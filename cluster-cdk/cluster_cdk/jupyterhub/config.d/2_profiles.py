@@ -199,7 +199,7 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
                             "OPENSCIENCELAB_LAB_SHORT_NAME": LAB_SHORT_NAME,
                             "OPENSCIENCELAB_PORTAL_DOMAIN": portal_domain,
                         },
-                        "default_url": "/lab",
+                        "default_url": lab_profile.get("default_url", "/lab"),
                     },
                 }
                 kubespawner_profile_list.append(kubespawner_profile_dict)

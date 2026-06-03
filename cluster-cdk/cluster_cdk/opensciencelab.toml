@@ -11,6 +11,8 @@
 # description = "Hello world"
 # image_url = "http://..."  # FQDN path to JupyterLab image that will be started"
 # node = ""  # Name of the node that the image will be starting on. Needs to match any defined below."
+# hook_script = ""  # The hook script to run on server startup. Defaults to None (no script ran).
+# storage_capacity = ""  # The size of the EBS volume used for user's home directory. Defaults to 10Gi. This cannot be shrunk - only expanded. If the config value is smaller than current storage values, it will be ignored. 
 #
 
 [ lab_profiles."m6a.large" ]
@@ -18,23 +20,27 @@ description = "Hello m6a.large"
 image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
 node = "m6a-large"
 hook_script = "default.sh"
+storage_capacity = "15Gi"
 
 [ lab_profiles."m6a.xlarge" ]
 description = "Hello m6a.xlarge"
 image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
 node = "m6a-xlarge"
 hook_script = "default.sh"
+storage_capacity = "15Gi"
 
 [ lab_profiles."sar" ]
 description = "Hello, there sar"
 image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
 node = "sar"
 hook_script = "default.sh"
+storage_capacity = "15Gi"
 
 [ lab_profiles."Debug Server Profile" ]
 description = "Debug"
 image_url = "ghcr.io/asfopensarlab/deployment-opensarlab-container_sar:test"
 node = "m6a-large"
+storage_capacity = "15Gi"
 
 #
 # Nodes
