@@ -73,7 +73,7 @@ class ClusterCdkStack(Stack):
             self.DAYS_TILL_VOLUME_DELETION is None
             or self.DAYS_TILL_VOLUME_DELETION == "None"
         ):
-            self.DAYS_TILL_VOLUME_DELETION = 3600
+            self.DAYS_TILL_VOLUME_DELETION = "3600"
 
         self.DAYS_TILL_SNAPSHOT_DELETION = os.getenv(
             "DAYS_TILL_SNAPSHOT_DELETION", None
@@ -82,7 +82,7 @@ class ClusterCdkStack(Stack):
             self.DAYS_TILL_SNAPSHOT_DELETION is None
             or self.DAYS_TILL_SNAPSHOT_DELETION == "None"
         ):
-            self.DAYS_TILL_SNAPSHOT_DELETION = 3600
+            self.DAYS_TILL_SNAPSHOT_DELETION = "3600"
 
         # Make sure everything happens in a particular AZ.
         # This is normally 'a' but can be 'b' or 'c' if more than one cluster is deployed in an account and resources will be limited.
@@ -611,6 +611,7 @@ class ClusterCdkStack(Stack):
                         "pod_name_template": "jupyter-{username}",
                     },
                 },
+                # All extraEnv need to be strings
                 "extraEnv": {
                     "AWS_REGION": self.region,
                     "SSO_TOKEN_ARN": self.sso_token.secret_arn,
