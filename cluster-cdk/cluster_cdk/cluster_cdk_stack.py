@@ -487,6 +487,14 @@ class ClusterCdkStack(Stack):
         self.jupyterhub_helm_version = "4.3.2"
 
         jupyterhub_helm_values = {
+            "cull": {
+                "enabled": True,
+                "timeout": 3600,  # Cull user servers after 3600 seconds (1 hour) of inactivity
+                "every": 300,  # Check for idle servers every 300 seconds (5 minutes)
+                "maxAge": 259200,  # Maximum age in seconds (3 days) before culling regardless of activity
+                "users": False,  # Cull users in addition to their servers
+                "adminUsers": False,  # Set to true to also cull admin users
+            },
             "prePuller": {
                 "continuous": {"enabled": False},
                 "hook": {"enabled": False},
