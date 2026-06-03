@@ -86,7 +86,7 @@ class ClusterCdkStack(Stack):
 
         # Make sure everything happens in a particular AZ.
         # This is normally 'a' but can be 'b' or 'c' if more than one cluster is deployed in an account and resources will be limited.
-        self.AZ_LETTER = "a"
+        self.AZ_LETTER = os.getenv("AZ_LETTER", "a")
 
         self.OPENSCIENCELAB_CONFIG_FILE = self.HOME_DIR / "opensciencelab.toml"
 
@@ -558,7 +558,6 @@ class ClusterCdkStack(Stack):
                         "fsGroupChangePolicy": "OnRootMismatch",
                     },
                 },
-                "startTimeout": 600,
                 "extraFiles": (
                     {}
                     | self._set_extra_file(
@@ -605,7 +604,9 @@ class ClusterCdkStack(Stack):
                     },
                     "KubeSpawner": {
                         # https://jupyterhub-kubespawner.readthedocs.io/en/latest/spawner.html#kubespawner.KubeSpawner.http_timeout
-                        "http_timeout": 120,
+                        "http_timeout": 30,
+                        # https://jupyterhub-kubespawner.readthedocs.io/en/latest/spawner.html#kubespawner.KubeSpawner.start_timeout
+                        "start_timeout": 600,
                         # https://jupyterhub-kubespawner.readthedocs.io/en/latest/spawner.html#kubespawner.KubeSpawner.pod_name_template
                         # This is not an f-string but a templated string.
                         "pod_name_template": "jupyter-{username}",
@@ -674,8 +675,6 @@ class ClusterCdkStack(Stack):
                 },
             },
         }
-
-        # print(json.dumps(jupyterhub_helm_values))
 
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#helm-charts
         # https://artifacthub.io/packages/helm/jupyterhub/jupyterhub?modal=values-schema

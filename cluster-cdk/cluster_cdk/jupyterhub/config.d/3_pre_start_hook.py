@@ -341,9 +341,150 @@ def volume_from_snapshot(spawner):
                     raise
 
         else:
-            log.info(
-                f"No volumes found nor restored from snapshot. Allow JupyterHub to create a new volume for {pvc_name}"
+            log.info("Creating new volume...")
+            vol = ec2.create_volume(
+                AvailabilityZone=AZ_NAME,
+                Encrypted=False,
+                Size=vol_size,
+                VolumeType="gp3",
+                DryRun=False,
+                TagSpecifications=[
+                    {
+                        "ResourceType": "volume",
+                        "Tags": [
+                            {
+                                "Key": "Name",
+                                "Value": f"{username}-{CLUSTER_NAME}",
+                            },
+                            {
+                                "Key": f"kubernetes.io/cluster/{CLUSTER_NAME}",
+                                "Value": "owned",
+                            },
+                            {
+                                "Key": "kubernetes.io/created-for/pvc/namespace",
+                                "Value": namespace,
+                            },
+                            {
+                                "Key": "kubernetes.io/created-for/pvc/name",
+                                "Value": pvc_name,
+                            },
+                            {"Key": "RestoredFromSnapshot", "Value": "False"},
+                        ],
+                    },
+                ],
             )
+            vol_id = vol["VolumeId"]
+            log.info(f"Volume {vol_id} created.")
+
+            ec2.create_tags(
+                DryRun=False,
+                Resources=[vol_id],
+                Tags=[
+                    {"Key": COST_TAG_KEY, "Value": COST_TAG_VALUE},
+                ],
+            )
+
+            annotations = spawn_pvc.metadata.annotations
+
+            # Explicit annote the provisioner. The CSI plugin appears to not do this properly.
+            # May not be needed
+            # annotations.update({"pv.kubernetes.io/provisioned-by": "ebs.csi.aws.com"})
+
+            labels = spawn_pvc.metadata.labels
+
+            pvc_manifest = {
+                "api_version": "v1",
+                "kind": "PersistentVolumeClaim",
+                "metadata": {
+                    "annotations": annotations,
+                    "cluster_name": CLUSTER_NAME,
+                    "labels": labels,
+                    "name": pvc_name,
+                    "namespace": namespace,
+                },
+                "spec": {
+                    "accessModes": ["ReadWriteOnce"],
+                    "resources": {"requests": {"storage": f"{vol_size}Gi"}},
+                    "storageClassName": "gp3",
+                    "volumeMode": "Filesystem",
+                    "volumeName": vol_id,
+                },
+            }
+
+            pv_manifest = {
+                "api_version": "v1",
+                "kind": "PersistentVolume",
+                "metadata": {
+                    "annotations": pvc_manifest["metadata"]["annotations"],
+                    "cluster_name": CLUSTER_NAME,
+                    "labels": {
+                        "topology.kubernetes.io/region": REGION_NAME,
+                        "topology.kubernetes.io/zone": AZ_NAME,
+                    },
+                    "name": vol_id,
+                    "namespace": namespace,
+                },
+                "spec": {
+                    "accessModes": ["ReadWriteOnce"],
+                    "awsElasticBlockStore": {
+                        "fsType": "ext4",
+                        "volumeID": f"aws://{AZ_NAME}/{vol_id}",
+                    },
+                    "capacity": {
+                        "storage": pvc_manifest["spec"]["resources"]["requests"][
+                            "storage"
+                        ]
+                    },
+                    "nodeAffinity": {
+                        "required": {
+                            "nodeSelectorTerms": [
+                                {
+                                    "matchExpressions": [
+                                        {
+                                            "key": "topology.kubernetes.io/zone",
+                                            "operator": "In",
+                                            "values": AZ_NAME,
+                                        },
+                                        {
+                                            "key": "topology.kubernetes.io/region",
+                                            "operator": "In",
+                                            "values": AZ_NAME,
+                                        },
+                                    ]
+                                }
+                            ]
+                        }
+                    },
+                    "persistentVolumeReclaimPolicy": "Delete",
+                    "storageClassName": "gp3",
+                    "volumeMode": "Filesystem",
+                    "claimRef": {"namespace": namespace, "name": pvc_name},
+                },
+            }
+
+            # https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/CoreV1Api.md#create_persistent_volume
+            log.info("Creating persistent volume...")
+            try:
+                api.create_persistent_volume(body=pv_manifest)
+            except ApiException as e:
+                if e.status == 409:
+                    log.info(f"PV {vol_id} already exists, so did not create new pvc.")
+                else:
+                    raise
+
+            # https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/CoreV1Api.md#create_namespaced_persistent_volume_claim
+            log.info("Creating persistent volume claim...")
+            try:
+                api.create_namespaced_persistent_volume_claim(
+                    body=pvc_manifest, namespace=namespace
+                )
+            except ApiException as e:
+                if e.status == 409:
+                    log.info(
+                        f"PVC {pvc_name} already exists, so did not create new pvc."
+                    )
+                else:
+                    raise
 
 
 def server_starting_tag(spawner):
