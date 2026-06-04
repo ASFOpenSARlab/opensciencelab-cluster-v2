@@ -29,9 +29,7 @@ def _get_delta_time(days: int) -> datetime.datetime:
     return the_future_in_utc.replace(second=0, microsecond=0)
 
 
-def server_stopping_tags(spawner):
-    pvc_name = spawner.pvc_name
-
+def server_stopping_tags(pvc_name: str) -> None:
     session = boto3.Session(region_name=REGION_NAME)
     ec2 = session.client("ec2")
 
@@ -83,9 +81,11 @@ def server_stopping_tags(spawner):
 
 
 # After stopping the notebook server, tag the volume with the current "stopping" time. This will help determine which volumes are active.
-def my_post_hook(spawner):
+def my_post_hook(spawner: c.Spawner):  # noqa: F821
     try:
-        server_stopping_tags(spawner)
+        pvc_name = spawner.pvc_name
+
+        server_stopping_tags(pvc_name)
 
     except Exception as e:
         log.error("Something went wrong with the volume stopping tag post hook...")
@@ -93,4 +93,8 @@ def my_post_hook(spawner):
         raise
 
 
+# The variable "c" is a global variable representing the Config instance.
+# This code will be appended to the end of the jupyterhub config.
+# Linters like Flake8 often fail to recognize "magic" variables like "c".
+# Therefore we apply "noqa: F821"
 c.Spawner.post_stop_hook = my_post_hook  # noqa: F821

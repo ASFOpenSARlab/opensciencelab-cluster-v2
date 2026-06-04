@@ -508,6 +508,24 @@ class ClusterCdkStack(Stack):
 
         self.jupyterhub_helm_version = "4.3.2"
 
+        # Make sure the hook volume scripts have the right volume provisioner permissions
+        self.cluster.add_manifest(
+            "PVClusterRoleBinding",
+            {
+                "kind": "ClusterRoleBinding",
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "metadata": {"name": "cluster-pv"},
+                "subjects": [
+                    {"kind": "ServiceAccount", "name": "hub", "namespace": "jupyter"}
+                ],
+                "roleRef": {
+                    "apiGroup": "rbac.authorization.k8s.io",
+                    "kind": "ClusterRole",
+                    "name": "system:persistent-volume-provisioner",
+                },
+            },
+        )
+
         jupyterhub_helm_values = {
             "cull": {
                 "enabled": True,
@@ -532,7 +550,7 @@ class ClusterCdkStack(Stack):
             },
             # https://z2jh.jupyter.org/en/stable/resources/reference.html#singleuser
             # Usually, general and default pod, volume, and kubespawner settings should be set here.
-            # If profile specific settings are needed, set within `config.d/2_profiles.py`
+            # If profile specific settings are needed, set within `config.d/profiles.py`
             "singleuser": {
                 # This might not be needed anymore. Actually, not sure why this was added but something broke on upgrading to AL2023 and this fixed it at the time.
                 # "cloudMetadata": {
@@ -569,11 +587,6 @@ class ClusterCdkStack(Stack):
                         "user_server_includes/overrides/default.json",
                         "file",
                         "/etc/user_server_includes/overrides/default.json",
-                    )
-                    | self._set_extra_file(
-                        "user_server_includes/scripts/pkg_clean.py",
-                        "python",
-                        "/etc/user_server_includes/scripts/pkg_clean.py",
                     )
                 ),
             },
@@ -628,43 +641,44 @@ class ClusterCdkStack(Stack):
                     "AZ_NAME": f"{self.region}{self.AZ_LETTER}",
                     "COST_TAG_KEY": "osl-billing",
                     "COST_TAG_VALUE": self.LAB_SHORT_NAME,
+                    "K8s_NAMESPACE": "jupyter",
                 },
                 "extraFiles": (
                     {}
-                    | self._set_extra_file(
-                        "jupyterhub/portal_auth.py",
-                        "python",
-                        "/usr/local/lib/python3.12/site-packages/jupyterhub/portal_auth.py",
-                    )
-                    | self._set_extra_file(
-                        "jupyterhub/config.d/1_auth.py",
-                        "python",
-                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/1_auth.py",
-                    )
-                    | self._set_extra_file(
-                        "jupyterhub/config.d/0_extras.py",
-                        "python",
-                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/0_extras.py",
-                    )
                     | self._set_extra_file(
                         "jupyterhub/hub_home.html.j2",
                         "html",
                         "/usr/local/share/jupyterhub/templates/custom/page.html",
                     )
                     | self._set_extra_file(
-                        "jupyterhub/config.d/2_profiles.py",
+                        "jupyterhub/portal_auth.py",
                         "python",
-                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/2_profiles.py",
+                        "/usr/local/lib/python3.12/site-packages/jupyterhub/portal_auth.py",
                     )
                     | self._set_extra_file(
-                        "jupyterhub/config.d/3_pre_start_hook.py",
+                        "jupyterhub/config.d/auth.py",
                         "python",
-                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/3_pre_start_hook.py",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/auth.py",
                     )
                     | self._set_extra_file(
-                        "jupyterhub/config.d/4_post_stop_hook.py",
+                        "jupyterhub/config.d/extras.py",
                         "python",
-                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/4_post_stop_hook.py",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/extras.py",
+                    )
+                    | self._set_extra_file(
+                        "jupyterhub/config.d/profiles.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/profiles.py",
+                    )
+                    | self._set_extra_file(
+                        "jupyterhub/config.d/pre_start_hook.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/pre_start_hook.py",
+                    )
+                    | self._set_extra_file(
+                        "jupyterhub/config.d/post_stop_hook.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/post_stop_hook.py",
                     )
                 ),
             },

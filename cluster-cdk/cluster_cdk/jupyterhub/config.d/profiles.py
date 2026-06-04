@@ -231,4 +231,8 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
         return no_profiles()
 
 
+# The variable "c" is a global variable representing the Config instance.
+# This code will be appended to the end of the jupyterhub config.
+# Linters like Flake8 often fail to recognize "magic" variables like "c".
+# Therefore we apply "noqa: F821"
 c.KubeSpawner.profile_list = lab_profile_list_hook  # noqa: F821
