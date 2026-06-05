@@ -165,9 +165,9 @@ def snapshot_is_expiring(snapshot):
     expiry = expiry_time(tags.get("snapshot-delete-time"))
 
     # warning trigger date
-    warning_date = datetime.datetime.now() - datetime.timedelta(days=SNAPSHOT_WARNING_DAYS)
+    warning_date = expiry - datetime.timedelta(days=SNAPSHOT_WARNING_DAYS)
 
-    if warning_date > expiry:
+    if datetime.datetime.now() > warning_date:
         return True
 
     # snapshot is not about to expire
