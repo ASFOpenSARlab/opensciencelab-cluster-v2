@@ -95,6 +95,8 @@ cdk-shell:
 		-e PORTAL_DOMAINS \
 		-e ALLOWED_LAB_PROFILES \
 		-e LAB_SHORT_NAME \
+		-e VOLUME_CRON_SCHEDULE \
+		-e SNAPSHOT_WARNING_DAYS \
 		-w /code/ \
 		--pull always \
 		${IMAGE_NAME} || \

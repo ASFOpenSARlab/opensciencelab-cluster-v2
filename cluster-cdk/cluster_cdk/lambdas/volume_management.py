@@ -173,6 +173,8 @@ def run_volume_management():
             logger.info(" - Snapshot is expiring!")
             send_snapshot_warning(snapshot, claim_user)
 
+def lambda_hander(event, context):
+    run_volume_management()
 
 if __name__ == "__main__":
     run_volume_management()
