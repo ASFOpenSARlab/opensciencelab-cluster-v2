@@ -22,16 +22,25 @@ ec2_resource = boto3.resource("ec2")
 
 
 def tags_to_dict(tags):
+    """ Convert list of dicts tags to single list  """
     if not tags:
         return {}
     return {item["Key"]: item["Value"] for item in tags}
 
 
-def get_all_volumes():
+def get_unattached_volumes():
+    """ Return a list of available EBS Volumes """
+    unattached_volumes = []
+    for volume in ec2_resource.volumes.all():
+        if volume.state == "available":
+            unattached_volumes.append(volume)
+        else:
+            logger.debug("Ignoring attached volume %s", volume.id)
     return ec2_resource.volumes.all()
 
 
 def get_all_snapshots():
+    """ Get all volume snapshots owned by this AWS account """
     this_account = boto3.client("sts").get_caller_identity().get("Account")
     return ec2_resource.snapshots.filter(
         OwnerIds=[this_account]
@@ -39,6 +48,7 @@ def get_all_snapshots():
 
 
 def get_claim_user(item):
+    """ Determine the username from a claim tag """
     item_tags = tags_to_dict(item.tags)
     if not item_tags.get(CLAIM_TAG, "").startswith("claim-"):
         return None
@@ -68,6 +78,7 @@ def filter_users(all_items):
     return user_items
 
 def expiry_time(expiry):
+    """ Convert expiry time into a datetime object """
     try:
         return datetime.datetime.strptime(expiry, DATE_FORMAT)
     except Exception as E:
@@ -76,11 +87,13 @@ def expiry_time(expiry):
         return datetime.datetime.now() + datetime.timedelta(days=100)
 
 def is_delete_protected(item):
+    """ Does the item have a delete protection tag? """
     if tags_to_dict(item.tags).get("do-not-delete", "") == "true":
         return True
     return False
 
 def is_expired(item, grace_period_days=0):
+    """ Check if item is expired, with optional grace period """
     now = datetime.datetime.now()
     tags = tags_to_dict(item.tags)
 
@@ -101,6 +114,7 @@ def is_expired(item, grace_period_days=0):
     return now > expire_time
 
 def send_snapshot_warning(snapshot, claim_user):
+    """ Send an email to the user warning of snapshot expiration """
     # Create email
 
     # send email to portal
@@ -118,6 +132,7 @@ def send_snapshot_warning(snapshot, claim_user):
     return True
 
 def send_snapshot_delete(snapshot, claim_user):
+    """ Send an email to the owner of a to-be-deleted snapshot """
     tags = tags_to_dict(snapshot.tags)
 
     # Make sure we haven't already warning
@@ -139,7 +154,7 @@ def send_snapshot_delete(snapshot, claim_user):
     return True
 
 def snapshot_is_expiring(snapshot):
-
+    """ Determine if a snapshot is inside the warning window """
     tags = tags_to_dict(snapshot.tags)
 
     # Make sure we haven't already warning
@@ -160,6 +175,7 @@ def snapshot_is_expiring(snapshot):
 
 
 def volume_has_snapshot(volume, user_snapshots):
+    """ Check if a specific volume has a snapshot available """
     for claim_user, snapshot in user_snapshots.items():
         if snapshot.volume_id == volume.volume_id:
             logger.info(
@@ -180,6 +196,7 @@ def volume_has_snapshot(volume, user_snapshots):
     return False
 
 def delete_volume(volume):
+    """ Delete a user's volume by removing their PVC in K8s"""
     # Create final Snapshot
 
     # delete pvc
@@ -187,15 +204,17 @@ def delete_volume(volume):
 
 
 def get_user_volumes():
-    return filter_users(get_all_volumes())
+    """ Return unattached user volumes for a cluster """
+    return filter_users(get_unattached_volumes())
 
 
 def get_user_snapshots():
+    """ Return user snapshots for a cluster """
     return filter_users(get_all_snapshots())
 
 
 def run_volume_management():
-
+    """ Process Volumes and Snapshots """
     user_volumes = get_user_volumes()
     user_snapshots = get_user_snapshots()
 
@@ -204,7 +223,7 @@ def run_volume_management():
         if is_delete_protected(volume):
             logger.info(" - Volume is Delete protected!")
         elif not volume_has_snapshot(volume, user_snapshots):
-            logger.error(" - Volume has not active snapshot!")
+            logger.error(" - Volume has no active snapshot!")
         elif is_expired(volume):
             logger.info(" - Volume is expired!")
             delete_volume(volume)
