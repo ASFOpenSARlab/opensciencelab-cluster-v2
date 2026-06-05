@@ -10,8 +10,9 @@ CLAIM_TAG = "kubernetes.io/created-for/pvc/name"
 CLUSTER_TAG = "KubernetesCluster"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S+00:00"
 
-CLUSTER_NAME = os.getenv("CLUSTER_NAME", "eks-cluster-test")
+CLUSTER_NAME = os.getenv("CLUSTER_NAME")
 SNAPSHOT_WARNING_DAYS = int(os.getenv("SNAPSHOT_WARNING_DAYS", "5"))
+SNAPSHOT_EXPIRY_GRACEPERIOD = int(os.getenv("SNAPSHOT_EXPIRY_GRACEPERIOD", "1"))
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger()
@@ -56,9 +57,10 @@ def filter_users(all_items):
             logger.debug("Skipping non-claim %s: %s", item.id, item_tags.get(CLAIM_TAG))
             continue
 
-        if item_tags.get(CLUSTER_TAG, "") != CLUSTER_TAG:
+        if CLUSTER_NAME and item_tags.get(CLUSTER_TAG, "") != CLUSTER_NAME:
             # Wrong Cluster
             logger.debug("Skipping cross-cluster %s: %s", item.id, item_tags.get(CLUSTER_TAG))
+            continue
 
         # Item from a PVC in the right cluster
         user_items[claim_user] = item
@@ -78,7 +80,7 @@ def is_delete_protected(item):
         return True
     return False
 
-def is_expired(item):
+def is_expired(item, grace_period_days=0):
     now = datetime.datetime.now()
     tags = tags_to_dict(item.tags)
 
@@ -93,7 +95,10 @@ def is_expired(item):
         logger.warning("Item %s did not have delete-time tag", item.id)
         return None
 
-    return now > expiry_time(expiry)
+    # Expire time is the marked expiry time, plus added grace period in days
+    expire_time = expiry_time(expiry) + datetime.timedelta(days=grace_period_days)
+
+    return now > expire_time
 
 def send_snapshot_warning(snapshot, claim_user):
     # Create email
@@ -105,6 +110,27 @@ def send_snapshot_warning(snapshot, claim_user):
         Tags=[
             {
                 "Key": "snapshot-warning-sent",
+                "Value": "true"
+            },
+        ]
+    )
+
+    return True
+
+def send_snapshot_delete(snapshot, claim_user):
+    tags = tags_to_dict(snapshot.tags)
+
+    # Make sure we haven't already warning
+    if tags.get("snapshot-warning-sent", "") == "true":
+        return None
+
+    # Send email
+
+    # Add email tag
+    snapshot.create_tags(
+        Tags=[
+            {
+                "Key": "snapshot-delete-sent",
                 "Value": "true"
             },
         ]
@@ -133,6 +159,25 @@ def snapshot_is_expiring(snapshot):
     return False
 
 
+def volume_has_snapshot(volume, user_snapshots):
+    for claim_user, snapshot in user_snapshots.items():
+        if snapshot.volume_id == volume.volume_id:
+            logger.info(
+                "Found Snapshot %s for Volume %s for user %s",
+                snapshot.id,
+                volume.volume_id,
+                claim_user,
+            )
+            return True
+        else:
+            logger.debug(
+                "Snapshot %s is for %s, not %s",
+                snapshot.id,
+                snapshot.volume_id,
+                volume.volume_id
+            )
+
+    return False
 
 def delete_volume(volume):
     # Create final Snapshot
@@ -151,24 +196,32 @@ def get_user_snapshots():
 
 def run_volume_management():
 
-    for claim_user, volume in get_user_volumes().items():
+    user_volumes = get_user_volumes()
+    user_snapshots = get_user_snapshots()
+
+    for claim_user, volume in user_volumes.items():
         logger.info(f"VOLUME: {claim_user} | ID: {volume.id} | Size: {volume.size}GB | State: {volume.state}")
         if is_delete_protected(volume):
             logger.info(" - Volume is Delete protected!")
+        elif not volume_has_snapshot(volume, user_snapshots):
+            logger.error(" - Volume has not active snapshot!")
         elif is_expired(volume):
             logger.info(" - Volume is expired!")
             delete_volume(volume)
 
-    for claim_user, snapshot in get_user_snapshots().items():
+    for claim_user, snapshot in user_snapshots.items():
         logger.info(
             f"SNAPSHOT: {claim_user} | ID: {snapshot.id} | Size: {snapshot.volume_size}GB | State: {snapshot.state}"
         )
 
         if is_delete_protected(snapshot):
             logger.info(" - Snapshot is Delete protected!")
-        elif is_expired(snapshot):
-            logger.info(" - Snapshot is expired!")
+        elif is_expired(snapshot, grace_period_days=SNAPSHOT_EXPIRY_GRACEPERIOD):
+            logger.info(" - Snapshot is expired past grace period!")
             snapshot.delete(DryRun=True)
+        elif is_expired(snapshot):
+            logger.info(" - Snapshot is in expired grace period!")
+            send_snapshot_delete(snapshot, claim_user)
         elif snapshot_is_expiring(snapshot):
             logger.info(" - Snapshot is expiring!")
             send_snapshot_warning(snapshot, claim_user)
