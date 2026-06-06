@@ -432,8 +432,6 @@ class ClusterCdkStack(Stack):
                 "parameters": {
                     "type": "gp3",
                     "fsType": "ext4",
-                    "tagSpecification_1": f"osl-billing={self.LAB_SHORT_NAME}",
-                    "tagSpecification_2": "is-jupyterhub-user=true",
                 },
                 "allowVolumeExpansion": True,
                 "volumeBindingMode": "Immediate",

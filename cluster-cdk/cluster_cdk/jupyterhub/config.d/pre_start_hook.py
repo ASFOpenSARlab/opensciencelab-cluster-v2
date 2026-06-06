@@ -193,6 +193,7 @@ def get_volume(
                                 "Value": pvc_name,
                             },
                             {"Key": "RestoredFromSnapshot", "Value": "true"},
+                            {"Key": "is-jupyterhub-user", "Value": "true"},
                         ],
                     },
                 ],
@@ -209,19 +210,6 @@ def get_volume(
                         {"Key": "do-not-delete", "Value": "True"},
                     ],
                 )
-
-            # If the billing tag is present in the snapshot, add to volume tags
-            # If the tag doesn't exist in the snapshot, the default is `COST_TAG_VALUE`
-            this_val = get_tag_value(snapshot, COST_TAG_KEY)
-            if not this_val:
-                this_val = COST_TAG_VALUE
-            ec2.create_tags(
-                DryRun=False,
-                Resources=[vol_id],
-                Tags=[
-                    {"Key": COST_TAG_KEY, "Value": this_val},
-                ],
-            )
 
         elif not volume and not snapshot:
             log.info("Creating new volume...")
@@ -253,6 +241,7 @@ def get_volume(
                             },
                             {"Key": COST_TAG_KEY, "Value": COST_TAG_VALUE},
                             {"Key": "RestoredFromSnapshot", "Value": "false"},
+                            {"Key": "is-jupyterhub-user", "Value": "true"},
                         ],
                     },
                 ],
@@ -424,6 +413,8 @@ def my_pre_hook(spawner: c.Spawner) -> None:  # noqa: F821
     try:
         # Get a object with pvc metadata that JupyterHub thinks you will need
         spawn_pvc = spawner.get_pvc_manifest()
+
+        log.info(f"***** spawner: {vars(spawner)}")
 
         args = {
             "username": spawner.user.name,
