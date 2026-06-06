@@ -88,6 +88,8 @@ class ClusterCdkStack(Stack):
         # This is normally 'a' but can be 'b' or 'c' if more than one cluster is deployed in an account and resources will be limited.
         self.AZ_LETTER = os.getenv("AZ_LETTER", "a")
 
+        self.K8s_NAMESPACE = "jupyter"
+
         self.OPENSCIENCELAB_CONFIG_FILE = self.HOME_DIR / "opensciencelab.toml"
 
         # Determine the selected lab config values
@@ -347,7 +349,7 @@ class ClusterCdkStack(Stack):
                                 CfnTag(key="osl-billing", value=self.LAB_SHORT_NAME),
                                 CfnTag(
                                     key="Name",
-                                    value=f"jupyterhub-{node['name']}-{self.LAB_SHORT_NAME}",
+                                    value=f"{node['name']}--{self.LAB_SHORT_NAME}",
                                 ),
                             ],
                         ),
@@ -357,7 +359,7 @@ class ClusterCdkStack(Stack):
                                 CfnTag(key="osl-billing", value=self.LAB_SHORT_NAME),
                                 CfnTag(
                                     key="Name",
-                                    value=f"jupyterhub-{node['name']}-root-{self.LAB_SHORT_NAME}",
+                                    value=f"{node['name']}-root--{self.LAB_SHORT_NAME}",
                                 ),
                             ],
                         ),
@@ -414,6 +416,54 @@ class ClusterCdkStack(Stack):
         #
         #####################################################################
 
+        # Storage classes
+        self.cluster.add_manifest(
+            "CsiStorageClass",
+            {
+                "apiVersion": "storage.k8s.io/v1",
+                "kind": "StorageClass",
+                "metadata": {
+                    "name": "gp3-jh-user",
+                    "annotations": {
+                        "storageclass.kubernetes.io/is-default-class": "true",
+                    },
+                },
+                "provisioner": "ebs.csi.aws.com",
+                "parameters": {
+                    "type": "gp3",
+                    "fsType": "ext4",
+                    "tagSpecification_1": f"osl-billing={self.LAB_SHORT_NAME}",
+                    "tagSpecification_2": "is-jupyterhub-user=true",
+                },
+                "allowVolumeExpansion": True,
+                "volumeBindingMode": "Immediate",
+                "reclaimPolicy": "Delete",
+            },
+        )
+
+        # Storage class for JupyterHub DB. Ensures that it is nicely named in the EC2 console
+        self.cluster.add_manifest(
+            "JhDbStorageClass",
+            {
+                "apiVersion": "storage.k8s.io/v1",
+                "kind": "StorageClass",
+                "metadata": {
+                    "name": "gp3-jh-db",
+                },
+                "provisioner": "ebs.csi.aws.com",
+                "parameters": {
+                    "type": "gp3",
+                    "fsType": "ext4",
+                    "tagSpecification_1": f"osl-billing={self.LAB_SHORT_NAME}",
+                    "tagSpecification_2": f"Name=hub-db-dir--{self.LAB_SHORT_NAME}",
+                    "tagSpecification_3": "is-jupyterhub-db=true",
+                },
+                "allowVolumeExpansion": False,
+                "volumeBindingMode": "Immediate",
+                "reclaimPolicy": "Delete",
+            },
+        )
+
         # CSI storage
         csi_service_account = self.cluster.add_service_account(
             "EbsCsiServiceAccount",
@@ -426,43 +476,19 @@ class ClusterCdkStack(Stack):
                 effect=iam.Effect.ALLOW,
                 actions=[
                     "ec2:AttachVolume",
-                    "ec2:CreateSnapshot",
                     "ec2:CreateTags",
-                    "ec2:CreateVolume",  # Remove?
-                    "ec2:DeleteSnapshot",
+                    "ec2:DeleteVolume",
+                    "ec2:ModifyVolume",
+                    "ec2:CreateVolume",
                     "ec2:DescribeAvailabilityZones",
                     "ec2:DescribeInstances",
-                    "ec2:DescribeSnapshots",
                     "ec2:DescribeTags",
                     "ec2:DescribeVolumeStatus",
                     "ec2:DescribeVolumes",
                     "ec2:DetachVolume",
-                    "ec2:ModifyVolume",
                 ],
                 resources=["*"],
             )
-        )
-
-        self.cluster.add_manifest(
-            "CsiStorageClass",
-            {
-                "apiVersion": "storage.k8s.io/v1",
-                "kind": "StorageClass",
-                "metadata": {
-                    "name": "gp3",
-                    "annotations": {
-                        "storageclass.kubernetes.io/is-default-class": "true",
-                    },
-                },
-                "provisioner": "ebs.csi.aws.com",
-                "parameters": {
-                    "type": "gp3",
-                    "fsType": "ext4",
-                },
-                "allowVolumeExpansion": True,
-                "volumeBindingMode": "Immediate",
-                "reclaimPolicy": "Delete",
-            },
         )
 
         self.csi_driver_version = "2.56.1"
@@ -473,7 +499,7 @@ class ClusterCdkStack(Stack):
             repository="https://kubernetes-sigs.github.io/aws-ebs-csi-driver",
             atomic=True,
             chart="aws-ebs-csi-driver",
-            release=f"osl-ebs-driver-{self.LAB_SHORT_NAME}",  # type: ignore
+            release=f"ebs-csi-driver-{self.LAB_SHORT_NAME}",  # type: ignore
             namespace="kube-system",
             version=self.csi_driver_version,
             wait=True,
@@ -516,7 +542,11 @@ class ClusterCdkStack(Stack):
                 "apiVersion": "rbac.authorization.k8s.io/v1",
                 "metadata": {"name": "cluster-pv"},
                 "subjects": [
-                    {"kind": "ServiceAccount", "name": "hub", "namespace": "jupyter"}
+                    {
+                        "kind": "ServiceAccount",
+                        "name": "hub",
+                        "namespace": self.K8s_NAMESPACE,
+                    }
                 ],
                 "roleRef": {
                     "apiGroup": "rbac.authorization.k8s.io",
@@ -562,7 +592,7 @@ class ClusterCdkStack(Stack):
                 # https://z2jh.jupyter.org/en/stable/resources/reference.html#singleuser-storage
                 "storage": {
                     "dynamic": {
-                        "storageClass": "gp3",
+                        "storageClass": "gp3-jh-user",
                         # This {username} is a template used by jupyterhub and is not an f-string
                         # Fpr possible template values: https://jupyterhub-kubespawner.readthedocs.io/en/latest/templates.html#templated-fields
                         "pvcNameTemplate": "claim-{username}",
@@ -598,7 +628,7 @@ class ClusterCdkStack(Stack):
                 },
                 "db": {
                     "pvc": {
-                        "storageClassName": "gp3",
+                        "storageClassName": "gp3-jh-db",
                     }
                 },
                 "baseUrl": f"/lab/{self.LAB_SHORT_NAME}",
@@ -641,7 +671,7 @@ class ClusterCdkStack(Stack):
                     "AZ_NAME": f"{self.region}{self.AZ_LETTER}",
                     "COST_TAG_KEY": "osl-billing",
                     "COST_TAG_VALUE": self.LAB_SHORT_NAME,
-                    "K8s_NAMESPACE": "jupyter",
+                    "K8s_NAMESPACE": self.K8s_NAMESPACE,
                 },
                 "extraFiles": (
                     {}
@@ -698,9 +728,9 @@ class ClusterCdkStack(Stack):
             repository="https://jupyterhub.github.io/helm-chart/",
             atomic=False,
             chart="jupyterhub",
-            release=f"osl-jupyterhub-{self.LAB_SHORT_NAME}",  # type: ignore
+            release=f"jupyterhub-{self.LAB_SHORT_NAME}",  # type: ignore
             version=self.jupyterhub_helm_version,
-            namespace="jupyter",
+            namespace=self.K8s_NAMESPACE,
             wait=True,
             timeout=Duration.minutes(10),
             values=jupyterhub_helm_values,
@@ -763,7 +793,7 @@ class ClusterCdkStack(Stack):
                 "kind": "Service",
                 "metadata": {
                     "name": "proxy-public-loadbalancer",
-                    "namespace": "jupyter",
+                    "namespace": self.K8s_NAMESPACE,
                     "labels": {
                         "app": "jupyterhub",
                         "opensciencelab.local/node-type": "core",
@@ -803,7 +833,7 @@ class ClusterCdkStack(Stack):
         # Since the NLB is created via annotations, we need to get the url after jupyterhub installation.
         self.nlb_url = self.cluster.get_service_load_balancer_address(
             "proxy-public-loadbalancer",
-            namespace="jupyter",
+            namespace=self.K8s_NAMESPACE,
             timeout=Duration.minutes(15),
         )
 

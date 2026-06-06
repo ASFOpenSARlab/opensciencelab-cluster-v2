@@ -6,6 +6,7 @@ import traceback
 
 import boto3
 
+LAB_SHORT_NAME = os.environ["LAB_SHORT_NAME"]
 CLUSTER_NAME = os.environ["CLUSTER_NAME"]
 REGION_NAME = os.environ["AWS_REGION"]
 AZ_NAME = os.environ["AZ_NAME"]
@@ -151,6 +152,8 @@ def get_volume(
     # If PVC does exist, assume volume does as well.
 
     if not has_pvc:
+        vol_id = None
+
         # If a volume doesn't exist but a snapshot does, restore from snapshot and create PVC
         if not volume and snapshot:
             log.warning(
@@ -175,7 +178,7 @@ def get_volume(
                         "Tags": [
                             {
                                 "Key": "Name",
-                                "Value": f"{username}--{CLUSTER_NAME}",
+                                "Value": f"user--{username}--{LAB_SHORT_NAME}",
                             },
                             {
                                 "Key": f"kubernetes.io/cluster/{CLUSTER_NAME}",
@@ -189,7 +192,7 @@ def get_volume(
                                 "Key": "kubernetes.io/created-for/pvc/name",
                                 "Value": pvc_name,
                             },
-                            {"Key": "RestoredFromSnapshot", "Value": "True"},
+                            {"Key": "RestoredFromSnapshot", "Value": "true"},
                         ],
                     },
                 ],
@@ -234,7 +237,7 @@ def get_volume(
                         "Tags": [
                             {
                                 "Key": "Name",
-                                "Value": f"{username}--{CLUSTER_NAME}",
+                                "Value": f"user--{username}--{LAB_SHORT_NAME}",
                             },
                             {
                                 "Key": f"kubernetes.io/cluster/{CLUSTER_NAME}",
@@ -249,7 +252,7 @@ def get_volume(
                                 "Value": pvc_name,
                             },
                             {"Key": COST_TAG_KEY, "Value": COST_TAG_VALUE},
-                            {"Key": "RestoredFromSnapshot", "Value": "False"},
+                            {"Key": "RestoredFromSnapshot", "Value": "false"},
                         ],
                     },
                 ],
@@ -264,14 +267,14 @@ def get_volume(
             )
 
             vol_id = volume["VolumeId"]
-            vol_size = volume["VolumeSize"]
+            vol_size = volume["Size"]
 
         # After volume is created (either by previously existing, as new, or restored from snapshot), create PV and PVC
 
         # Explicit annote the provisioner. The CSI plugin appears to not do this properly.
-        # Is this needed?
-        # annotations.update({"pv.kubernetes.io/provisioned-by": "ebs.csi.aws.com"})
+        annotations.update({"pv.kubernetes.io/provisioned-by": "ebs.csi.aws.com"})
 
+        # The Storage Class and PVC schema used is defined in cluster_cdk_stack.py:jupyterhub_helm_values.singleuser.storage
         pvc_manifest = {
             "api_version": "v1",
             "kind": "PersistentVolumeClaim",
@@ -285,7 +288,7 @@ def get_volume(
             "spec": {
                 "accessModes": ["ReadWriteOnce"],
                 "resources": {"requests": {"storage": f"{vol_size}Gi"}},
-                "storageClassName": "gp3",
+                "storageClassName": "gp3-jh-user",
                 "volumeMode": "Filesystem",
                 "volumeName": vol_id,
             },
@@ -334,7 +337,7 @@ def get_volume(
                     }
                 },
                 "persistentVolumeReclaimPolicy": "Delete",
-                "storageClassName": "gp3",
+                "storageClassName": "gp3-jh-user",
                 "volumeMode": "Filesystem",
                 "claimRef": {"namespace": NAMESPACE, "name": pvc_name},
             },
@@ -346,7 +349,7 @@ def get_volume(
             api.create_persistent_volume(body=pv_manifest)
         except ApiException as e:
             if e.status == 409:
-                log.info(f"PV {vol_id} already exists, so did not create new pvc.")
+                log.info(f"PV {vol_id} already exists, so did not create new pv.")
             else:
                 raise
 
@@ -361,6 +364,17 @@ def get_volume(
                 log.info(f"PVC {pvc_name} already exists, so did not create new pvc.")
             else:
                 raise
+
+        ec2.create_tags(
+            DryRun=False,
+            Resources=[vol_id],
+            Tags=[
+                {"Key": "kubernetes.io/created-for/pv/name", "Value": vol_id},
+                {"Key": "CSIVolumeName", "Value": vol_id},
+                {"Key": "KubernetesCluster", "Value": CLUSTER_NAME},
+                {"Key": "ebs.csi.aws.com/cluster", "Value": "true"},
+            ],
+        )
 
 
 def server_starting_tag(pvc_name: str, **kwargs) -> None:
