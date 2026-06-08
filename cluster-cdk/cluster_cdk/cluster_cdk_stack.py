@@ -52,7 +52,7 @@ class ClusterCdkStack(Stack):
         self.UI_IAM_USER = os.getenv("UI_IAM_USER", None)
 
         # Default cron schedule to top of every hour
-        self.VOLUME_CRON_SCHEDULE = os.getenv("VOLUME_CRON_SCHEDULE", "0 * * * *")
+        self.VOLUME_CRON_SCHEDULE = os.getenv("VOLUME_CRON_SCHEDULE", "0 * * * ? *")
         self.SNAPSHOT_WARNING_DAYS = os.getenv("SNAPSHOT_WARNING_DAYS", "5")
 
         self.LAB_SHORT_NAME = str(os.getenv("LAB_SHORT_NAME", "")).lower()
@@ -735,7 +735,7 @@ class ClusterCdkStack(Stack):
             timeout=Duration.minutes(15),
             handler="volume_management.lambda_hander",
             code=lambda_.Code.from_asset(
-                path='lambdas/',
+                path='cluster_cdk/lambdas/',
             ),
             environment={
                 "CLUSTER_NAME": self.cluster.cluster_name,
@@ -771,12 +771,11 @@ class ClusterCdkStack(Stack):
             targets.LambdaFunction(self.volume_management_lambda)
         )
 
-
         # DLM configuration to create daily volume snapshots
         self.dlm_role = iam.Role(
             self,
             id=f"{self.DEPLOY_PREFIX}_dlm_service_role",
-            assumed_by=iam.ServicePrincipal("://amazonaws.com"),
+            assumed_by=iam.ServicePrincipal("dlm.amazonaws.com"),
         )
 
         # Attach the AWS-managed policy for DLM execution
@@ -795,15 +794,21 @@ class ClusterCdkStack(Stack):
             state="ENABLED",
             policy_details=dlm.CfnLifecyclePolicy.PolicyDetailsProperty(
                 resource_types=["VOLUME"],
-                target_tags=[],
+                # Target volumes from this cluster only
+                target_tags=[
+                    CfnTag(
+                        key="KubernetesCluster",
+                        value=self.cluster.cluster_name
+                    ),
+                ],
                 schedules=[
                     dlm.CfnLifecyclePolicy.ScheduleProperty(
                         name="DailySnapshots",
                         tags_to_add=[
-                            dlm.CfnLifecyclePolicy.TagProperty(
+                            CfnTag(
                                 key="CreatedBy",
                                 value=f"{self.DEPLOY_PREFIX}_daily_snapshot"
-                            )
+                            ),
                         ],
                         create_rule=dlm.CfnLifecyclePolicy.CreateRuleProperty(
                             interval=24,  # every 24 hours
