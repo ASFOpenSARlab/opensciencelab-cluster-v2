@@ -735,7 +735,7 @@ class ClusterCdkStack(Stack):
             timeout=Duration.minutes(15),
             handler="volume_management.lambda_hander",
             code=lambda_.Code.from_asset(
-                path='cluster_cdk/lambdas/',
+                path="cluster_cdk/lambdas/",
             ),
             environment={
                 "CLUSTER_NAME": self.cluster.cluster_name,
@@ -756,7 +756,7 @@ class ClusterCdkStack(Stack):
                     "ec2:CreateSnapshot",
                     "ec2:DeleteSnapshot",
                 ],
-                resources=["*"]
+                resources=["*"],
             )
         )
 
@@ -796,10 +796,7 @@ class ClusterCdkStack(Stack):
                 resource_types=["VOLUME"],
                 # Target volumes from this cluster only
                 target_tags=[
-                    CfnTag(
-                        key="KubernetesCluster",
-                        value=self.cluster.cluster_name
-                    ),
+                    CfnTag(key="KubernetesCluster", value=self.cluster.cluster_name),
                 ],
                 schedules=[
                     dlm.CfnLifecyclePolicy.ScheduleProperty(
@@ -807,19 +804,19 @@ class ClusterCdkStack(Stack):
                         tags_to_add=[
                             CfnTag(
                                 key="CreatedBy",
-                                value=f"{self.DEPLOY_PREFIX}_daily_snapshot"
+                                value=f"{self.DEPLOY_PREFIX}_daily_snapshot",
                             ),
                         ],
                         create_rule=dlm.CfnLifecyclePolicy.CreateRuleProperty(
                             interval=24,  # every 24 hours
                             interval_unit="HOURS",
-                            times=["12:00"]  # Start window time (UTC HH:MM format)
+                            times=["12:00"],  # Start window time (UTC HH:MM format)
                         ),
                         retain_rule=dlm.CfnLifecyclePolicy.RetainRuleProperty(count=1),
                         copy_tags=True,
                     )
-                ]
-            )
+                ],
+            ),
         )
 
         #####################################################################

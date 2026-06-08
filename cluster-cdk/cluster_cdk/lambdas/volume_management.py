@@ -22,14 +22,14 @@ ec2_resource = boto3.resource("ec2")
 
 
 def tags_to_dict(tags):
-    """ Convert list of dicts tags to single list  """
+    """Convert list of dicts tags to single list"""
     if not tags:
         return {}
     return {item["Key"]: item["Value"] for item in tags}
 
 
 def get_unattached_volumes():
-    """ Return a list of available EBS Volumes """
+    """Return a list of available EBS Volumes"""
     unattached_volumes = []
     for volume in ec2_resource.volumes.all():
         if volume.state == "available":
@@ -40,15 +40,13 @@ def get_unattached_volumes():
 
 
 def get_all_snapshots():
-    """ Get all volume snapshots owned by this AWS account """
+    """get all volume snapshots owned by this AWS account"""
     this_account = boto3.client("sts").get_caller_identity().get("Account")
-    return ec2_resource.snapshots.filter(
-        OwnerIds=[this_account]
-    )
+    return ec2_resource.snapshots.filter(OwnerIds=[this_account])
 
 
 def get_claim_user(item):
-    """ Determine the username from a claim tag """
+    """Determine the username from a claim tag"""
     item_tags = tags_to_dict(item.tags)
     if not item_tags.get(CLAIM_TAG, "").startswith("claim-"):
         return None
@@ -56,7 +54,7 @@ def get_claim_user(item):
 
 
 def filter_users(all_items):
-    """ Filter resources by claim tagged users """
+    """Filter resources by claim tagged users"""
     user_items = {}
     for item in all_items:
         item_tags = tags_to_dict(item.tags)
@@ -69,7 +67,9 @@ def filter_users(all_items):
 
         if CLUSTER_NAME and item_tags.get(CLUSTER_TAG, "") != CLUSTER_NAME:
             # Wrong Cluster
-            logger.debug("Skipping cross-cluster %s: %s", item.id, item_tags.get(CLUSTER_TAG))
+            logger.debug(
+                "Skipping cross-cluster %s: %s", item.id, item_tags.get(CLUSTER_TAG)
+            )
             continue
 
         # Item from a PVC in the right cluster
@@ -77,8 +77,9 @@ def filter_users(all_items):
 
     return user_items
 
+
 def expiry_time(expiry):
-    """ Convert expiry time into a datetime object """
+    """Convert expiry time into a datetime object"""
     try:
         return datetime.datetime.strptime(expiry, DATE_FORMAT)
     except Exception as E:
@@ -86,14 +87,16 @@ def expiry_time(expiry):
         # Return a time in future since the value is garbage
         return datetime.datetime.now() + datetime.timedelta(days=100)
 
+
 def is_delete_protected(item):
-    """ Does the item have a delete protection tag? """
+    """Does the item have a delete protection tag?"""
     if tags_to_dict(item.tags).get("do-not-delete", "") == "true":
         return True
     return False
 
+
 def is_expired(item, grace_period_days=0):
-    """ Check if item is expired, with optional grace period """
+    """Check if item is expired, with optional grace period"""
     now = datetime.datetime.now()
     tags = tags_to_dict(item.tags)
 
@@ -113,8 +116,9 @@ def is_expired(item, grace_period_days=0):
 
     return now > expire_time
 
+
 def send_snapshot_warning(snapshot, claim_user):
-    """ Send an email to the user warning of snapshot expiration """
+    """Send an email to the user warning of snapshot expiration"""
     # Create email
 
     # send email to portal
@@ -122,17 +126,15 @@ def send_snapshot_warning(snapshot, claim_user):
     # Add reported tag
     snapshot.create_tags(
         Tags=[
-            {
-                "Key": "snapshot-warning-sent",
-                "Value": "true"
-            },
+            {"Key": "snapshot-warning-sent", "Value": "true"},
         ]
     )
 
     return True
 
+
 def send_snapshot_delete(snapshot, claim_user):
-    """ Send an email to the owner of a to-be-deleted snapshot """
+    """Send an email to the owner of a to-be-deleted snapshot"""
     tags = tags_to_dict(snapshot.tags)
 
     # Make sure we haven't already warning
@@ -144,17 +146,15 @@ def send_snapshot_delete(snapshot, claim_user):
     # Add email tag
     snapshot.create_tags(
         Tags=[
-            {
-                "Key": "snapshot-delete-sent",
-                "Value": "true"
-            },
+            {"Key": "snapshot-delete-sent", "Value": "true"},
         ]
     )
 
     return True
 
+
 def snapshot_is_expiring(snapshot):
-    """ Determine if a snapshot is inside the warning window """
+    """Determine if a snapshot is inside the warning window"""
     tags = tags_to_dict(snapshot.tags)
 
     # Make sure we haven't already warning
@@ -175,7 +175,7 @@ def snapshot_is_expiring(snapshot):
 
 
 def volume_has_snapshot(volume, user_snapshots):
-    """ Check if a specific volume has a snapshot available """
+    """Check if a specific volume has a snapshot available"""
     for claim_user, snapshot in user_snapshots.items():
         if snapshot.volume_id == volume.volume_id:
             logger.info(
@@ -190,13 +190,14 @@ def volume_has_snapshot(volume, user_snapshots):
                 "Snapshot %s is for %s, not %s",
                 snapshot.id,
                 snapshot.volume_id,
-                volume.volume_id
+                volume.volume_id,
             )
 
     return False
 
+
 def delete_volume(volume):
-    """ Delete a user's volume by removing their PVC in K8s"""
+    """Delete a user's volume by removing their PVC in K8s"""
     # Create final Snapshot
 
     # delete pvc
@@ -204,22 +205,24 @@ def delete_volume(volume):
 
 
 def get_user_volumes():
-    """ Return unattached user volumes for a cluster """
+    """Return unattached user volumes for a cluster"""
     return filter_users(get_unattached_volumes())
 
 
 def get_user_snapshots():
-    """ Return user snapshots for a cluster """
+    """Return user snapshots for a cluster"""
     return filter_users(get_all_snapshots())
 
 
 def run_volume_management():
-    """ Process Volumes and Snapshots """
+    """Process Volumes and Snapshots"""
     user_volumes = get_user_volumes()
     user_snapshots = get_user_snapshots()
 
     for claim_user, volume in user_volumes.items():
-        logger.info(f"VOLUME: {claim_user} | ID: {volume.id} | Size: {volume.size}GB | State: {volume.state}")
+        logger.info(
+            f"VOLUME: {claim_user} | ID: {volume.id} | Size: {volume.size}GB | State: {volume.state}"
+        )
         if is_delete_protected(volume):
             logger.info(" - Volume is Delete protected!")
         elif not volume_has_snapshot(volume, user_snapshots):
@@ -245,8 +248,10 @@ def run_volume_management():
             logger.info(" - Snapshot is expiring!")
             send_snapshot_warning(snapshot, claim_user)
 
+
 def lambda_hander(event, context):
     run_volume_management()
+
 
 if __name__ == "__main__":
     run_volume_management()
