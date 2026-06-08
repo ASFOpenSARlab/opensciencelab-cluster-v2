@@ -45,8 +45,9 @@ AWS_DEFAULT_PROFILE := $(AWS_DEFAULT_PROFILE)
 AWS_REGION ?= us-west-2
 IS_PROD ?= false
 
-JUPYTER_HUB_DOCKER_TAG ?= main
+JUPYTER_HUB_DOCKER_TAG ?= test
 UI_IAM_USER := $(UI_IAM_USER)
+
 
 .PHONY := all
 all: help
