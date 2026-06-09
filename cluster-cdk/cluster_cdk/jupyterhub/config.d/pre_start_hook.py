@@ -52,10 +52,6 @@ def get_volume(
     k8s_config.load_incluster_config()
     api = k8s_client.CoreV1Api()
 
-    log.info(
-        f"Spawner gives storage as {storage_capacity}. If restoring from a snapshot, the size may be different."
-    )
-
     # Convert the desired volume size into a standarized value
     alpha = " ".join(re.findall("[a-zA-Z]+", storage_capacity)).lower()
     number = int(" ".join(re.findall("[0-9]+", storage_capacity)))
@@ -88,14 +84,23 @@ def get_volume(
 
     pvcs = api.list_namespaced_persistent_volume_claim(namespace=NAMESPACE, watch=False)
 
+    # Check to see if an pvc already exists
     has_pvc = False
     for items in pvcs.items:
         if items.metadata.name == pvc_name:
-            log.warning(
-                f"PVC '{pvc_name}' exists! Therefore a volume should have already been assigned to user '{username}'."
-            )
             has_pvc = True
 
+    # If PVC does exist, assume volume does as well. Therefore don't do anything here and return.
+    # If volume doesn't exist, maybe the volume was deleted in the AWS console.
+    # Force delete the existing pvc: `kubectl -n jupyter delete --force pvc {claim-name}`
+    if has_pvc:
+        log.info(
+            f"PVC '{pvc_name}' exists! Therefore a volume should have already been assigned to user '{username}'."
+        )
+        return
+
+    # To create a PVC we need info about any existing volumes and snapshots
+    # Get any existing volume info
     vol = ec2.describe_volumes(
         Filters=[
             {
@@ -113,10 +118,10 @@ def get_volume(
     if len(volumes) > 1:
         volumes = sorted(volumes, key=lambda s: s["CreateTime"], reverse=True)
         log.warning(
-            f"\nWARNING ***** More than one volume found for pvc name: {pvc_name}. Claiming the latest one: \n{volumes[0]}."
+            f"\nWARNING ***** More than one volume found for pvc {pvc_name}. Claiming the latest one: \n{volumes[0]}."
         )
     elif len(volumes) == 0:
-        log.info(f"No volumes found that matched pvc name '{pvc_name}'")
+        log.info(f"No volumes found that matched pvc '{pvc_name}'")
         volumes = [None]
 
     volume = volumes[0]
@@ -149,221 +154,227 @@ def get_volume(
 
     snapshot = snap[0]
 
-    # If PVC does exist, assume volume does as well.
+    vol_id = None
 
-    if not has_pvc:
-        vol_id = None
+    # Case 1: No PVC, no existing volume, but an existing snapshot. Restore volume from snapshot
+    if not volume and snapshot:
+        snapshot_id = snapshot["SnapshotId"]
+        snapshot_size = snapshot["VolumeSize"]
 
-        # If a volume doesn't exist but a snapshot does, restore from snapshot and create PVC
-        if not volume and snapshot:
-            log.warning(
-                f"PVC '{pvc_name}' does not exist. Therefore a volume will have to be created for user '{username}'."
+        log.info(
+            f"PVC '{pvc_name}' does not exist for user '{username}'. Therefore a volume will be restored from '{snapshot_id}'."
+        )
+
+        # Guarantee that the volume never shrinks if the spawner's volume is smaller than the snapshot
+        if snapshot_size > vol_size:
+            log.info(
+                f"Spawner gives storage as {vol_size}. Snapshot has volume {snapshot_size}. Expanding volume size to match snapshot."
             )
+            vol_size = snapshot_size
 
-            # Guarantee that the volume never shrinks if the spawner's volume is smaller than the snapshot
-            if snapshot["VolumeSize"] > vol_size:
-                vol_size = snapshot["VolumeSize"]
-
-            log.info("Creating volume from snapshot...")
-            vol = ec2.create_volume(
-                AvailabilityZone=AZ_NAME,
-                Encrypted=False,
-                Size=vol_size,
-                SnapshotId=snapshot["SnapshotId"],
-                VolumeType="gp3",
-                DryRun=False,
-                TagSpecifications=[
-                    {
-                        "ResourceType": "volume",
-                        "Tags": [
-                            {
-                                "Key": "Name",
-                                "Value": f"user--{username}--{LAB_SHORT_NAME}",
-                            },
-                            {
-                                "Key": f"kubernetes.io/cluster/{CLUSTER_NAME}",
-                                "Value": "owned",
-                            },
-                            {
-                                "Key": "kubernetes.io/created-for/pvc/namespace",
-                                "Value": NAMESPACE,
-                            },
-                            {
-                                "Key": "kubernetes.io/created-for/pvc/name",
-                                "Value": pvc_name,
-                            },
-                            {"Key": "RestoredFromSnapshot", "Value": "true"},
-                            {"Key": "is-jupyterhub-user", "Value": "true"},
-                        ],
-                    },
-                ],
-            )
-            vol_id = vol["VolumeId"]
-            log.info(f"Volume {vol_id} created.")
-
-            # If do-not-delete tag was present in snapshot, add to volume tags
-            if get_tag_value(snapshot, "do-not-delete"):
-                ec2.create_tags(
-                    DryRun=False,
-                    Resources=[vol_id],
-                    Tags=[
-                        {"Key": "do-not-delete", "Value": "True"},
-                    ],
-                )
-
-        elif not volume and not snapshot:
-            log.info("Creating new volume...")
-            vol = ec2.create_volume(
-                AvailabilityZone=AZ_NAME,
-                Encrypted=False,
-                Size=vol_size,
-                VolumeType="gp3",
-                DryRun=False,
-                TagSpecifications=[
-                    {
-                        "ResourceType": "volume",
-                        "Tags": [
-                            {
-                                "Key": "Name",
-                                "Value": f"user--{username}--{LAB_SHORT_NAME}",
-                            },
-                            {
-                                "Key": f"kubernetes.io/cluster/{CLUSTER_NAME}",
-                                "Value": "owned",
-                            },
-                            {
-                                "Key": "kubernetes.io/created-for/pvc/namespace",
-                                "Value": NAMESPACE,
-                            },
-                            {
-                                "Key": "kubernetes.io/created-for/pvc/name",
-                                "Value": pvc_name,
-                            },
-                            {"Key": COST_TAG_KEY, "Value": COST_TAG_VALUE},
-                            {"Key": "RestoredFromSnapshot", "Value": "false"},
-                            {"Key": "is-jupyterhub-user", "Value": "true"},
-                        ],
-                    },
-                ],
-            )
-            vol_id = vol["VolumeId"]
-            log.info(f"Volume {vol_id} created.")
-
-        # If a volume exists create PVC for volume.
-        elif volume:
-            log.warning(
-                f"Volume found for '{username}' without pvc '{pvc_name}'. This should not happen."
-            )
-
-            vol_id = volume["VolumeId"]
-            vol_size = volume["Size"]
-
-        # After volume is created (either by previously existing, as new, or restored from snapshot), create PV and PVC
-
-        # Explicit annote the provisioner. The CSI plugin appears to not do this properly.
-        annotations.update({"pv.kubernetes.io/provisioned-by": "ebs.csi.aws.com"})
-
-        # The Storage Class and PVC schema used is defined in cluster_cdk_stack.py:jupyterhub_helm_values.singleuser.storage
-        pvc_manifest = {
-            "api_version": "v1",
-            "kind": "PersistentVolumeClaim",
-            "metadata": {
-                "annotations": annotations,
-                "cluster_name": CLUSTER_NAME,
-                "labels": labels,
-                "name": pvc_name,
-                "namespace": NAMESPACE,
-            },
-            "spec": {
-                "accessModes": ["ReadWriteOnce"],
-                "resources": {"requests": {"storage": f"{vol_size}Gi"}},
-                "storageClassName": "gp3-jh-user",
-                "volumeMode": "Filesystem",
-                "volumeName": vol_id,
-            },
-        }
-
-        pv_manifest = {
-            "api_version": "v1",
-            "kind": "PersistentVolume",
-            "metadata": {
-                "annotations": pvc_manifest["metadata"]["annotations"],
-                "cluster_name": CLUSTER_NAME,
-                "labels": {
-                    "topology.kubernetes.io/region": REGION_NAME,
-                    "topology.kubernetes.io/zone": AZ_NAME,
-                },
-                "name": vol_id,
-                "namespace": NAMESPACE,
-            },
-            "spec": {
-                "accessModes": ["ReadWriteOnce"],
-                "awsElasticBlockStore": {
-                    "fsType": "ext4",
-                    "volumeID": f"aws://{AZ_NAME}/{vol_id}",
-                },
-                "capacity": {
-                    "storage": pvc_manifest["spec"]["resources"]["requests"]["storage"]
-                },
-                "nodeAffinity": {
-                    "required": {
-                        "nodeSelectorTerms": [
-                            {
-                                "matchExpressions": [
-                                    {
-                                        "key": "topology.kubernetes.io/zone",
-                                        "operator": "In",
-                                        "values": [AZ_NAME],
-                                    },
-                                    {
-                                        "key": "topology.kubernetes.io/region",
-                                        "operator": "In",
-                                        "values": [REGION_NAME],
-                                    },
-                                ]
-                            }
-                        ]
-                    }
-                },
-                "persistentVolumeReclaimPolicy": "Delete",
-                "storageClassName": "gp3-jh-user",
-                "volumeMode": "Filesystem",
-                "claimRef": {"namespace": NAMESPACE, "name": pvc_name},
-            },
-        }
-
-        # https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/CoreV1Api.md#create_persistent_volume
-        log.info("Creating persistent volume...")
-        try:
-            api.create_persistent_volume(body=pv_manifest)
-        except ApiException as e:
-            if e.status == 409:
-                log.info(f"PV {vol_id} already exists, so did not create new pv.")
-            else:
-                raise
-
-        # https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/CoreV1Api.md#create_namespaced_persistent_volume_claim
-        log.info("Creating persistent volume claim...")
-        try:
-            api.create_namespaced_persistent_volume_claim(
-                body=pvc_manifest, namespace=NAMESPACE
-            )
-        except ApiException as e:
-            if e.status == 409:
-                log.info(f"PVC {pvc_name} already exists, so did not create new pvc.")
-            else:
-                raise
-
-        ec2.create_tags(
+        vol = ec2.create_volume(
+            AvailabilityZone=AZ_NAME,
+            Encrypted=False,
+            Size=vol_size,
+            SnapshotId=snapshot_id,
+            VolumeType="gp3",
             DryRun=False,
-            Resources=[vol_id],
-            Tags=[
-                {"Key": "kubernetes.io/created-for/pv/name", "Value": vol_id},
-                {"Key": "CSIVolumeName", "Value": vol_id},
-                {"Key": "KubernetesCluster", "Value": CLUSTER_NAME},
-                {"Key": "ebs.csi.aws.com/cluster", "Value": "true"},
+            TagSpecifications=[
+                {
+                    "ResourceType": "volume",
+                    "Tags": [
+                        {
+                            "Key": "Name",
+                            "Value": f"user--{username}--{LAB_SHORT_NAME}",
+                        },
+                        {
+                            "Key": f"kubernetes.io/cluster/{CLUSTER_NAME}",
+                            "Value": "owned",
+                        },
+                        {
+                            "Key": "kubernetes.io/created-for/pvc/namespace",
+                            "Value": NAMESPACE,
+                        },
+                        {
+                            "Key": "kubernetes.io/created-for/pvc/name",
+                            "Value": pvc_name,
+                        },
+                        {"Key": "RestoredFromSnapshot", "Value": "true"},
+                        {"Key": "is-jupyterhub-user", "Value": "true"},
+                    ],
+                },
             ],
         )
+        vol_id = vol["VolumeId"]
+        log.info(f"Volume {vol_id} created.")
+
+        # If do-not-delete tag was present in snapshot, add to volume tags
+        if get_tag_value(snapshot, "do-not-delete"):
+            ec2.create_tags(
+                DryRun=False,
+                Resources=[vol_id],
+                Tags=[
+                    {"Key": "do-not-delete", "Value": "True"},
+                ],
+            )
+
+    # Case 2: No PVC, no existing volume, no existing snapshot. Create new volume.
+    elif not volume and not snapshot:
+        log.info(
+            f"PVC '{pvc_name}' does not exist for user '{username}'. Therefore a new volume will be created."
+        )
+
+        vol = ec2.create_volume(
+            AvailabilityZone=AZ_NAME,
+            Encrypted=False,
+            Size=vol_size,
+            VolumeType="gp3",
+            DryRun=False,
+            TagSpecifications=[
+                {
+                    "ResourceType": "volume",
+                    "Tags": [
+                        {
+                            "Key": "Name",
+                            "Value": f"user--{username}--{LAB_SHORT_NAME}",
+                        },
+                        {
+                            "Key": f"kubernetes.io/cluster/{CLUSTER_NAME}",
+                            "Value": "owned",
+                        },
+                        {
+                            "Key": "kubernetes.io/created-for/pvc/namespace",
+                            "Value": NAMESPACE,
+                        },
+                        {
+                            "Key": "kubernetes.io/created-for/pvc/name",
+                            "Value": pvc_name,
+                        },
+                        {"Key": COST_TAG_KEY, "Value": COST_TAG_VALUE},
+                        {"Key": "RestoredFromSnapshot", "Value": "false"},
+                        {"Key": "is-jupyterhub-user", "Value": "true"},
+                    ],
+                },
+            ],
+        )
+        vol_id = vol["VolumeId"]
+        log.info(f"Volume {vol_id} created.")
+
+    # Case 3: No PVC but existing volume. Any existing snapshots are ignored.
+    elif volume:
+        log.warning(
+            f"Volume found for '{username}' without pvc '{pvc_name}'. This is unusual."
+        )
+
+        vol_id = volume["VolumeId"]
+        vol_size = volume["Size"]
+
+    # After volume is created (either by previously existing, as new, or restored from snapshot), create PV and PVC
+
+    # Explicitly annote the provisioner. The CSI plugin appears to not do this properly.
+    annotations.update({"pv.kubernetes.io/provisioned-by": "ebs.csi.aws.com"})
+
+    # The Storage Class and PVC schema used is defined in cluster_cdk_stack.py:jupyterhub_helm_values.singleuser.storage
+    pvc_manifest = {
+        "api_version": "v1",
+        "kind": "PersistentVolumeClaim",
+        "metadata": {
+            "annotations": annotations,
+            "cluster_name": CLUSTER_NAME,
+            "labels": labels,
+            "name": pvc_name,
+            "namespace": NAMESPACE,
+        },
+        "spec": {
+            "accessModes": ["ReadWriteOnce"],
+            "resources": {"requests": {"storage": f"{vol_size}Gi"}},
+            "storageClassName": "gp3-jh-user",
+            "volumeMode": "Filesystem",
+            "volumeName": vol_id,
+        },
+    }
+
+    pv_manifest = {
+        "api_version": "v1",
+        "kind": "PersistentVolume",
+        "metadata": {
+            "annotations": pvc_manifest["metadata"]["annotations"],
+            "cluster_name": CLUSTER_NAME,
+            "labels": {
+                "topology.kubernetes.io/region": REGION_NAME,
+                "topology.kubernetes.io/zone": AZ_NAME,
+            },
+            "name": vol_id,
+            "namespace": NAMESPACE,
+        },
+        "spec": {
+            "accessModes": ["ReadWriteOnce"],
+            "awsElasticBlockStore": {
+                "fsType": "ext4",
+                "volumeID": f"aws://{AZ_NAME}/{vol_id}",
+            },
+            "capacity": {
+                "storage": pvc_manifest["spec"]["resources"]["requests"]["storage"]
+            },
+            "nodeAffinity": {
+                "required": {
+                    "nodeSelectorTerms": [
+                        {
+                            "matchExpressions": [
+                                {
+                                    "key": "topology.kubernetes.io/zone",
+                                    "operator": "In",
+                                    "values": [AZ_NAME],
+                                },
+                                {
+                                    "key": "topology.kubernetes.io/region",
+                                    "operator": "In",
+                                    "values": [REGION_NAME],
+                                },
+                            ]
+                        }
+                    ]
+                }
+            },
+            "persistentVolumeReclaimPolicy": "Delete",
+            "storageClassName": "gp3-jh-user",
+            "volumeMode": "Filesystem",
+            "claimRef": {"namespace": NAMESPACE, "name": pvc_name},
+        },
+    }
+
+    # https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/CoreV1Api.md#create_persistent_volume
+    log.info("Creating persistent volume...")
+    try:
+        api.create_persistent_volume(body=pv_manifest)
+    except ApiException as e:
+        if e.status == 409:
+            log.info(f"PV {vol_id} already exists, so did not create new pv.")
+        else:
+            raise
+
+    # https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/CoreV1Api.md#create_namespaced_persistent_volume_claim
+    log.info("Creating persistent volume claim...")
+    try:
+        api.create_namespaced_persistent_volume_claim(
+            body=pvc_manifest, namespace=NAMESPACE
+        )
+    except ApiException as e:
+        if e.status == 409:
+            log.info(f"PVC {pvc_name} already exists, so did not create new pvc.")
+        else:
+            raise
+
+    ec2.create_tags(
+        DryRun=False,
+        Resources=[vol_id],
+        Tags=[
+            {"Key": "kubernetes.io/created-for/pv/name", "Value": vol_id},
+            {"Key": "CSIVolumeName", "Value": vol_id},
+            {"Key": "KubernetesCluster", "Value": CLUSTER_NAME},
+            {"Key": "ebs.csi.aws.com/cluster", "Value": "true"},
+        ],
+    )
 
 
 def server_starting_tag(pvc_name: str, **kwargs) -> None:
@@ -409,12 +420,28 @@ def server_starting_tag(pvc_name: str, **kwargs) -> None:
         )
 
 
-def my_pre_hook(spawner: c.Spawner) -> None:  # noqa: F821
+async def my_pre_hook(spawner: c.Spawner) -> None:  # noqa: F821
     try:
+        # Kubespawner overrides in the Profile List are enacted AFTER this hook script runs.
+        # So we need to retrieve the user-selected profile and options
+        user_options = spawner.user_options
+        log.info(f"User options selected: {user_options}")
+
+        selected_profile_slug: str = user_options.get("profile")
+
+        # Get the profile list (as defined in profiles.py)
+        profile_list: list = spawner.profile_list
+        if callable(profile_list):
+            profile_list: list = await profile_list(spawner)  # type: ignore
+
+        # Cycle through profiles until the right profile is found and then apply overrides
+        for profile in profile_list:
+            if profile["slug"] == selected_profile_slug:
+                overrides = profile.get("kubespawner_override", {})
+                spawner.storage_capacity = overrides.get("storage_capacity", "10Gi")
+
         # Get a object with pvc metadata that JupyterHub thinks you will need
         spawn_pvc = spawner.get_pvc_manifest()
-
-        log.info(f"***** spawner: {vars(spawner)}")
 
         args = {
             "username": spawner.user.name,
