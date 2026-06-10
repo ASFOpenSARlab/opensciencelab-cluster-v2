@@ -45,8 +45,9 @@ AWS_DEFAULT_PROFILE := $(AWS_DEFAULT_PROFILE)
 AWS_REGION ?= us-west-2
 IS_PROD ?= false
 
-JUPYTER_HUB_DOCKER_TAG ?= main
+JUPYTER_HUB_DOCKER_TAG ?= test
 UI_IAM_USER := $(UI_IAM_USER)
+
 
 .PHONY := all
 all: help
@@ -95,6 +96,8 @@ cdk-shell:
 		-e PORTAL_DOMAINS \
 		-e ALLOWED_LAB_PROFILES \
 		-e LAB_SHORT_NAME \
+		-e VOLUME_CRON_SCHEDULE \
+		-e SNAPSHOT_WARNING_DAYS \
 		-w /code/ \
 		--pull always \
 		${IMAGE_NAME} || \
