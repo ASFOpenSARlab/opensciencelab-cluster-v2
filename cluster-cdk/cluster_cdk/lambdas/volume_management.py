@@ -9,12 +9,18 @@ import boto3
 CLAIM_TAG = "kubernetes.io/created-for/pvc/name"
 CLUSTER_TAG = "KubernetesCluster"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S+00:00"
+REQUIRED_SNAPSHOT_TAGS = ("volume-delete-time", "snapshot-delete-time")
 
 CLUSTER_NAME = os.getenv("CLUSTER_NAME")
 SNAPSHOT_WARNING_DAYS = int(os.getenv("SNAPSHOT_WARNING_DAYS", "5"))
 SNAPSHOT_EXPIRY_GRACEPERIOD = int(os.getenv("SNAPSHOT_EXPIRY_GRACEPERIOD", "1"))
 
-logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+logging.basicConfig(
+    level=logging.DEBUG if LOG_LEVEL.lower() == "debug" else logging.INFO,
+    stream=sys.stdout,
+)
 logger = logging.getLogger()
 
 ec2 = boto3.client("ec2")
@@ -42,7 +48,10 @@ def get_unattached_volumes():
 def get_all_snapshots():
     """get all volume snapshots owned by this AWS account"""
     this_account = boto3.client("sts").get_caller_identity().get("Account")
-    return ec2_resource.snapshots.filter(OwnerIds=[this_account])
+    return ec2_resource.snapshots.filter(
+        OwnerIds=[this_account],
+        Filters=[{"Name": "status", "Values": ["completed"]}],
+    )
 
 
 def get_claim_user(item):
@@ -117,8 +126,24 @@ def is_expired(item, grace_period_days=0):
     return now > expire_time
 
 
+def snapshot_has_required_tags(snapshot):
+    """Verify snapshot has tags required for proper management"""
+    tags = tags_to_dict(snapshot.tags)
+
+    for required_tag in REQUIRED_SNAPSHOT_TAGS:
+        if not tags.get(required_tag):
+            logger.warning(
+                "Required tag %s not found in %s",
+                required_tag,
+                snapshot.id,
+            )
+            return False
+
+    return True
+
+
 def send_snapshot_warning(snapshot, claim_user):
-    """Send an email to the user warning of snapshot expiration"""
+    """Email the user warning of snapshot expiration"""
     # Create email
 
     # send email to portal
@@ -174,7 +199,7 @@ def snapshot_is_expiring(snapshot):
     return False
 
 
-def volume_has_snapshot(volume, user_snapshots):
+def get_snapshot_for_volume(volume, user_snapshots):
     """Check if a specific volume has a snapshot available"""
     for claim_user, snapshot in user_snapshots.items():
         if snapshot.volume_id == volume.volume_id:
@@ -184,7 +209,7 @@ def volume_has_snapshot(volume, user_snapshots):
                 volume.volume_id,
                 claim_user,
             )
-            return True
+            return snapshot
         else:
             logger.debug(
                 "Snapshot %s is for %s, not %s",
@@ -193,7 +218,7 @@ def volume_has_snapshot(volume, user_snapshots):
                 volume.volume_id,
             )
 
-    return False
+    return None
 
 
 def delete_volume(volume):
@@ -223,10 +248,16 @@ def run_volume_management():
         logger.info(
             f"VOLUME: {claim_user} | ID: {volume.id} | Size: {volume.size}GB | State: {volume.state}"
         )
+
+        # attempt to find a snapshot for the volume
+        snapshot_from_volume = get_snapshot_for_volume(volume, user_snapshots)
+
         if is_delete_protected(volume):
             logger.info(" - Volume is Delete protected!")
-        elif not volume_has_snapshot(volume, user_snapshots):
+        elif not snapshot_from_volume:
             logger.error(" - Volume has no active snapshot!")
+        elif not snapshot_has_required_tags(snapshot_from_volume):
+            logger.error(" - Ignoring volume with invalid snapshot tags")
         elif is_expired(volume):
             logger.info(" - Volume is expired!")
             delete_volume(volume)
