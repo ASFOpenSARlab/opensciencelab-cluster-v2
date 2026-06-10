@@ -16,7 +16,7 @@ on: # yamllint disable-line rule:truthy
 
       runTestSuite:
         description: "Run test suite on build. Note that Test always runs tests."
-        tyoe: boolean
+        type: boolean
         default: false
 
   push:
@@ -48,6 +48,8 @@ jobs:
       PORTAL_DOMAINS: ${{ vars.PORTAL_DOMAINS }}
       ALLOWED_LAB_PROFILES: ${{ vars.ALLOWED_LAB_PROFILES }}
       LAB_SHORT_NAME: ${{ inputs.envOverride || needs.setup.outputs.environment }}
+      VOLUME_CRON_SCHEDULE: ${{ vars.VOLUME_CRON_SCHEDULE }}
+      SNAPSHOT_WARNING_DAYS: ${{ vars.SNAPSHOT_WARNING_DAYS }}
     steps:
       - name: Log Environment
         run: |

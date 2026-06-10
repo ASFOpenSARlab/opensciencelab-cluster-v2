@@ -18,8 +18,12 @@ from aws_cdk import (  # type: ignore
     SecretValue,
     aws_eks_v2 as eks,
     aws_ec2 as ec2,
+    aws_dlm as dlm,
     aws_iam as iam,
+    aws_lambda as lambda_,
     aws_secretsmanager as secretsmanager,
+    aws_events as events,
+    aws_events_targets as targets,
     lambda_layer_kubectl_v34,
 )
 
@@ -46,6 +50,10 @@ class ClusterCdkStack(Stack):
             "JUPYTER_HUB_DOCKER_TAG", self.DEPLOY_PREFIX
         )
         self.UI_IAM_USER = os.getenv("UI_IAM_USER", None)
+
+        # Default cron schedule to top of every hour
+        self.VOLUME_CRON_SCHEDULE = os.getenv("VOLUME_CRON_SCHEDULE", "0 * * * ? *")
+        self.SNAPSHOT_WARNING_DAYS = os.getenv("SNAPSHOT_WARNING_DAYS", "5")
 
         self.LAB_SHORT_NAME = str(os.getenv("LAB_SHORT_NAME", "")).lower()
         if not self.LAB_SHORT_NAME:
@@ -711,6 +719,104 @@ class ClusterCdkStack(Stack):
             "proxy-public-loadbalancer",
             namespace="jupyter",
             timeout=Duration.minutes(15),
+        )
+
+        #####################################################################
+        #
+        #    Volume/Snapshot Management
+        #
+        #####################################################################
+
+        self.volume_management_lambda = lambda_.Function(
+            self,
+            description=f"{self.DEPLOY_PREFIX} Volume Management Lambda",
+            id=f"{self.DEPLOY_PREFIX}_volume_management",
+            runtime=lambda_.Runtime.PYTHON_3_13,
+            timeout=Duration.minutes(15),
+            handler="volume_management.lambda_hander",
+            code=lambda_.Code.from_asset(
+                path="cluster_cdk/lambdas/",
+            ),
+            environment={
+                "CLUSTER_NAME": self.cluster.cluster_name,
+                "SNAPSHOT_WARNING_DAYS": self.SNAPSHOT_WARNING_DAYS,
+                "PORTAL_DOMAINS": self.PORTAL_DOMAINS,
+                "SSO_SECRET": self.sso_token.secret_arn,
+            },
+        )
+
+        # grant lambda the access it needs
+        self.sso_token.grant_read(self.volume_management_lambda)
+        self.volume_management_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "ec2:DescribeVolumes",
+                    "ec2:DescribeSnapshots",
+                    "ec2:CreateSnapshot",
+                    "ec2:DeleteSnapshot",
+                ],
+                resources=["*"],
+            )
+        )
+
+        self.cron_schedule_rule = events.Rule(
+            self,
+            id=f"{self.DEPLOY_PREFIX}_volume_management_rule",
+            schedule=events.Schedule.expression(f"cron({self.VOLUME_CRON_SCHEDULE})"),
+            description="Triggers Volume Management Lambda",
+        )
+
+        self.cron_schedule_rule.add_target(
+            targets.LambdaFunction(self.volume_management_lambda)
+        )
+
+        # DLM configuration to create daily volume snapshots
+        self.dlm_role = iam.Role(
+            self,
+            id=f"{self.DEPLOY_PREFIX}_dlm_service_role",
+            assumed_by=iam.ServicePrincipal("dlm.amazonaws.com"),
+        )
+
+        # Attach the AWS-managed policy for DLM execution
+        self.dlm_role.add_managed_policy(
+            iam.ManagedPolicy.from_aws_managed_policy_name(
+                "service-role/AWSDataLifecycleManagerServiceRole"
+            )
+        )
+
+        # Create DLM Policy - https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_dlm.html
+        self.ebs_lifecycle_policy = dlm.CfnLifecyclePolicy(
+            self,
+            id=f"{self.DEPLOY_PREFIX}_daily_snapshot",
+            description="Daily backup policy for EBS volumes",
+            execution_role_arn=self.dlm_role.role_arn,
+            state="ENABLED",
+            policy_details=dlm.CfnLifecyclePolicy.PolicyDetailsProperty(
+                resource_types=["VOLUME"],
+                # Target volumes from this cluster only
+                target_tags=[
+                    CfnTag(key="KubernetesCluster", value=self.cluster.cluster_name),
+                ],
+                schedules=[
+                    dlm.CfnLifecyclePolicy.ScheduleProperty(
+                        name="DailySnapshots",
+                        tags_to_add=[
+                            CfnTag(
+                                key="CreatedBy",
+                                value=f"{self.DEPLOY_PREFIX}_daily_snapshot",
+                            ),
+                        ],
+                        create_rule=dlm.CfnLifecyclePolicy.CreateRuleProperty(
+                            interval=24,  # every 24 hours
+                            interval_unit="HOURS",
+                            times=["12:00"],  # Start window time (UTC HH:MM format)
+                        ),
+                        retain_rule=dlm.CfnLifecyclePolicy.RetainRuleProperty(count=1),
+                        copy_tags=True,
+                    )
+                ],
+            ),
         )
 
         #####################################################################

@@ -75,16 +75,19 @@ nano .env
 `.env`:
 
 ```bash
-export AWS_PROFILE=<AWS PROFILE>
-export DEPLOY_PREFIX=<YOUR INITIALS>
+export AWS_PROFILE="profile_name"            # The profile configured to access AWS Account
+export DEPLOY_PREFIX="eg"                    # Short deployment prefix value, probably initials
 
-export JUPYTER_HUB_DOCKER_TAG=<OPENSCIENCELAB JUPYTERHUB IMAGE TAG>
-export UI_IAM_USER=<AWS CONSOLE USER ROLE>
+export JUPYTER_HUB_DOCKER_TAG="test"         # needs to exist for opensciencelab-jupyterhub image
+export UI_IAM_USER="AWSReservedSSO_Project"  # IAM Role used by admins in the AWS console
 
-export LAB_SHORT_NAME=<LAB SHORT NAME>
-export ALLOWED_LAB_PROFILES=<LIST OF PROFILES>
-export ADMIN_USERS=<JUPYTERHUB ADMIN USERNAME>
-export PORTAL_DOMAINS=<PORTAL CALLBACK CLOUDFRONT DOMAIN(S)>
+export LAB_SHORT_NAME="eg"                   # Probably a duplicate of DEPLOY_PREFIX, not used for actions
+export ALLOWED_LAB_PROFILES="sar"            # Comma seperated list of profiles to enable
+export ADMIN_USERS="nobody, joe"             # Comma seperated list of users to embed into JH       
+export PORTAL_DOMAINS="https://...."         # Comma seperated list of approved portal domains
+
+export VOLUME_CRON_SCHEDULE="0 * * * ? *"    # Schedule to run the volume management lambda
+export SNAPSHOT_WARNING_DAYS="5"             # Number of days before delete to warn for old snapshots
 ```
 
 For example configurations, see the [GitHub Environments](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/settings/environments)
@@ -96,6 +99,12 @@ environment:
 ```bash
 source .env
 ```
+
+##### Pre-Deploy
+
+Initial stack deployments take a long time. If the initial stack deploy fails, it takes
+a very long time to delete and retry. It can be helpful to deploy the main stack prior
+to beginning development to create a stable cluster before feature development.
 
 ##### Start CDK Shell
 
