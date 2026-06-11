@@ -653,7 +653,7 @@ class ClusterCdkStack(Stack):
                     "dynamic": {
                         "storageClass": "gp3-jh-user",
                         # This {username} is a template used by jupyterhub and is not an f-string
-                        # Fpr possible template values: https://jupyterhub-kubespawner.readthedocs.io/en/latest/templates.html#templated-fields
+                        # For possible template values: https://jupyterhub-kubespawner.readthedocs.io/en/latest/templates.html#templated-fields
                         "pvcNameTemplate": "claim-{username}",
                     },
                 },

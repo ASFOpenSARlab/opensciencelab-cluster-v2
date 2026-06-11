@@ -17,7 +17,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-def _get_delta_time(days: int) -> datetime.datetime:
+def _get_delta_time(days: int) -> str:
     """
     Get datetime now in UTC.
     Add number of `days` until event.
@@ -26,7 +26,7 @@ def _get_delta_time(days: int) -> datetime.datetime:
     the_future_in_utc = datetime.datetime.now(
         datetime.timezone.utc
     ) + datetime.timedelta(days=days)
-    return the_future_in_utc.replace(second=0, microsecond=0)
+    return f"{the_future_in_utc.replace(second=0, microsecond=0)}"
 
 
 def server_stopping_tags(pvc_name: str) -> None:

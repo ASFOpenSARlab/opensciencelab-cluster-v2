@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 def standarized_storage_capacity(storage_capacity: str) -> int:
     """
     Args:
-        storage_capacity: volume size string. Ex. "100Gi", "50ki"
+        storage_capacity: volume size string. Ex. "100Gi", "2Ti"
 
     Returns:
         An integer of GiB size.
@@ -39,19 +39,11 @@ def standarized_storage_capacity(storage_capacity: str) -> int:
     number = int(" ".join(re.findall("[0-9]+", storage_capacity)))
 
     possible_units = {
-        "ei": 2**60,
-        "pi": 2**50,
         "ti": 2**40,
         "gi": 2**30,
-        "mi": 2**20,
-        "ki": 2**10,
-        "e": 10**18,
-        "p": 10**15,
         "t": 10**12,
         "g": 10**9,
-        "m": 10**6,
-        "k": 10**3,
-        "": 1,
+        "": 1,  # Default without units is bytes
     }
 
     vol_size = number * possible_units[alpha]
@@ -106,10 +98,7 @@ def get_volume(
     pvcs = api.list_namespaced_persistent_volume_claim(namespace=NAMESPACE, watch=False)
 
     # Check to see if an pvc already exists
-    has_pvc = False
-    for items in pvcs.items:
-        if items.metadata.name == pvc_name:
-            has_pvc = True
+    has_pvc = pvc_name in [item.metadata.name for item in pvcs.items]
 
     # To create a PVC we need info about any existing volumes and snapshots
     # Get any existing volume info
@@ -280,6 +269,10 @@ def get_volume(
                             "Value": "owned",
                         },
                         {
+                            "Key": "KubernetesCluster",
+                            "Value": CLUSTER_NAME,
+                        },
+                        {
                             "Key": "kubernetes.io/created-for/pvc/namespace",
                             "Value": NAMESPACE,
                         },
@@ -438,17 +431,9 @@ def server_starting_tag(pvc_name: str, **kwargs) -> None:
         ]
     )
 
-    vol = vol["Volumes"]
-
-    if len(vol) > 1:
+    if len(vol["Volumes"]) > 1:
         raise Exception(f"\n ***** More than one volume for pvc: {pvc_name}")
-
-    if len(vol) != 1:
-        vol = []
-    else:
-        vol = vol[0]
-
-    if vol:
+    elif vol:
         ec2.create_tags(
             DryRun=False,
             Resources=[vol["VolumeId"]],
@@ -469,10 +454,10 @@ async def my_pre_hook(spawner: c.Spawner) -> None:  # noqa: F821
     try:
         # Kubespawner overrides in the Profile List are enacted AFTER this hook script runs.
         # So we need to retrieve the user-selected profile and options
-        user_options = spawner.user_options
+        user_options: dict = spawner.user_options
         log.info(f"User options selected: {user_options}")
 
-        selected_profile_slug: str = user_options.get("profile")
+        selected_profile_slug: str | None = user_options.get("profile")
 
         # Get the profile list (as defined in profiles.py)
         profile_list: list = spawner.profile_list
