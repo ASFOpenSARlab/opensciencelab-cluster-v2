@@ -51,7 +51,7 @@ If more than one EBS snapshot is found, the most recent one will be used when re
 
 If the restoring EBS snapshot has a size bigger than the configured value, the restored volume size will be the same as the snapshot.
 
-The default size of user `storage_capacity` is 10GBi if not provided in configuration. Values for user `storage_capacity` can be applied to individual lab profiles in [opensciencelab.toml](./cluster-cdk/cluster_cdk/opensciencelab.toml). Once the volume is created, this storage value can not be changed via updating the lab profile. EBS volumes cannot be shrunk but they may be expanded. If volumes could be shrunk, users would lose data. Therefore, bigger storage sizes should be assigned carefully to avoid costs. To expand the user volume size, use AWS cloudshell and edit `spec.resources.requests.storage` within the user's PVC.
+The default size of user `storage_capacity` is 10GBi if not provided in configuration. Values for user `storage_capacity` can be applied to individual lab profiles in [opensciencelab.toml](./cluster-cdk/cluster_cdk/opensciencelab.toml). Once the volume is created, this storage value can not be changed via updating the lab profile. EBS volumes cannot be shrunk but they may be expanded. Therefore, bigger storage sizes should be assigned carefully to avoid costs. To expand the user volume size, use AWS cloudshell and edit `spec.resources.requests.storage` within the user's PVC. If the `storage_capacity` of a profile is larger than the current volume size, the volume will expand to that size.
 
 Various EBS tags are created on server start and stop. Some relevant ones are
 
