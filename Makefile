@@ -48,6 +48,9 @@ IS_PROD ?= false
 JUPYTER_HUB_DOCKER_TAG ?= test
 UI_IAM_USER := $(UI_IAM_USER)
 
+# Extra env var for running volume management lambda
+CLUSTER_NAME ?= eks-cluster-$(DEPLOY_PREFIX)
+
 
 .PHONY := all
 all: help
@@ -98,6 +101,8 @@ cdk-shell:
 		-e LAB_SHORT_NAME \
 		-e VOLUME_CRON_SCHEDULE \
 		-e SNAPSHOT_WARNING_DAYS \
+		-e AWS_CLI_PATH \
+		-e CLUSTER_NAME \
 		-w /code/ \
 		--pull always \
 		${IMAGE_NAME} || \
@@ -133,17 +138,33 @@ install-reqs:
 	  ( echo "Installing cluster-cdk/requirements.txt" && \
 		pip install -r cluster-cdk/requirements.txt ) )
 
+.PHONY := bundle-deps
+bundle-deps:
+	echo "Checking if ${BUILD_DEPS} exists..." && \
+	if [[ ! -d ${BUILD_DEPS} ]]; then \
+		mkdir -p ${BUILD_DEPS} && \
+		pip install -r cluster-cdk/cluster_cdk/lambdas/requirements.txt --platform manylinux2014_x86_64 --only-binary=:all: -t ${BUILD_DEPS} ; \
+	else \
+		echo "Skipping deps bundled in ${BUILD_DEPS}. Remove to rebuild."; \
+	fi
+
+.PHONY := run-volume-lambda
+run-volume-lambda: bundle-deps
+	export PYTHONPATH="${BUILD_DEPS}:$${PYTHONPATH}" && \
+	export CLUSTER_NAME="${CLUSTER_NAME}" && \
+	python3 cluster-cdk/cluster_cdk/lambdas/volume_management.py
+
 .PHONY := test
-test: remove-cdk-out install-reqs
+test: remove-cdk-out install-reqs bundle-deps
 	@echo "Running tests for Cluster (${DEPLOY_PREFIX})"
 
 .PHONY := synth-cluster
-synth-cluster: install-reqs
+synth-cluster: install-reqs bundle-deps
 	@echo "Synthesizing ${DEPLOY_PREFIX}/cluster-cdk"
 	cd ./cluster-cdk && cdk synth
 
 .PHONY := deploy-cluster
-deploy-cluster: install-reqs
+deploy-cluster: install-reqs bundle-deps
 	@echo "Deploying ${DEPLOY_PREFIX}/cluster-cdk"
 	cd ./cluster-cdk && cdk --require-approval never deploy --no-rollback
 
