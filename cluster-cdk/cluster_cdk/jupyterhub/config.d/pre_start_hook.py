@@ -3,8 +3,13 @@ import os
 import datetime
 import logging
 import traceback
+import re
 
 import boto3
+
+from kubernetes import client as k8s_client
+from kubernetes import config as k8s_config
+from kubernetes.client.rest import ApiException
 
 LAB_SHORT_NAME = os.environ["LAB_SHORT_NAME"]
 CLUSTER_NAME = os.environ["CLUSTER_NAME"]
@@ -21,37 +26,14 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-def get_tag_value(resource, key):
-    val = [s["Value"] for s in resource["Tags"] if s["Key"] == key]
-
-    if not val:
-        val = [""]
-
-    return str(val[0])
-
-
-def get_volume(
-    username: str, pvc_name: str, storage_capacity: str, annotations: dict, labels: dict
-) -> None:
+def standarized_storage_capacity(storage_capacity: str) -> int:
     """
-    # Before mounting the home directory, check to see if a PVC exists.
-    # If it does, then assume there is a EBS volume associated.
-    # If it doesn't, check for any EBS snapshots.
-    # If a snapshot exists, create a volume from the snapshot.
-    # Else, JupyterHub will create the volume.
+    Args:
+        storage_capacity: volume size string. Ex. "100Gi", "50ki"
+
+    Returns:
+        An integer of GiB size.
     """
-
-    import re
-
-    import boto3
-
-    from kubernetes import client as k8s_client
-    from kubernetes import config as k8s_config
-    from kubernetes.client.rest import ApiException
-
-    k8s_config.load_incluster_config()
-    api = k8s_client.CoreV1Api()
-
     # Convert the desired volume size into a standarized value
     alpha = " ".join(re.findall("[a-zA-Z]+", storage_capacity)).lower()
     number = int(" ".join(re.findall("[0-9]+", storage_capacity)))
@@ -79,6 +61,45 @@ def get_volume(
     if vol_size < 0:
         vol_size = 1
 
+    return vol_size
+
+
+def expand_volume(volume_size: str, pvc_name: str, api: k8s_client.CoreV1Api) -> None:
+    vol_size: int = standarized_storage_capacity(volume_size)
+
+    body = {"spec": {"resources": {"requests": {"storage": f"{vol_size}Gi"}}}}
+
+    api.patch_namespaced_persistent_volume_claim(
+        name=pvc_name, namespace=NAMESPACE, body=body
+    )
+    log.info(f"Successfully patched PVC {pvc_name} storage parameter to {vol_size}Gi.")
+
+
+def get_tag_value(resource, key):
+    val = [s["Value"] for s in resource["Tags"] if s["Key"] == key]
+
+    if not val:
+        val = [""]
+
+    return str(val[0])
+
+
+def get_volume(
+    username: str, pvc_name: str, storage_capacity: str, annotations: dict, labels: dict
+) -> None:
+    """
+    # Before mounting the home directory, check to see if a PVC exists.
+    # If it does, then assume there is a EBS volume associated.
+    # If it doesn't, check for any EBS snapshots.
+    # If a snapshot exists, create a volume from the snapshot.
+    # Else, JupyterHub will create the volume.
+    """
+
+    k8s_config.load_incluster_config()
+    api = k8s_client.CoreV1Api()
+
+    desired_vol_size = standarized_storage_capacity(storage_capacity)
+
     session = boto3.Session(region_name=REGION_NAME)
     ec2 = session.client("ec2")
 
@@ -89,15 +110,6 @@ def get_volume(
     for items in pvcs.items:
         if items.metadata.name == pvc_name:
             has_pvc = True
-
-    # If PVC does exist, assume volume does as well. Therefore don't do anything here and return.
-    # If volume doesn't exist, maybe the volume was deleted in the AWS console.
-    # Force delete the existing pvc: `kubectl -n jupyter delete --force pvc {claim-name}`
-    if has_pvc:
-        log.info(
-            f"PVC '{pvc_name}' exists! Therefore a volume should have already been assigned to user '{username}'."
-        )
-        return
 
     # To create a PVC we need info about any existing volumes and snapshots
     # Get any existing volume info
@@ -154,6 +166,31 @@ def get_volume(
 
     snapshot = snap[0]
 
+    # If PVC does exist, assume volume does as well. Therefore don't do anything here and return.
+    # If volume doesn't exist, maybe the volume was deleted in the AWS console.
+    # Force delete the existing pvc: `kubectl -n jupyter delete --force pvc {claim-name}`
+    if volume and has_pvc:
+        log.info(
+            f"PVC '{pvc_name}' exists! Therefore a volume should have already been assigned to user '{username}'."
+        )
+
+        # Boto3 describe_volume returns an integer of volume size in GiBs
+        vol_size: int = volume["Size"]
+
+        # Since we only really work in GB sized increments, we can compare the volumes on the Gi scale.
+        if desired_vol_size > vol_size:
+            log.info(
+                f"Expanding existing volume size from {vol_size}Gi to {desired_vol_size}Gi"
+            )
+            expand_volume(f"{desired_vol_size}Gi", pvc_name, api)
+
+        return
+
+    if not volume and has_pvc:
+        raise Exception(
+            "No volume found to match existing PVC. This should not happen and something probably went wrong."
+        )
+
     vol_id = None
 
     # Case 1: No PVC, no existing volume, but an existing snapshot. Restore volume from snapshot
@@ -166,16 +203,16 @@ def get_volume(
         )
 
         # Guarantee that the volume never shrinks if the spawner's volume is smaller than the snapshot
-        if snapshot_size > vol_size:
+        if snapshot_size > desired_vol_size:
             log.info(
-                f"Spawner gives storage as {vol_size}. Snapshot has volume {snapshot_size}. Expanding volume size to match snapshot."
+                f"Spawner gives storage as {desired_vol_size}. Snapshot has volume {snapshot_size}. Expanding volume size to match snapshot."
             )
-            vol_size = snapshot_size
+            desired_vol_size = snapshot_size
 
         vol = ec2.create_volume(
             AvailabilityZone=AZ_NAME,
             Encrypted=False,
-            Size=vol_size,
+            Size=desired_vol_size,
             SnapshotId=snapshot_id,
             VolumeType="gp3",
             DryRun=False,
@@ -227,7 +264,7 @@ def get_volume(
         vol = ec2.create_volume(
             AvailabilityZone=AZ_NAME,
             Encrypted=False,
-            Size=vol_size,
+            Size=desired_vol_size,
             VolumeType="gp3",
             DryRun=False,
             TagSpecifications=[
@@ -260,7 +297,7 @@ def get_volume(
         vol_id = vol["VolumeId"]
         log.info(f"Volume {vol_id} created.")
 
-    # Case 3: No PVC but existing volume. Any existing snapshots are ignored.
+    # Case 3: No PVC but existing volume. Any existing snapshots are ignored. Volume will be expanded to desired value if needed.
     elif volume:
         log.warning(
             f"Volume found for '{username}' without pvc '{pvc_name}'. This is unusual."
@@ -268,6 +305,14 @@ def get_volume(
 
         vol_id = volume["VolumeId"]
         vol_size = volume["Size"]
+
+        if desired_vol_size > vol_size:
+            log.info(
+                f"Expanding existing volume size from {vol_size}Gi to {desired_vol_size}Gi"
+            )
+            expand_volume(f"{desired_vol_size}Gi", pvc_name, api)
+        else:
+            desired_vol_size = vol_size
 
     # After volume is created (either by previously existing, as new, or restored from snapshot), create PV and PVC
 
@@ -287,7 +332,7 @@ def get_volume(
         },
         "spec": {
             "accessModes": ["ReadWriteOnce"],
-            "resources": {"requests": {"storage": f"{vol_size}Gi"}},
+            "resources": {"requests": {"storage": f"{desired_vol_size}Gi"}},
             "storageClassName": "gp3-jh-user",
             "volumeMode": "Filesystem",
             "volumeName": vol_id,

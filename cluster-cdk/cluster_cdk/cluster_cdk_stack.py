@@ -490,6 +490,7 @@ class ClusterCdkStack(Stack):
                     "ec2:DescribeInstances",
                     "ec2:DescribeTags",
                     "ec2:DescribeVolumeStatus",
+                    "ec2:DescribeVolumesModifications",
                     "ec2:DescribeVolumes",
                     "ec2:DetachVolume",
                 ],
@@ -540,7 +541,59 @@ class ClusterCdkStack(Stack):
 
         self.jupyterhub_helm_version = "4.3.2"
 
-        # Make sure the hook volume scripts have the right volume provisioner permissions
+        # Modify the k8s permissions so the volumes can be modified in place
+        # Patching existing clusterroles is difficult. So we are fully replacing the original from jupyterhub.
+        # This particular action adds the verb "patch" to PVC
+        # Original can be found in the Kubernetes git repo https://github.com/kubernetes/kubernetes/blob/release-1.36/plugin/pkg/auth/authorizer/rbac/bootstrappolicy/policy.go#L501
+        # and https://github.com/kubernetes/kubernetes/blob/8f8aa9aae157b88db6ba02836c57596496d3f684/plugin/pkg/auth/authorizer/rbac/bootstrappolicy/testdata/cluster-roles.yaml#L1320
+        eks.KubernetesManifest(
+            self,
+            "PVProvisionerClusterRole",
+            cluster=self.cluster,
+            overwrite=True,
+            manifest=[
+                {
+                    "apiVersion": "rbac.authorization.k8s.io/v1",
+                    "kind": "ClusterRole",
+                    "metadata": {
+                        "annotations": {
+                            "rbac.authorization.kubernetes.io/autoupdate": "true"
+                        },
+                        "labels": {"kubernetes.io/bootstrapping": "rbac-defaults"},
+                        "name": "system:persistent-volume-provisioner",
+                    },
+                    "rules": [
+                        {
+                            "apiGroups": [""],
+                            "resources": ["persistentvolumes"],
+                            "verbs": ["create", "delete", "get", "list", "watch"],
+                        },
+                        {
+                            "apiGroups": [""],
+                            "resources": ["persistentvolumeclaims"],
+                            "verbs": ["get", "list", "update", "watch", "patch"],
+                        },
+                        {
+                            "apiGroups": ["storage.k8s.io"],
+                            "resources": ["storageclasses"],
+                            "verbs": ["get", "list", "watch"],
+                        },
+                        {
+                            "apiGroups": [""],
+                            "resources": ["events"],
+                            "verbs": ["watch"],
+                        },
+                        {
+                            "apiGroups": ["", "events.k8s.io"],
+                            "resources": ["events"],
+                            "verbs": ["create", "patch", "update"],
+                        },
+                    ],
+                }
+            ],
+        )
+
+        # Make sure the hook volume scripts (via the hub service account) have the right volume provisioner permissions
         self.cluster.add_manifest(
             "PVClusterRoleBinding",
             {
@@ -642,7 +695,7 @@ class ClusterCdkStack(Stack):
                     "JupyterHub": {
                         "default_url": f"/lab/{self.LAB_SHORT_NAME}/hub/home",
                         "tornado_settings": {
-                            "cookie_options": {"expires_days": 7.0},
+                            "cookie_options": {"expires_days": 1.0},
                         },
                     },
                     "Authenticator": {
