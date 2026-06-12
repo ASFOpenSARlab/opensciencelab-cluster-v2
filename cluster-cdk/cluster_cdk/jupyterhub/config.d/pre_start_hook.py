@@ -450,8 +450,7 @@ def server_starting_tag(pvc_name: str, **kwargs) -> None:
             ],
         )
     else:
-        log.info(f"No volumes found for '{pvc_name}'")
-        return
+        log.info(f"No volumes found for '{pvc_name}'. Nothing to tag.")
 
 
 async def my_pre_hook(spawner: c.Spawner) -> None:  # noqa: F821
