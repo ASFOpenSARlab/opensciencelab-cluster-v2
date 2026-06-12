@@ -26,6 +26,18 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
+def _get_delta_time(days: int) -> str:
+    """
+    Get datetime now in UTC.
+    Add number of `days` until event.
+    We don't need second and millisecond resolution so make those 0.
+    """
+    the_future_in_utc = datetime.datetime.now(
+        datetime.timezone.utc
+    ) + datetime.timedelta(days=days)
+    return f"{the_future_in_utc.replace(second=0, microsecond=0)}"
+
+
 def standarized_storage_capacity(storage_capacity: str) -> int:
     """
     Args:
@@ -76,29 +88,12 @@ def get_tag_value(resource, key):
     return str(val[0])
 
 
-def get_volume(
-    username: str, pvc_name: str, storage_capacity: str, annotations: dict, labels: dict
-) -> None:
+def get_volume_for_pvc(pvc_name: str, ec2: boto3.Session.client) -> dict | None:
     """
-    # Before mounting the home directory, check to see if a PVC exists.
-    # If it does, then assume there is a EBS volume associated.
-    # If it doesn't, check for any EBS snapshots.
-    # If a snapshot exists, create a volume from the snapshot.
-    # Else, JupyterHub will create the volume.
+    Get the EBS volume assigned to a pvc.
+
+    If more than one volume is found, throw and error. If none are found, return None.
     """
-
-    k8s_config.load_incluster_config()
-    api = k8s_client.CoreV1Api()
-
-    desired_vol_size = standarized_storage_capacity(storage_capacity)
-
-    session = boto3.Session(region_name=REGION_NAME)
-    ec2 = session.client("ec2")
-
-    pvcs = api.list_namespaced_persistent_volume_claim(namespace=NAMESPACE, watch=False)
-
-    # Check to see if an pvc already exists
-    has_pvc = pvc_name in [item.metadata.name for item in pvcs.items]
 
     # To create a PVC we need info about any existing volumes and snapshots
     # Get any existing volume info
@@ -117,15 +112,22 @@ def get_volume(
 
     volumes = vol["Volumes"]
     if len(volumes) > 1:
-        volumes = sorted(volumes, key=lambda s: s["CreateTime"], reverse=True)
-        log.warning(
-            f"\nWARNING ***** More than one volume found for pvc {pvc_name}. Claiming the latest one: \n{volumes[0]}."
+        raise Exception(
+            f"More than one volume found for pvc {pvc_name}. This should not happen."
         )
     elif len(volumes) == 0:
         log.info(f"No volumes found that matched pvc '{pvc_name}'")
         volumes = [None]
 
-    volume = volumes[0]
+    return volumes[0]
+
+
+def get_snapshot_for_pvc(pvc_name: str, ec2: boto3.Session.client) -> dict | None:
+    """
+    Get the EBS snapshot assigned to a pvc.
+
+    If more than one snapshot is found, use the latest one. If none are found, return None.
+    """
 
     # Does the user have any snapshots?
     snap = ec2.describe_snapshots(
@@ -153,7 +155,36 @@ def get_volume(
         log.info(f"No snapshot found that matched pvc '{pvc_name}'")
         snap = [None]
 
-    snapshot = snap[0]
+    return snap[0]
+
+
+def get_user_volume(
+    username: str, pvc_name: str, storage_capacity: str, annotations: dict, labels: dict
+) -> None:
+    """
+    # Before mounting the home directory, check to see if a PVC exists.
+    # If it does, then assume there is a EBS volume associated.
+    # If it doesn't, check for any EBS snapshots.
+    # If a snapshot exists, create a volume from the snapshot.
+    # Else, JupyterHub will create the volume.
+    """
+
+    k8s_config.load_incluster_config()
+    api = k8s_client.CoreV1Api()
+
+    desired_vol_size = standarized_storage_capacity(storage_capacity)
+
+    session = boto3.Session(region_name=REGION_NAME)
+    ec2 = session.client("ec2")
+
+    pvcs = api.list_namespaced_persistent_volume_claim(namespace=NAMESPACE, watch=False)
+
+    # Check to see if an pvc already exists
+    has_pvc = pvc_name in [item.metadata.name for item in pvcs.items]
+
+    volume = get_volume_for_pvc(pvc_name=pvc_name, ec2=ec2)
+
+    snapshot = get_snapshot_for_pvc(pvc_name=pvc_name, ec2=ec2)
 
     # Case 1: PVC does exist with an existing volume. Do nothing except potentially expand volume size.
     if volume and has_pvc:
@@ -188,8 +219,25 @@ def get_volume(
 
     vol_id = None
 
-    # Case 3: No PVC, no existing volume, but an existing snapshot. Restore volume from snapshot
-    if not volume and snapshot:
+    # Case 3: No PVC but existing volume. Any existing snapshots are ignored. Volume will be expanded to desired value if needed. A PVC and PV will be created later
+    if volume and not has_pvc:
+        log.warning(
+            f"Volume found for '{username}' without pvc '{pvc_name}'. This is unusual."
+        )
+
+        vol_id = volume["VolumeId"]
+        vol_size = volume["Size"]
+
+        if desired_vol_size > vol_size:
+            log.info(
+                f"Expanding existing volume size from {vol_size}Gi to {desired_vol_size}Gi"
+            )
+            expand_volume(f"{desired_vol_size}Gi", pvc_name, api)
+        else:
+            desired_vol_size = vol_size
+
+    # Case 4: No PVC, no existing volume, but an existing snapshot. Restore volume from snapshot
+    elif snapshot and not volume and not has_pvc:
         snapshot_id = snapshot["SnapshotId"]
         snapshot_size = snapshot["VolumeSize"]
 
@@ -208,7 +256,7 @@ def get_volume(
             AvailabilityZone=AZ_NAME,
             Encrypted=False,
             Size=desired_vol_size,
-            SnapshotId=snapshot_id,
+            SnapshotId=snapshot_id,  # It's important that the snapshot id exist to restore from
             VolumeType="gp3",
             DryRun=False,
             TagSpecifications=[
@@ -250,8 +298,8 @@ def get_volume(
                 ],
             )
 
-    # Case 4: No PVC, no existing volume, no existing snapshot. Create new volume.
-    elif not volume and not snapshot:
+    # Case 5: No PVC, no existing volume, no existing snapshot. Create new volume.
+    elif not volume and not snapshot and not has_pvc:
         log.info(
             f"PVC '{pvc_name}' does not exist for user '{username}'. Therefore a new volume will be created."
         )
@@ -295,23 +343,6 @@ def get_volume(
         )
         vol_id = vol["VolumeId"]
         log.info(f"Volume {vol_id} created.")
-
-    # Case 5: No PVC but existing volume. Any existing snapshots are ignored. Volume will be expanded to desired value if needed.
-    elif volume:
-        log.warning(
-            f"Volume found for '{username}' without pvc '{pvc_name}'. This is unusual."
-        )
-
-        vol_id = volume["VolumeId"]
-        vol_size = volume["Size"]
-
-        if desired_vol_size > vol_size:
-            log.info(
-                f"Expanding existing volume size from {vol_size}Gi to {desired_vol_size}Gi"
-            )
-            expand_volume(f"{desired_vol_size}Gi", pvc_name, api)
-        else:
-            desired_vol_size = vol_size
 
     # After volume is created (either by previously existing, as new, or restored from snapshot), create PV and PVC
 
@@ -409,6 +440,7 @@ def get_volume(
         else:
             raise
 
+    # Make sure that the volume is tagged with required tags.
     ec2.create_tags(
         DryRun=False,
         Resources=[vol_id],
@@ -427,34 +459,14 @@ def server_starting_tag(pvc_name: str, **kwargs) -> None:
 
     log.info(f"Updating starting tags to '{pvc_name}' in cluster '{CLUSTER_NAME}'...")
 
-    vol = ec2.describe_volumes(
-        Filters=[
-            {"Name": "tag:kubernetes.io/created-for/pvc/name", "Values": [pvc_name]},
-            {
-                "Name": f"tag:kubernetes.io/cluster/{CLUSTER_NAME}",
-                "Values": ["owned"],
-            },
-        ]
-    )
-    volumes: list = vol["Volumes"]
+    volume = get_volume_for_pvc(pvc_name=pvc_name, ec2=ec2)
 
-    if len(volumes) > 1:
-        raise Exception(
-            f"\n ***** More than one volume for pvc: {pvc_name}. Which volume should be tagged?"
-        )
-    elif len(volumes) == 1:
+    if volume:
         ec2.create_tags(
             DryRun=False,
-            Resources=[volumes[0]["VolumeId"]],
+            Resources=[volume["VolumeId"]],
             Tags=[
-                {
-                    "Key": "server-start-time",
-                    "Value": str(
-                        datetime.datetime.now(datetime.timezone.utc).replace(
-                            second=0, microsecond=0
-                        )
-                    ),
-                },
+                {"Key": "server-start-time", "Value": _get_delta_time(days=0)},
             ],
         )
     else:
@@ -492,7 +504,7 @@ async def my_pre_hook(spawner: c.Spawner) -> None:  # noqa: F821
             "labels": spawn_pvc.metadata.labels,
         }
 
-        get_volume(**args)
+        get_user_volume(**args)
         server_starting_tag(**args)
 
     except Exception as e:

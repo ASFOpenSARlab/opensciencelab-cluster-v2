@@ -98,6 +98,8 @@ cdk-shell:
 		-e LAB_SHORT_NAME \
 		-e VOLUME_CRON_SCHEDULE \
 		-e SNAPSHOT_WARNING_DAYS \
+		-e DAYS_TILL_VOLUME_DELETION \
+		-e DAYS_TILL_SNAPSHOT_DELETION \
 		-w /code/ \
 		--pull always \
 		${IMAGE_NAME} || \

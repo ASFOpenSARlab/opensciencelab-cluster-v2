@@ -29,15 +29,21 @@ def _get_delta_time(days: int) -> str:
     return f"{the_future_in_utc.replace(second=0, microsecond=0)}"
 
 
-def server_stopping_tags(pvc_name: str) -> None:
-    session = boto3.Session(region_name=REGION_NAME)
-    ec2 = session.client("ec2")
+def get_volume_for_pvc(pvc_name: str, ec2: boto3.Session.client) -> dict | None:
+    """
+    Get the EBS volume assigned to a pvc.
 
-    log.info(f"Updating stopping tags to '{pvc_name}' in cluster '{CLUSTER_NAME}'...")
+    If more than one volume is found, throw an error. If none are found, return None.
+    """
 
+    # To create a PVC we need info about any existing volumes and snapshots
+    # Get any existing volume info
     vol = ec2.describe_volumes(
         Filters=[
-            {"Name": "tag:kubernetes.io/created-for/pvc/name", "Values": [pvc_name]},
+            {
+                "Name": "tag:kubernetes.io/created-for/pvc/name",
+                "Values": [pvc_name],
+            },
             {
                 "Name": f"tag:kubernetes.io/cluster/{CLUSTER_NAME}",
                 "Values": ["owned"],
@@ -45,16 +51,30 @@ def server_stopping_tags(pvc_name: str) -> None:
         ]
     )
 
-    volumes: list = vol["Volumes"]
-
+    volumes = vol["Volumes"]
     if len(volumes) > 1:
         raise Exception(
-            f"\n ***** More than one volume for pvc: {pvc_name}. Which volume should be tagged?"
+            f"More than one volume found for pvc {pvc_name}. This should not happen."
         )
-    elif len(volumes) == 1:
+    elif len(volumes) == 0:
+        log.info(f"No volumes found that matched pvc '{pvc_name}'")
+        volumes = [None]
+
+    return volumes[0]
+
+
+def server_stopping_tags(pvc_name: str) -> None:
+    session = boto3.Session(region_name=REGION_NAME)
+    ec2 = session.client("ec2")
+
+    log.info(f"Updating stopping tags to '{pvc_name}' in cluster '{CLUSTER_NAME}'...")
+
+    volume = get_volume_for_pvc(pvc_name=pvc_name, ec2=ec2)
+
+    if volume:
         ec2.create_tags(
             DryRun=False,
-            Resources=[volumes[0]["VolumeId"]],
+            Resources=[volume["VolumeId"]],
             Tags=[
                 {
                     "Key": "server-stop-time",
@@ -71,7 +91,7 @@ def server_stopping_tags(pvc_name: str) -> None:
             ],
         )
     else:
-        log.info(f"No volumes found for '{pvc_name}'. Nothing to tag.")
+        log.info(f"No volume found for '{pvc_name}'. Nothing to tag.")
 
 
 # After stopping the notebook server, tag the volume with the current "stopping" time. This will help determine which volumes are active.

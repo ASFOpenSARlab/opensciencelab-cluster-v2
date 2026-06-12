@@ -76,21 +76,11 @@ class ClusterCdkStack(Stack):
         if not self.PORTAL_DOMAINS:
             raise Exception("Portal domains is not defined")
 
-        self.DAYS_TILL_VOLUME_DELETION = os.getenv("DAYS_TILL_VOLUME_DELETION", None)
-        if (
-            self.DAYS_TILL_VOLUME_DELETION is None
-            or self.DAYS_TILL_VOLUME_DELETION == "None"
-        ):
-            self.DAYS_TILL_VOLUME_DELETION = "3600"
+        self.DAYS_TILL_VOLUME_DELETION = os.getenv("DAYS_TILL_VOLUME_DELETION", "3600")
 
         self.DAYS_TILL_SNAPSHOT_DELETION = os.getenv(
-            "DAYS_TILL_SNAPSHOT_DELETION", None
+            "DAYS_TILL_SNAPSHOT_DELETION", "3600"
         )
-        if (
-            self.DAYS_TILL_SNAPSHOT_DELETION is None
-            or self.DAYS_TILL_SNAPSHOT_DELETION == "None"
-        ):
-            self.DAYS_TILL_SNAPSHOT_DELETION = "3600"
 
         # Make sure everything happens in a particular AZ.
         # This is normally 'a' but can be 'b' or 'c' if more than one cluster is deployed in an account and resources will be limited.
