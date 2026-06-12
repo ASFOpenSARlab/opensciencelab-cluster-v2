@@ -430,13 +430,14 @@ def server_starting_tag(pvc_name: str, **kwargs) -> None:
             },
         ]
     )
+    volumes: list = vol["Volumes"]
 
-    if len(vol["Volumes"]) > 1:
+    if len(volumes) > 1:
         raise Exception(f"\n ***** More than one volume for pvc: {pvc_name}")
-    elif vol:
+    elif len(volumes) == 1:
         ec2.create_tags(
             DryRun=False,
-            Resources=[vol["VolumeId"]],
+            Resources=[volumes[0]["VolumeId"]],
             Tags=[
                 {
                     "Key": "server-start-time",
@@ -448,6 +449,9 @@ def server_starting_tag(pvc_name: str, **kwargs) -> None:
                 },
             ],
         )
+    else:
+        log.info(f"No volumes found for '{pvc_name}'")
+        return
 
 
 async def my_pre_hook(spawner: c.Spawner) -> None:  # noqa: F821
