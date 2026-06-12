@@ -155,9 +155,7 @@ def get_volume(
 
     snapshot = snap[0]
 
-    # If PVC does exist, assume volume does as well. Therefore don't do anything here and return.
-    # If volume doesn't exist, maybe the volume was deleted in the AWS console.
-    # Force delete the existing pvc: `kubectl -n jupyter delete --force pvc {claim-name}`
+    # Case 1: PVC does exist with an existing volume. Do nothing except potentially expand volume size.
     if volume and has_pvc:
         log.info(
             f"PVC '{pvc_name}' exists! Therefore a volume should have already been assigned to user '{username}'."
@@ -175,14 +173,22 @@ def get_volume(
 
         return
 
+    # Case 2: PVC does exist. There is no existing volume. Delete PVC (and PV) and move on to Case 3 or Case 4.
     if not volume and has_pvc:
-        raise Exception(
-            "No volume found to match existing PVC. This should not happen and something probably went wrong."
+        log.warning(
+            "No volume found to match existing PVC. Was the volume deleted in the AWS console? Deleting the PVC (and PV)."
         )
+
+        # https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/CoreV1Api.md#delete_namespaced_persistent_volume_claim
+        api.delete_namespaced_persistent_volume_claim(
+            name=pvc_name, namespace=NAMESPACE, grace_period_seconds=0
+        )
+
+        has_pvc = False
 
     vol_id = None
 
-    # Case 1: No PVC, no existing volume, but an existing snapshot. Restore volume from snapshot
+    # Case 3: No PVC, no existing volume, but an existing snapshot. Restore volume from snapshot
     if not volume and snapshot:
         snapshot_id = snapshot["SnapshotId"]
         snapshot_size = snapshot["VolumeSize"]
@@ -244,7 +250,7 @@ def get_volume(
                 ],
             )
 
-    # Case 2: No PVC, no existing volume, no existing snapshot. Create new volume.
+    # Case 4: No PVC, no existing volume, no existing snapshot. Create new volume.
     elif not volume and not snapshot:
         log.info(
             f"PVC '{pvc_name}' does not exist for user '{username}'. Therefore a new volume will be created."
@@ -290,7 +296,7 @@ def get_volume(
         vol_id = vol["VolumeId"]
         log.info(f"Volume {vol_id} created.")
 
-    # Case 3: No PVC but existing volume. Any existing snapshots are ignored. Volume will be expanded to desired value if needed.
+    # Case 5: No PVC but existing volume. Any existing snapshots are ignored. Volume will be expanded to desired value if needed.
     elif volume:
         log.warning(
             f"Volume found for '{username}' without pvc '{pvc_name}'. This is unusual."
