@@ -1,2 +1,4 @@
 aws-cdk-lib==2.243.0
+boto3==1.43.27
+kubernetes==36.0.2
 pytest>=8.4.2

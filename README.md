@@ -129,6 +129,8 @@ export SNAPSHOT_WARNING_DAYS="5"             # Number of days before delete to w
 
 export DAYS_TILL_VOLUME_DELETION=2           # Number of days after server stop when the user's volume will be deleted
 export DAYS_TILL_SNAPSHOT_DELETION=7         # Number of days after server stop when the user's snapshot will be deleted
+
+export AWS_CLI_PATH=/usr/local/bin/aws       # Path to your installation of awscli
 ```
 
 For example configurations, see the [GitHub Environments](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/settings/environments)
