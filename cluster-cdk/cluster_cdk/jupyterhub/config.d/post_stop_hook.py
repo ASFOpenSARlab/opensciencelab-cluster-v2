@@ -45,39 +45,33 @@ def server_stopping_tags(pvc_name: str) -> None:
         ]
     )
 
-    vol = vol["Volumes"]
+    volumes: list = vol["Volumes"]
 
-    if len(vol) > 1:
-        raise Exception(f"\n ***** More than one volume for pvc: {pvc_name}")
-
-    if len(vol) != 1:
-        vol = []
-    else:
-        vol = vol[0]
-
-    if vol:
+    if len(volumes) > 1:
+        raise Exception(
+            f"\n ***** More than one volume for pvc: {pvc_name}. Which volume should be tagged?"
+        )
+    elif len(volumes) == 1:
         ec2.create_tags(
             DryRun=False,
-            Resources=[vol["VolumeId"]],
+            Resources=[volumes[0]["VolumeId"]],
             Tags=[
                 {
                     "Key": "server-stop-time",
-                    "Value": "{0}".format(_get_delta_time(days=0)),
+                    "Value": _get_delta_time(days=0),
                 },
                 {
                     "Key": "volume-delete-time",
-                    "Value": "{0}".format(
-                        _get_delta_time(days=DAYS_TILL_VOLUME_DELETION)
-                    ),
+                    "Value": _get_delta_time(days=DAYS_TILL_VOLUME_DELETION),
                 },
                 {
                     "Key": "snapshot-delete-time",
-                    "Value": "{0}".format(
-                        _get_delta_time(days=DAYS_TILL_SNAPSHOT_DELETION)
-                    ),
+                    "Value": _get_delta_time(days=DAYS_TILL_SNAPSHOT_DELETION),
                 },
             ],
         )
+    else:
+        log.info(f"No volumes found for '{pvc_name}'. Nothing to tag.")
 
 
 # After stopping the notebook server, tag the volume with the current "stopping" time. This will help determine which volumes are active.

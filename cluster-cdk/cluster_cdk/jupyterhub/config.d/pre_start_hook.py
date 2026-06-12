@@ -433,7 +433,9 @@ def server_starting_tag(pvc_name: str, **kwargs) -> None:
     volumes: list = vol["Volumes"]
 
     if len(volumes) > 1:
-        raise Exception(f"\n ***** More than one volume for pvc: {pvc_name}")
+        raise Exception(
+            f"\n ***** More than one volume for pvc: {pvc_name}. Which volume should be tagged?"
+        )
     elif len(volumes) == 1:
         ec2.create_tags(
             DryRun=False,
