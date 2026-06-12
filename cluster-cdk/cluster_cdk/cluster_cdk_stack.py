@@ -25,6 +25,7 @@ from aws_cdk import (  # type: ignore
     aws_events as events,
     aws_events_targets as targets,
     lambda_layer_kubectl_v34,
+    lambda_layer_awscli,
 )
 
 from constructs import Construct  # type: ignore
@@ -84,7 +85,7 @@ class ClusterCdkStack(Stack):
         # All resources in this specific stack will get this tag
         Tags.of(self).add("osl-billing", f"eks-cluster-{self.LAB_SHORT_NAME}")  # type: ignore
 
-        kubectl_layer = lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl")
+        self.kubectl_layer = lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl")
 
         print(vars(self))
 
@@ -130,7 +131,7 @@ class ClusterCdkStack(Stack):
             cluster_name=f"eks-cluster-{self.LAB_SHORT_NAME}",
             version=eks.KubernetesVersion.V1_34,
             kubectl_provider_options=eks.KubectlProviderOptions(
-                kubectl_layer=kubectl_layer,
+                kubectl_layer=self.kubectl_layer,
             ),
             default_capacity_type=eks.DefaultCapacityType.NODEGROUP,
             default_capacity=0,
@@ -733,7 +734,7 @@ class ClusterCdkStack(Stack):
             id=f"{self.DEPLOY_PREFIX}_volume_management",
             runtime=lambda_.Runtime.PYTHON_3_13,
             timeout=Duration.minutes(15),
-            handler="volume_management.lambda_hander",
+            handler="volume_management.lambda_handler",
             code=lambda_.Code.from_asset(
                 path="cluster_cdk/lambdas/",
             ),
@@ -743,6 +744,37 @@ class ClusterCdkStack(Stack):
                 "PORTAL_DOMAINS": self.PORTAL_DOMAINS,
                 "SSO_SECRET": self.sso_token.secret_arn,
             },
+        )
+
+        self.requirements_layer = lambda_.LayerVersion(
+            self,
+            "RequirementsLayer",
+            # /tmp/.build/lambda/ is make in the Makefile @ bundle-deps
+            code=lambda_.Code.from_asset("/tmp/.build/lambda/"),
+            compatible_runtimes=[lambda_.Runtime.PYTHON_3_13],
+        )
+
+        # Add kubectl, awscli, and requirements lambda layers
+        self.volume_management_lambda.add_layers(self.kubectl_layer)
+        self.volume_management_lambda.add_layers(
+            lambda_layer_awscli.AwsCliLayer(self, "AwsCliLayer")
+        )
+        self.volume_management_lambda.add_layers(self.requirements_layer)
+
+        # Grant lambda role access to EKS
+        eks.AccessEntry(
+            self,
+            "lambda_eks_access",
+            access_policies=[
+                eks.AccessPolicy.from_access_policy_name(
+                    "AmazonEKSClusterAdminPolicy",
+                    access_scope_type=eks.AccessScopeType.CLUSTER,
+                ),
+            ],
+            cluster=self.cluster,
+            principal=self.volume_management_lambda.role.role_arn,
+            access_entry_type=eks.AccessEntryType.STANDARD,
+            removal_policy=RemovalPolicy.DESTROY,
         )
 
         # grant lambda the access it needs

@@ -1,10 +1,12 @@
 import datetime
 import logging
 import os
+import subprocess
 import sys
 import urllib.parse
 
 import boto3
+import kubernetes
 
 CLAIM_TAG = "kubernetes.io/created-for/pvc/name"
 CLUSTER_TAG = "KubernetesCluster"
@@ -16,6 +18,8 @@ SNAPSHOT_WARNING_DAYS = int(os.getenv("SNAPSHOT_WARNING_DAYS", "5"))
 SNAPSHOT_EXPIRY_GRACEPERIOD = int(os.getenv("SNAPSHOT_EXPIRY_GRACEPERIOD", "1"))
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+AWS_CLI_PATH = os.getenv("AWS_CLI_PATH", "/opt/awscli/aws")
+KUBECONFIG = os.getenv("KUBECONFIG", "/tmp/eks.conf")
 
 logging.basicConfig(
     level=logging.DEBUG if LOG_LEVEL.lower() == "debug" else logging.INFO,
@@ -60,6 +64,59 @@ def get_claim_user(item):
     if not item_tags.get(CLAIM_TAG, "").startswith("claim-"):
         return None
     return urllib.parse.unquote(item_tags.get(CLAIM_TAG)[6:])
+
+
+def get_eks_client():
+    """use awscli to generate a KUBECONFIG for the cluster"""
+    # Hacky way to set up kubectl
+    subprocess.run(
+        [
+            AWS_CLI_PATH,
+            "eks",
+            "update-kubeconfig",
+            "--name",
+            CLUSTER_NAME,
+            "--kubeconfig",
+            KUBECONFIG,
+            "--alias",
+            "eks",
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    # Read kubeconfig file
+    kubernetes.config.load_kube_config(config_file=KUBECONFIG)
+    return kubernetes.client.CoreV1Api()
+
+
+def get_all_pvcs(kube_client):
+    """Return a list of all PVC's in the jupyter namespace of the cluster"""
+    all_pvcs = kube_client.list_namespaced_persistent_volume_claim(namespace="jupyter")
+    return [pvc.metadata.name for pvc in all_pvcs.items]
+
+
+def delete_pvc(claim_user, all_pvcs, kube_client):
+    """Delete a user's volume by removing their PVC in K8s"""
+    user_claim_id = f"claim-{claim_user}"
+
+    # Verify the PVC exists
+    if user_claim_id not in all_pvcs:
+        logger.warning("user pvc %s does not exist in %s", user_claim_id, CLUSTER_NAME)
+        return False
+
+    # Attempt to remove PVC
+    try:
+        kube_client.delete_namespaced_persistent_volume_claim(
+            name=user_claim_id,
+            namespace="jupyter",
+        )
+    except kubernetes.client.rest.ApiException:
+        logger.exception("Could not delete PVC %s in %s", user_claim_id, CLUSTER_NAME)
+        return True
+
+    # PVC Successfully deleted
+    return True
 
 
 def filter_users(all_items):
@@ -221,14 +278,6 @@ def get_snapshot_for_volume(volume, user_snapshots):
     return None
 
 
-def delete_volume(volume):
-    """Delete a user's volume by removing their PVC in K8s"""
-    # Create final Snapshot
-
-    # delete pvc
-    return True
-
-
 def get_user_volumes():
     """Return unattached user volumes for a cluster"""
     return filter_users(get_unattached_volumes())
@@ -241,8 +290,15 @@ def get_user_snapshots():
 
 def run_volume_management():
     """Process Volumes and Snapshots"""
+
+    kube_client = get_eks_client()
+
     user_volumes = get_user_volumes()
     user_snapshots = get_user_snapshots()
+    all_pvcs = get_all_pvcs(kube_client)
+
+    for pvc in all_pvcs:
+        logger.info("found cluster PVC %s", pvc)
 
     for claim_user, volume in user_volumes.items():
         logger.info(
@@ -260,7 +316,8 @@ def run_volume_management():
             logger.error(" - Ignoring volume with invalid snapshot tags")
         elif is_expired(volume):
             logger.info(" - Volume is expired!")
-            delete_volume(volume)
+            if not delete_pvc(claim_user, all_pvcs, kube_client):
+                logger.warning("There was a problem removing PVC for %s", volume.id)
 
     for claim_user, snapshot in user_snapshots.items():
         logger.info(
@@ -271,7 +328,7 @@ def run_volume_management():
             logger.info(" - Snapshot is Delete protected!")
         elif is_expired(snapshot, grace_period_days=SNAPSHOT_EXPIRY_GRACEPERIOD):
             logger.info(" - Snapshot is expired past grace period!")
-            snapshot.delete(DryRun=True)
+            snapshot.delete()
         elif is_expired(snapshot):
             logger.info(" - Snapshot is in expired grace period!")
             send_snapshot_delete(snapshot, claim_user)
@@ -280,7 +337,7 @@ def run_volume_management():
             send_snapshot_warning(snapshot, claim_user)
 
 
-def lambda_hander(event, context):
+def lambda_handler(event, context):
     run_volume_management()
 
 

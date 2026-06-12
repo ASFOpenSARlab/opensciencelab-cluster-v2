@@ -88,6 +88,8 @@ export PORTAL_DOMAINS="https://...."         # Comma seperated list of approved 
 
 export VOLUME_CRON_SCHEDULE="0 * * * ? *"    # Schedule to run the volume management lambda
 export SNAPSHOT_WARNING_DAYS="5"             # Number of days before delete to warn for old snapshots
+
+export AWS_CLI_PATH=/usr/local/bin/aws       # Path to your installation of awscli
 ```
 
 For example configurations, see the [GitHub Environments](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/settings/environments)
