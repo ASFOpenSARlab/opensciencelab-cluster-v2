@@ -10,7 +10,9 @@ Makefile commands:
 
     manual-cdk-bootstrap:   Bootstrap an account for CDK. Especially for OIDC.
 
-    test:					Run PyTest tests
+    test:                   Run PyTest tests
+
+    run-volume-lambda:      Attempt to execute volume lambda locally
 
     synth-cluster:          Synth cluster CDK project
 
@@ -22,7 +24,7 @@ Makefile commands:
 
     aws-info:               Get AWS account info
 
-    clean:					Remove .build/ & cdk.out/
+    clean:                  Remove .build/ & cdk.out/
 
 endef
 export HELP
@@ -103,6 +105,7 @@ cdk-shell:
 		-e SNAPSHOT_WARNING_DAYS \
 		-e AWS_CLI_PATH \
 		-e CLUSTER_NAME \
+		-e SSO_SECRET_ARN \
 		-w /code/ \
 		--pull always \
 		${IMAGE_NAME} || \
@@ -143,7 +146,13 @@ bundle-deps:
 	echo "Checking if ${BUILD_DEPS} exists..." && \
 	if [[ ! -d ${BUILD_DEPS} ]]; then \
 		mkdir -p ${BUILD_DEPS} && \
-		pip install -r cluster-cdk/cluster_cdk/lambdas/requirements.txt --platform manylinux2014_x86_64 --only-binary=:all: -t ${BUILD_DEPS} ; \
+		pip install \
+			-r cluster-cdk/cluster_cdk/lambdas/requirements.txt \
+			--platform manylinux2014_x86_64 \
+			--python-version 3.13 \
+			--only-binary=:all: \
+			-t ${BUILD_DEPS} \
+			--upgrade ; \
 	else \
 		echo "Skipping deps bundled in ${BUILD_DEPS}. Remove to rebuild."; \
 	fi
@@ -166,7 +175,7 @@ synth-cluster: install-reqs bundle-deps
 .PHONY := deploy-cluster
 deploy-cluster: install-reqs bundle-deps
 	@echo "Deploying ${DEPLOY_PREFIX}/cluster-cdk"
-	cd ./cluster-cdk && cdk --require-approval never deploy --no-rollback
+	cd ./cluster-cdk && cdk --require-approval never deploy
 
 .PHONY := destroy-cluster
 destroy-cluster:
