@@ -49,20 +49,20 @@ Kubernetes handles user storage internally via the [kubernetes objects](https://
 
 WARNING: Never have more than one EBS volume with the same `kubernetes.io/created-for/pvc/name` value. This will throw a 500 error for users.
 
-WARNING: If more than one EBS snapshot is found with the same `kubernetes.io/created-for/pvc/name` value, the most recent will be restored.   
+WARNING: If more than one EBS snapshot is found with the same `kubernetes.io/created-for/pvc/name` value, the most recent will be restored.
 
 WARNING: If an EBS volume `kubernetes.io/created-for/pvc/name` tag is manually changed, then the script will treat it like it doesn't exist. Since the existing PVC is referencing an apparently non-existing volume, the PVC will be deleted and the real volume will also be deleted. Therefore, NEVER modify the `kubernetes.io/created-for/pvc/name` EBS volume tag. It is safer to create a snapshot and restore a volume from that.
 
 If the restoring EBS snapshot has a size bigger than the configured value, the restored volume size will be the same as the snapshot.
 
-The size of the requested storage is `storage_capacity` as found in individual lab profiles within [opensciencelab.toml](./cluster-cdk/cluster_cdk/opensciencelab.toml). The default size of user `storage_capacity` is 10GBi if not provided in configuration. Once the volume is created, this storage value can not be changed via updating the lab profile. EBS volumes cannot be shrunk but they may be expanded. Therefore, bigger storage sizes should be assigned carefully to avoid costs. 
+The size of the requested storage is `storage_capacity` as found in individual lab profiles within [opensciencelab.toml](./cluster-cdk/cluster_cdk/opensciencelab.toml). The default size of user `storage_capacity` is 10GBi if not provided in configuration. Once the volume is created, this storage value can not be changed via updating the lab profile. EBS volumes cannot be shrunk but they may be expanded. Therefore, bigger storage sizes should be assigned carefully to avoid costs.
 
 There are two ways to expand the size of an existing volume:
 
 1. Assign an user a lab profile with a bigger `storage_capacity`. If the `storage_capacity` of a profile is larger than the current volume size, the volume will expand to that size.
 2. Use AWS cloudshell and edit `spec.resources.requests.storage` within the user's PVC. If the `storage_capacity` of a profile is larger than the current volume size, the volume will expand to that size.
 
-Specific environment variables (can be set in the GitHub Environment) include 
+Specific environment variables (can be set in the GitHub Environment) include
 
 - `DAYS_TILL_VOLUME_DELETION`: The number of days after server stop when the EBS volume will be deleted. The default (if not set) is 3600.  
 - `DAYS_TILL_SNAPSHOT_DELETION`: The number of days after server stop when the EBS snapshot will be deleted. The default (if not set) is 3600.
