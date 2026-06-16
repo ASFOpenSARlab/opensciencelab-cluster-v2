@@ -78,13 +78,25 @@ class ClusterCdkStack(Stack):
         if not self.PORTAL_DOMAINS:
             raise Exception("Portal domains is not defined")
 
+        self.DAYS_TILL_VOLUME_DELETION = os.getenv("DAYS_TILL_VOLUME_DELETION", "3600")
+
+        self.DAYS_TILL_SNAPSHOT_DELETION = os.getenv(
+            "DAYS_TILL_SNAPSHOT_DELETION", "3600"
+        )
+
+        # Make sure everything happens in a particular AZ.
+        # This is normally 'a' but can be 'b' or 'c' if more than one cluster is deployed in an account and resources will be limited.
+        self.AZ_LETTER = os.getenv("AZ_LETTER", "a")
+
+        self.K8s_NAMESPACE = "jupyter"
+
         self.OPENSCIENCELAB_CONFIG_FILE = self.HOME_DIR / "opensciencelab.toml"
 
         # Determine the selected lab config values
         self.osl_config = self._get_reduced_osl_config()
 
         # All resources in this specific stack will get this tag
-        Tags.of(self).add("osl-billing", f"eks-cluster-{self.LAB_SHORT_NAME}")  # type: ignore
+        Tags.of(self).add("osl-billing", self.LAB_SHORT_NAME)  # type: ignore
 
         self.kubectl_layer = lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl")
 
@@ -112,7 +124,7 @@ class ClusterCdkStack(Stack):
         self.vpc = ec2.Vpc(
             self,
             "EksVPC",
-            availability_zones=[f"{self.region}a", f"{self.region}d"],
+            availability_zones=[f"{self.region}{self.AZ_LETTER}", f"{self.region}d"],
             ip_addresses=ec2.IpAddresses.cidr("10.0.0.0/16"),
             # Configure subnet types for EKS (e.g., Public and Private)
             subnet_configuration=[public_subnet, private_subnet],
@@ -337,7 +349,7 @@ class ClusterCdkStack(Stack):
                                 CfnTag(key="osl-billing", value=self.LAB_SHORT_NAME),
                                 CfnTag(
                                     key="Name",
-                                    value=f"jupyterhub-{node['name']}-{self.LAB_SHORT_NAME}",
+                                    value=f"{node['name']}--{self.LAB_SHORT_NAME}",
                                 ),
                             ],
                         ),
@@ -347,7 +359,7 @@ class ClusterCdkStack(Stack):
                                 CfnTag(key="osl-billing", value=self.LAB_SHORT_NAME),
                                 CfnTag(
                                     key="Name",
-                                    value=f"jupyterhub-{node['name']}-root-{self.LAB_SHORT_NAME}",
+                                    value=f"{node['name']}-root--{self.LAB_SHORT_NAME}",
                                 ),
                             ],
                         ),
@@ -375,7 +387,9 @@ class ClusterCdkStack(Stack):
                 # Force the compute in the public subnet, in a single AZ
                 subnets=ec2.SubnetSelection(
                     subnet_type=ec2.SubnetType.PUBLIC,
-                    availability_zones=[f"{self.region}a"],  # Force compute into UW2a
+                    availability_zones=[
+                        f"{self.region}{self.AZ_LETTER}"
+                    ],  # Force compute into one AZ
                 ),
                 labels=node_labels,
             )
@@ -402,42 +416,14 @@ class ClusterCdkStack(Stack):
         #
         #####################################################################
 
-        # CSI storage
-        csi_service_account = self.cluster.add_service_account(
-            "EbsCsiServiceAccount",
-            name="ebs-csi-controller-sa",
-            namespace="kube-system",
-            overwrite_service_account=True,
-        )
-        csi_service_account.role.add_to_principal_policy(
-            iam.PolicyStatement(
-                effect=iam.Effect.ALLOW,
-                actions=[
-                    "ec2:AttachVolume",
-                    "ec2:CreateSnapshot",
-                    "ec2:CreateTags",
-                    "ec2:CreateVolume",  # Remove?
-                    "ec2:DeleteSnapshot",
-                    "ec2:DescribeAvailabilityZones",
-                    "ec2:DescribeInstances",
-                    "ec2:DescribeSnapshots",
-                    "ec2:DescribeTags",
-                    "ec2:DescribeVolumeStatus",
-                    "ec2:DescribeVolumes",
-                    "ec2:DetachVolume",
-                    "ec2:ModifyVolume",
-                ],
-                resources=["*"],
-            )
-        )
-
+        # Storage classes
         self.cluster.add_manifest(
             "CsiStorageClass",
             {
                 "apiVersion": "storage.k8s.io/v1",
                 "kind": "StorageClass",
                 "metadata": {
-                    "name": "gp3",
+                    "name": "gp3-jh-user",
                     "annotations": {
                         "storageclass.kubernetes.io/is-default-class": "true",
                     },
@@ -453,6 +439,57 @@ class ClusterCdkStack(Stack):
             },
         )
 
+        # Storage class for JupyterHub DB. Ensures that it is nicely named in the EC2 console
+        self.cluster.add_manifest(
+            "JhDbStorageClass",
+            {
+                "apiVersion": "storage.k8s.io/v1",
+                "kind": "StorageClass",
+                "metadata": {
+                    "name": "gp3-jh-db",
+                },
+                "provisioner": "ebs.csi.aws.com",
+                "parameters": {
+                    "type": "gp3",
+                    "fsType": "ext4",
+                    "tagSpecification_1": f"osl-billing={self.LAB_SHORT_NAME}",
+                    "tagSpecification_2": f"Name=hub-db-dir--{self.LAB_SHORT_NAME}",
+                    "tagSpecification_3": "is-jupyterhub-db=true",
+                },
+                "allowVolumeExpansion": False,
+                "volumeBindingMode": "Immediate",
+                "reclaimPolicy": "Delete",
+            },
+        )
+
+        # CSI storage
+        csi_service_account = self.cluster.add_service_account(
+            "EbsCsiServiceAccount",
+            name="ebs-csi-controller-sa",
+            namespace="kube-system",
+            overwrite_service_account=True,
+        )
+        csi_service_account.role.add_to_principal_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "ec2:AttachVolume",
+                    "ec2:CreateTags",
+                    "ec2:DeleteVolume",
+                    "ec2:ModifyVolume",
+                    "ec2:CreateVolume",
+                    "ec2:DescribeAvailabilityZones",
+                    "ec2:DescribeInstances",
+                    "ec2:DescribeTags",
+                    "ec2:DescribeVolumeStatus",
+                    "ec2:DescribeVolumesModifications",
+                    "ec2:DescribeVolumes",
+                    "ec2:DetachVolume",
+                ],
+                resources=["*"],
+            )
+        )
+
         self.csi_driver_version = "2.56.1"
 
         # https://artifacthub.io/packages/helm/aws-ebs-csi-driver/aws-ebs-csi-driver
@@ -461,7 +498,7 @@ class ClusterCdkStack(Stack):
             repository="https://kubernetes-sigs.github.io/aws-ebs-csi-driver",
             atomic=True,
             chart="aws-ebs-csi-driver",
-            release=f"osl-ebs-driver-{self.LAB_SHORT_NAME}",  # type: ignore
+            release=f"ebs-csi-driver-{self.LAB_SHORT_NAME}",  # type: ignore
             namespace="kube-system",
             version=self.csi_driver_version,
             wait=True,
@@ -496,7 +533,89 @@ class ClusterCdkStack(Stack):
 
         self.jupyterhub_helm_version = "4.3.2"
 
+        # Modify the k8s permissions so the volumes can be modified in place
+        # Patching existing clusterroles is difficult. So we are fully replacing the original from jupyterhub.
+        # This particular action adds the verb "patch" to PVC
+        # Original can be found in the Kubernetes git repo https://github.com/kubernetes/kubernetes/blob/release-1.36/plugin/pkg/auth/authorizer/rbac/bootstrappolicy/policy.go#L501
+        # and https://github.com/kubernetes/kubernetes/blob/8f8aa9aae157b88db6ba02836c57596496d3f684/plugin/pkg/auth/authorizer/rbac/bootstrappolicy/testdata/cluster-roles.yaml#L1320
+        eks.KubernetesManifest(
+            self,
+            "PVProvisionerClusterRole",
+            cluster=self.cluster,
+            overwrite=True,
+            manifest=[
+                {
+                    "apiVersion": "rbac.authorization.k8s.io/v1",
+                    "kind": "ClusterRole",
+                    "metadata": {
+                        "annotations": {
+                            "rbac.authorization.kubernetes.io/autoupdate": "true"
+                        },
+                        "labels": {"kubernetes.io/bootstrapping": "rbac-defaults"},
+                        "name": "system:persistent-volume-provisioner",
+                    },
+                    "rules": [
+                        {
+                            "apiGroups": [""],
+                            "resources": ["persistentvolumes"],
+                            "verbs": ["create", "delete", "get", "list", "watch"],
+                        },
+                        {
+                            "apiGroups": [""],
+                            "resources": ["persistentvolumeclaims"],
+                            "verbs": ["get", "list", "update", "watch", "patch"],
+                        },
+                        {
+                            "apiGroups": ["storage.k8s.io"],
+                            "resources": ["storageclasses"],
+                            "verbs": ["get", "list", "watch"],
+                        },
+                        {
+                            "apiGroups": [""],
+                            "resources": ["events"],
+                            "verbs": ["watch"],
+                        },
+                        {
+                            "apiGroups": ["", "events.k8s.io"],
+                            "resources": ["events"],
+                            "verbs": ["create", "patch", "update"],
+                        },
+                    ],
+                }
+            ],
+        )
+
+        # Make sure the hook volume scripts (via the hub service account) have the right volume provisioner permissions
+        self.cluster.add_manifest(
+            "PVClusterRoleBinding",
+            {
+                "kind": "ClusterRoleBinding",
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "metadata": {"name": "cluster-pv"},
+                "subjects": [
+                    {
+                        "kind": "ServiceAccount",
+                        "name": "hub",
+                        "namespace": self.K8s_NAMESPACE,
+                    }
+                ],
+                "roleRef": {
+                    "apiGroup": "rbac.authorization.k8s.io",
+                    "kind": "ClusterRole",
+                    "name": "system:persistent-volume-provisioner",
+                },
+            },
+        )
+
         jupyterhub_helm_values = {
+            "cull": {
+                "enabled": True,
+                "timeout": 3600,  # Cull user servers after 3600 seconds (1 hour) of inactivity
+                "every": 300,  # Check for idle servers every 300 seconds (5 minutes)
+                "maxAge": 259200,  # Maximum age in seconds (3 days) before culling regardless of activity
+                "users": False,  # Cull users in addition to their servers
+                "adminUsers": False,  # Set to true to also cull admin users
+            },
             "prePuller": {
                 "continuous": {"enabled": False},
                 "hook": {"enabled": False},
@@ -510,7 +629,34 @@ class ClusterCdkStack(Stack):
                 "corePods": {"nodeAffinity": {"matchNodePurpose": "require"}},
                 "userPods": {"nodeAffinity": {"matchNodePurpose": "require"}},
             },
+            # https://z2jh.jupyter.org/en/stable/resources/reference.html#singleuser
+            # Usually, general and default pod, volume, and kubespawner settings should be set here.
+            # If profile specific settings are needed, set within `config.d/profiles.py`
             "singleuser": {
+                # This might not be needed anymore. Actually, not sure why this was added but something broke on upgrading to AL2023 and this fixed it at the time.
+                # "cloudMetadata": {
+                #     # For some reason IP Tables isn't working properly anymore on AL2023
+                #     # So disable blocking cloud metadata which uses IP Tables
+                #     # For safety, the metadata IP is blocked on the Istio level.
+                #     "blockWithIptables": False
+                # },
+                # https://z2jh.jupyter.org/en/stable/resources/reference.html#singleuser-storage
+                "storage": {
+                    "dynamic": {
+                        "storageClass": "gp3-jh-user",
+                        # This {username} is a template used by jupyterhub and is not an f-string
+                        # For possible template values: https://jupyterhub-kubespawner.readthedocs.io/en/latest/templates.html#templated-fields
+                        "pvcNameTemplate": "claim-{username}",
+                    },
+                },
+                "extraPodConfig": {
+                    # By default, Kubernetes recursively changes the ownership of every single file in a mounted volume to match the pod's fsGroup. On very large volumes, this chown operation can take 15–45+ minutes, causing the pod to hang in a ContainerCreating or initializing state.
+                    # When set to OnRootMismatch, Kubernetes will only change the file ownership and permissions if the root directory of the volume does not match the expected fsGroup. If the permissions on the root already match, it completely skips the slow recursive check.
+                    "securityContext": {
+                        "fsGroup": 100,
+                        "fsGroupChangePolicy": "OnRootMismatch",
+                    },
+                },
                 "extraFiles": (
                     {}
                     | self._set_extra_file(
@@ -523,12 +669,7 @@ class ClusterCdkStack(Stack):
                         "file",
                         "/etc/user_server_includes/overrides/default.json",
                     )
-                    | self._set_extra_file(
-                        "user_server_includes/scripts/pkg_clean.py",
-                        "python",
-                        "/etc/user_server_includes/scripts/pkg_clean.py",
-                    )
-                )
+                ),
             },
             "hub": {
                 "image": {
@@ -538,7 +679,7 @@ class ClusterCdkStack(Stack):
                 },
                 "db": {
                     "pvc": {
-                        "storageClassName": "gp3",
+                        "storageClassName": "gp3-jh-db",
                     }
                 },
                 "baseUrl": f"/lab/{self.LAB_SHORT_NAME}",
@@ -546,7 +687,7 @@ class ClusterCdkStack(Stack):
                     "JupyterHub": {
                         "default_url": f"/lab/{self.LAB_SHORT_NAME}/hub/home",
                         "tornado_settings": {
-                            "cookie_options": {"expires_days": 7.0},
+                            "cookie_options": {"expires_days": 1.0},
                         },
                     },
                     "Authenticator": {
@@ -555,7 +696,17 @@ class ClusterCdkStack(Stack):
                         "allow_all": True,
                         "enable_auth_state": True,
                     },
+                    "KubeSpawner": {
+                        # https://jupyterhub-kubespawner.readthedocs.io/en/latest/spawner.html#kubespawner.KubeSpawner.http_timeout
+                        "http_timeout": 30,
+                        # https://jupyterhub-kubespawner.readthedocs.io/en/latest/spawner.html#kubespawner.KubeSpawner.start_timeout
+                        "start_timeout": 600,
+                        # https://jupyterhub-kubespawner.readthedocs.io/en/latest/spawner.html#kubespawner.KubeSpawner.pod_name_template
+                        # This is not an f-string but a templated string.
+                        "pod_name_template": "jupyter-{username}",
+                    },
                 },
+                # All extraEnv need to be strings
                 "extraEnv": {
                     "AWS_REGION": self.region,
                     "SSO_TOKEN_ARN": self.sso_token.secret_arn,
@@ -565,33 +716,50 @@ class ClusterCdkStack(Stack):
                     "JUPYTERHUB_LAB_PREFIX": f"/lab/{self.LAB_SHORT_NAME}",
                     "PORTAL_DOMAINS": self.PORTAL_DOMAINS,
                     "LAB_PROFILES": json.dumps(self.osl_config["lab_profiles"]),
+                    "DAYS_TILL_VOLUME_DELETION": self.DAYS_TILL_VOLUME_DELETION,
+                    "DAYS_TILL_SNAPSHOT_DELETION": self.DAYS_TILL_SNAPSHOT_DELETION,
+                    "CLUSTER_NAME": self.cluster.cluster_name,
+                    "AZ_NAME": f"{self.region}{self.AZ_LETTER}",
+                    "COST_TAG_KEY": "osl-billing",
+                    "COST_TAG_VALUE": self.LAB_SHORT_NAME,
+                    "K8s_NAMESPACE": self.K8s_NAMESPACE,
                 },
                 "extraFiles": (
                     {}
-                    | self._set_extra_file(
-                        "jupyterhub/portal_auth.py",
-                        "python",
-                        "/usr/local/lib/python3.12/site-packages/jupyterhub/portal_auth.py",
-                    )
-                    | self._set_extra_file(
-                        "jupyterhub/config.d/1_auth.py",
-                        "python",
-                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/1_auth.py",
-                    )
-                    | self._set_extra_file(
-                        "jupyterhub/config.d/0_extras.py",
-                        "python",
-                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/0_extras.py",
-                    )
                     | self._set_extra_file(
                         "jupyterhub/hub_home.html.j2",
                         "html",
                         "/usr/local/share/jupyterhub/templates/custom/page.html",
                     )
                     | self._set_extra_file(
-                        "jupyterhub/config.d/2_profiles.py",
+                        "jupyterhub/portal_auth.py",
                         "python",
-                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/2_profiles.py",
+                        "/usr/local/lib/python3.12/site-packages/jupyterhub/portal_auth.py",
+                    )
+                    | self._set_extra_file(
+                        "jupyterhub/config.d/auth.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/auth.py",
+                    )
+                    | self._set_extra_file(
+                        "jupyterhub/config.d/extras.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/extras.py",
+                    )
+                    | self._set_extra_file(
+                        "jupyterhub/config.d/profiles.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/profiles.py",
+                    )
+                    | self._set_extra_file(
+                        "jupyterhub/config.d/pre_start_hook.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/pre_start_hook.py",
+                    )
+                    | self._set_extra_file(
+                        "jupyterhub/config.d/post_stop_hook.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/post_stop_hook.py",
                     )
                 ),
             },
@@ -601,10 +769,7 @@ class ClusterCdkStack(Stack):
                     "type": "ClusterIP",
                 },
             },
-            "custom": {"COST_TAG_KEY": "hello", "COST_TAG_VALUE": "world"},
         }
-
-        # print(json.dumps(jupyterhub_helm_values))
 
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#helm-charts
         # https://artifacthub.io/packages/helm/jupyterhub/jupyterhub?modal=values-schema
@@ -614,9 +779,9 @@ class ClusterCdkStack(Stack):
             repository="https://jupyterhub.github.io/helm-chart/",
             atomic=False,
             chart="jupyterhub",
-            release=f"osl-jupyterhub-{self.LAB_SHORT_NAME}",  # type: ignore
+            release=f"jupyterhub-{self.LAB_SHORT_NAME}",  # type: ignore
             version=self.jupyterhub_helm_version,
-            namespace="jupyter",
+            namespace=self.K8s_NAMESPACE,
             wait=True,
             timeout=Duration.minutes(10),
             values=jupyterhub_helm_values,
@@ -679,7 +844,7 @@ class ClusterCdkStack(Stack):
                 "kind": "Service",
                 "metadata": {
                     "name": "proxy-public-loadbalancer",
-                    "namespace": "jupyter",
+                    "namespace": self.K8s_NAMESPACE,
                     "labels": {
                         "app": "jupyterhub",
                         "opensciencelab.local/node-type": "core",
@@ -719,7 +884,7 @@ class ClusterCdkStack(Stack):
         # Since the NLB is created via annotations, we need to get the url after jupyterhub installation.
         self.nlb_url = self.cluster.get_service_load_balancer_address(
             "proxy-public-loadbalancer",
-            namespace="jupyter",
+            namespace=self.K8s_NAMESPACE,
             timeout=Duration.minutes(15),
         )
 

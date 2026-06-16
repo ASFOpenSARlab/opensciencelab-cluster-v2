@@ -132,18 +132,25 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
         can_user_access: bool = bool(
             lab_access_for_user.get("can_user_access_lab", False)
         )
-        lab_profiles_for_user: list = lab_access_for_user.get("lab_profiles", [])
+        lab_profile_names_for_user: list = lab_access_for_user.get("lab_profiles", [])
 
         print(
-            f"Lab profiles and group list for user '{username}': {lab_profiles_for_user} with access status '{can_user_access}'"
+            f"Lab profiles and group list for user '{username}': {lab_profile_names_for_user} with access status '{can_user_access}'"
         )
 
-        if not can_user_access or len(lab_profiles_for_user) == 0:
+        if not can_user_access or len(lab_profile_names_for_user) == 0:
             return no_profiles()
+
+        # Subset of profiles that the user can see
+        lab_profiles = [
+            lab_profile
+            for lab_profile in LAB_PROFILES
+            if lab_profile["name"] in lab_profile_names_for_user
+        ]
 
         kubespawner_profile_list = []
 
-        for lab_profile in LAB_PROFILES:
+        for lab_profile in lab_profiles:
             node_name_escaped = re.sub(
                 r"[^A-Za-z0-9]", "00", lab_profile["node"].strip()
             )
@@ -156,59 +163,56 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
             else:
                 lifecycle_hook_cmd = "echo No hook script ran."
 
-            if lab_profile["name"] in lab_profiles_for_user:
-                escaped_lab_profile_name = lab_profile["name"].replace(" ", "_")
+            escaped_lab_profile_name = lab_profile["name"].replace(" ", "_")
 
-                kubespawner_profile_dict = {
-                    "display_name": lab_profile["name"],
-                    "slug": urllib.parse.quote(lab_profile["name"]),  # type: ignore
-                    "description": lab_profile["description"],
-                    "default": lab_profile.get("default", None),
-                    "kubespawner_override": {
-                        "extra_labels": {
-                            "opensciencelab.local/node-type": f"user-{node_name_escaped}",
-                            "opensciencelab.local/user-profile-name": escaped_lab_profile_name,
-                            "sidecar.istio.io/inject": "false",
-                            "opensciencelab.local/egress-profile": "none",
-                        },
-                        "node_selector": {
-                            "opensciencelab.local/node-type": f"user-{node_name_escaped}"
-                        },
-                        "image": lab_profile["image_url"],
-                        "lifecycle_hooks": {
-                            "postStart": {
-                                "exec": {
-                                    "command": ["/bin/sh", "-c", lifecycle_hook_cmd]
-                                }
-                            }
-                        },
-                        "args": [
-                            "--YDocExtension.disable_rtc=True",
-                            "--FileContentsManager.always_delete_dir=True",
-                            "--FileContentsManager.delete_to_trash=False",
-                        ],
-                        "mem_limit": lab_profile.get("memory_limit", None),
-                        "memory_guarantee": lab_profile.get("memory_guarantee", None),
-                        "cpu_limit": lab_profile.get("cpu_limit", None),
-                        "cpu_guarantee": lab_profile.get("cpu_guarantee", None),
-                        "delete_pvc": lab_profile.get("delete_pvc", False),
-                        "storage_capacity": lab_profile.get("storage_capacity", "10Gi"),
-                        "environment": {
-                            "JUPYTERHUB_SINGLEUSER_APP": "jupyter_server.serverapp.ServerApp",
-                            "OPENSARLAB_PROFILE_NAME": lab_profile["name"],
-                            "OPENSCIENCELAB_LAB_SHORT_NAME": LAB_SHORT_NAME,
-                            "OPENSCIENCELAB_PORTAL_DOMAIN": portal_domain,
-                        },
-                        "default_url": "/lab",
+            kubespawner_profile_dict = {
+                "display_name": lab_profile["name"],
+                "slug": urllib.parse.quote(lab_profile["name"]),  # type: ignore
+                "description": lab_profile["description"],
+                "default": lab_profile.get("default", None),
+                "kubespawner_override": {
+                    "extra_labels": {
+                        "opensciencelab.local/node-type": f"user-{node_name_escaped}",
+                        "opensciencelab.local/user-profile-name": escaped_lab_profile_name,
+                        "sidecar.istio.io/inject": "false",
+                        "opensciencelab.local/egress-profile": "none",
                     },
-                }
-                kubespawner_profile_list.append(kubespawner_profile_dict)
+                    "node_selector": {
+                        "opensciencelab.local/node-type": f"user-{node_name_escaped}"
+                    },
+                    "image": lab_profile["image_url"],
+                    "lifecycle_hooks": {
+                        "postStart": {
+                            "exec": {"command": ["/bin/sh", "-c", lifecycle_hook_cmd]}
+                        }
+                    },
+                    "args": [
+                        "--YDocExtension.disable_rtc=True",
+                        "--FileContentsManager.always_delete_dir=True",
+                        "--FileContentsManager.delete_to_trash=False",
+                    ],
+                    "mem_limit": lab_profile.get("memory_limit", None),
+                    "memory_guarantee": lab_profile.get("memory_guarantee", None),
+                    "cpu_limit": lab_profile.get("cpu_limit", None),
+                    "cpu_guarantee": lab_profile.get("cpu_guarantee", None),
+                    "delete_pvc": lab_profile.get("delete_pvc", False),
+                    "storage_capacity": lab_profile.get("storage_capacity", "10Gi"),
+                    "environment": {
+                        "JUPYTERHUB_SINGLEUSER_APP": "jupyter_server.serverapp.ServerApp",
+                        "OPENSARLAB_PROFILE_NAME": lab_profile["name"],
+                        "OPENSCIENCELAB_LAB_SHORT_NAME": LAB_SHORT_NAME,
+                        "OPENSCIENCELAB_PORTAL_DOMAIN": portal_domain,
+                    },
+                    "default_url": lab_profile.get("default_url", "/lab"),
+                },
+            }
+            kubespawner_profile_list.append(kubespawner_profile_dict)
 
         if kubespawner_profile_list == []:
             return no_profiles()
 
         # This clause for sudo should always be last
-        if "sudo" in lab_profiles_for_user:
+        if "sudo" in lab_profile_names_for_user:
             print("Adding sudo privs...")
             spawner.args.append("--allow-root")
             spawner.environment["GRANT_SUDO"] = "yes"
@@ -231,4 +235,8 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
         return no_profiles()
 
 
+# The variable "c" is a global variable representing the Config instance.
+# This code will be appended to the end of the jupyterhub config.
+# Linters like Flake8 often fail to recognize "magic" variables like "c".
+# Therefore we apply "noqa: F821"
 c.KubeSpawner.profile_list = lab_profile_list_hook  # noqa: F821

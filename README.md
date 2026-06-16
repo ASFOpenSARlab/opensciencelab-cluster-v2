@@ -36,6 +36,44 @@ a CDK + Actions pipeline.
 - Prod-level deployments (OpenSARLab, Custom Deployments) are manually deployed to via
   the deploy Action `workflow_dispatch`.
 
+### Creation of User Volumes and Snapshots
+
+The following assumes that all EBS volumes and snapshots are tagged with `kubernetes.io/cluster/{cluster_name}=owned`.
+
+Kubernetes handles user storage internally via the [kubernetes objects](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) Persistent Volume Claim (PVC) and Persistent Volume (PV). These map directly to AWS EBS volumes and snapshots. To ensure users don't lose their data, snapshots are taken often. On server startup, storage assigned to the user is checked accoring to four scenerios:
+
+1. If the user has an existing PVC it is assumed that they have an linked EBS volume. If this is not true and a PVC exists without a linked EBS volume, the PVC will be deleted to ensure consistency. Then a new PVC and volune will be created.
+2. If the user doesn't have an existing PVC, EBS volume, nor ENS snapshot, then a new PVC, PV, and EBS volume will be created.
+3. If the user doesn't have an existing PVC but does have an EBS volume, a PVC and PV is created from the volume. This should be rare. This case is most likely when a volume is manually created (or restored). Any EBS snapshots with the same claim name will be ignored.
+4. If the user doesn't have an existing PVC nor EBS volume, but does have a EBS snapshot, an EBS volume will be restored and the associated PVC and PV will be created.
+
+WARNING: Never have more than one EBS volume with the same `kubernetes.io/created-for/pvc/name` value. This will throw a 500 error for users.
+
+WARNING: If more than one EBS snapshot is found with the same `kubernetes.io/created-for/pvc/name` value, the most recent will be restored.
+
+WARNING: If an EBS volume `kubernetes.io/created-for/pvc/name` tag is manually changed, then the script will treat it like it doesn't exist. Since the existing PVC is referencing an apparently non-existing volume, the PVC will be deleted and the real volume will also be deleted. Therefore, NEVER modify the `kubernetes.io/created-for/pvc/name` EBS volume tag. It is safer to create a snapshot and restore a volume from that.
+
+If the restoring EBS snapshot has a size bigger than the configured value, the restored volume size will be the same as the snapshot.
+
+The size of the requested storage is `storage_capacity` as found in individual lab profiles within [opensciencelab.toml](./cluster-cdk/cluster_cdk/opensciencelab.toml). The default size of user `storage_capacity` is 10GBi if not provided in configuration. Once the volume is created, this storage value can not be changed via updating the lab profile. EBS volumes cannot be shrunk but they may be expanded. Therefore, bigger storage sizes should be assigned carefully to avoid costs.
+
+There are two ways to expand the size of an existing volume:
+
+1. Assign an user a lab profile with a bigger `storage_capacity`. If the `storage_capacity` of a profile is larger than the current volume size, the volume will expand to that size.
+2. Use AWS cloudshell and edit `spec.resources.requests.storage` within the user's PVC. If the `storage_capacity` of a profile is larger than the current volume size, the volume will expand to that size.
+
+Specific environment variables (can be set in the GitHub Environment) include
+
+- `DAYS_TILL_VOLUME_DELETION`: The number of days after server stop when the EBS volume will be deleted. The default (if not set) is 3600.  
+- `DAYS_TILL_SNAPSHOT_DELETION`: The number of days after server stop when the EBS snapshot will be deleted. The default (if not set) is 3600.
+
+Various EBS tags are created on server start and stop. Some relevant ones are
+
+- `server-start-tag`: The datetime the user's server started.
+- `server-stop-tag`: The datetime the user's server stopped.
+- `volume-delete-tag`: The datetime the EBS volume should be deleted. Calculated on server stop.
+- `snapshot-delete-time`: The datetime the EBS snapshot should be deleted. Calculated on server stop.
+
 ### Troubleshooting
 
 ### Deploying the Cluster
@@ -88,6 +126,9 @@ export PORTAL_DOMAINS="https://...."         # Comma seperated list of approved 
 
 export VOLUME_CRON_SCHEDULE="0 * * * ? *"    # Schedule to run the volume management lambda
 export SNAPSHOT_WARNING_DAYS="5"             # Number of days before delete to warn for old snapshots
+
+export DAYS_TILL_VOLUME_DELETION=2           # Number of days after server stop when the user's volume will be deleted
+export DAYS_TILL_SNAPSHOT_DELETION=7         # Number of days after server stop when the user's snapshot will be deleted
 
 export AWS_CLI_PATH=/usr/local/bin/aws       # Path to your installation of awscli
 export SSO_SECRET_ARN=arn:aws:.....          # Arn location of cluster SSO secret
