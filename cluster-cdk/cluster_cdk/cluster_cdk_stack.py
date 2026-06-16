@@ -24,6 +24,7 @@ from aws_cdk import (  # type: ignore
     aws_secretsmanager as secretsmanager,
     aws_events as events,
     aws_events_targets as targets,
+    aws_sns as sns,
     lambda_layer_kubectl_v34,
     lambda_layer_awscli,
 )
@@ -724,6 +725,19 @@ class ClusterCdkStack(Stack):
 
         #####################################################################
         #
+        #    Alerts / Observability
+        #
+        #####################################################################
+
+        self.alert_sns_topic = sns.Topic(
+            self,
+            f"{self.DEPLOY_PREFIX} Cluster Alerts",
+            display_name=f"{self.DEPLOY_PREFIX} Cluster Alerts",
+            topic_name=f"{self.DEPLOY_PREFIX}-cluster-alerts-sns",
+        )
+
+        #####################################################################
+        #
         #    Volume/Snapshot Management
         #
         #####################################################################
@@ -733,6 +747,7 @@ class ClusterCdkStack(Stack):
             description=f"{self.DEPLOY_PREFIX} Volume Management Lambda",
             id=f"{self.DEPLOY_PREFIX}_volume_management",
             runtime=lambda_.Runtime.PYTHON_3_13,
+            memory_size=1769,
             timeout=Duration.minutes(15),
             handler="volume_management.lambda_handler",
             code=lambda_.Code.from_asset(
@@ -740,9 +755,11 @@ class ClusterCdkStack(Stack):
             ),
             environment={
                 "CLUSTER_NAME": self.cluster.cluster_name,
+                "LAB_SHORT_NAME": self.LAB_SHORT_NAME,
                 "SNAPSHOT_WARNING_DAYS": self.SNAPSHOT_WARNING_DAYS,
                 "PORTAL_DOMAINS": self.PORTAL_DOMAINS,
-                "SSO_SECRET": self.sso_token.secret_arn,
+                "SSO_SECRET_ARN": self.sso_token.secret_arn,
+                "ALERT_SNS_TOPIC_ARN": self.alert_sns_topic.topic_arn,
             },
         )
 
@@ -754,8 +771,7 @@ class ClusterCdkStack(Stack):
             compatible_runtimes=[lambda_.Runtime.PYTHON_3_13],
         )
 
-        # Add kubectl, awscli, and requirements lambda layers
-        self.volume_management_lambda.add_layers(self.kubectl_layer)
+        # Add awscli and requirements lambda layers
         self.volume_management_lambda.add_layers(
             lambda_layer_awscli.AwsCliLayer(self, "AwsCliLayer")
         )
@@ -777,7 +793,16 @@ class ClusterCdkStack(Stack):
             removal_policy=RemovalPolicy.DESTROY,
         )
 
+        self.volume_management_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=["eks:*"],
+                resources=[self.cluster.cluster_arn],
+            )
+        )
+
         # grant lambda the access it needs
+        self.alert_sns_topic.grant_publish(self.volume_management_lambda)
         self.sso_token.grant_read(self.volume_management_lambda)
         self.volume_management_lambda.add_to_role_policy(
             iam.PolicyStatement(

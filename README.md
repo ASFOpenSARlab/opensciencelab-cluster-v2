@@ -90,6 +90,7 @@ export VOLUME_CRON_SCHEDULE="0 * * * ? *"    # Schedule to run the volume manage
 export SNAPSHOT_WARNING_DAYS="5"             # Number of days before delete to warn for old snapshots
 
 export AWS_CLI_PATH=/usr/local/bin/aws       # Path to your installation of awscli
+export SSO_SECRET_ARN=arn:aws:.....          # Arn location of cluster SSO secret
 ```
 
 For example configurations, see the [GitHub Environments](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/settings/environments)

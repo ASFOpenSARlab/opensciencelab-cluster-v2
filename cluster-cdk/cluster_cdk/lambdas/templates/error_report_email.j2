@@ -1,0 +1,25 @@
+<p>The following are errors for lab '{{ cluster_name }}' encountered while running the volume management lambda:</p>
+<table>
+    <tr>
+        <th>User</th>
+        <th>Volume</th>
+        <th>Snapshot</th>
+        <th>Message</th>
+    </tr>
+    {% for issue in issues %}
+        <tr>
+            <td>
+                {% if "user" in issue %}{{ issue["user"] }}{% endif %}
+            </td>
+            <td>
+                {% if "volume" in issue %}{{ issue["volume"] }}{% endif %}
+            </td>
+            <td>
+                {% if "snapshot" in issue %}{{ issue["snapshot"] }}{% endif %}
+            </td>
+            <td>
+                {% if "message" in issue %}{{ issue["message"] }}{% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+</table>
