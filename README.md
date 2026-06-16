@@ -131,6 +131,7 @@ export DAYS_TILL_VOLUME_DELETION=2           # Number of days after server stop 
 export DAYS_TILL_SNAPSHOT_DELETION=7         # Number of days after server stop when the user's snapshot will be deleted
 
 export AWS_CLI_PATH=/usr/local/bin/aws       # Path to your installation of awscli
+export SSO_SECRET_ARN=arn:aws:.....          # Arn location of cluster SSO secret
 ```
 
 For example configurations, see the [GitHub Environments](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/settings/environments)
