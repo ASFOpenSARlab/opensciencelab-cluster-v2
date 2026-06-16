@@ -72,9 +72,15 @@ def reset_concerning_issues():
 def add_concerning_issue(**args):
     """Keep a list of concerning issues to email to admins"""
     global CONCERNING_ISSUES
+
+    # Prevent duplicates
+    if args in CONCERNING_ISSUES:
+        return False
+
+    # Record
     logger.warning(args["message"])
     CONCERNING_ISSUES.append(args)
-
+    return True
 
 def email_concerning_issues():
     if not CONCERNING_ISSUES:
@@ -187,7 +193,7 @@ def get_eks_client():
 def get_all_pvcs(kube_client):
     """Return a list of all PVC's in the jupyter namespace of the cluster"""
     all_pvcs = kube_client.list_namespaced_persistent_volume_claim(namespace="jupyter")
-    return [pvc.metadata.name for pvc in all_pvcs.items]
+    return [pvc.metadata.name for pvc in all_pvcs.items if pvc.metadata.name != 'hub-db-dir']
 
 
 def delete_pvc(claim_user, all_pvcs, kube_client):
@@ -426,7 +432,7 @@ def get_user_snapshots():
 def send_email_to_portal(email_payload):
     """Proxy an email through portal endpoint"""
     encrypted_data = encryptedjwt.encrypt(email_payload, sso_token=SSO_SECRET)
-    portal_email_url = f"https://{PORTAL_DOMAIN}/user/email/send"
+    portal_email_url = f"https://{PORTAL_DOMAIN}/portal/hub/user/email"
 
     # Send Request
     response = requests.post(url=portal_email_url, data=encrypted_data, timeout=15)
@@ -485,7 +491,9 @@ def run_volume_management():
             f"SNAPSHOT: {claim_user} | ID: {snapshot.id} | Size: {snapshot.volume_size}GB | State: {snapshot.state}"
         )
 
-        if is_delete_protected(snapshot):
+        if not snapshot_has_required_tags(snapshot):
+            logger.warning(" - Snapshot is missing tags!")
+        elif is_delete_protected(snapshot):
             logger.info(" - Snapshot is Delete protected!")
         elif is_expired(snapshot, grace_period_days=SNAPSHOT_EXPIRY_GRACEPERIOD):
             logger.info(" - Snapshot is expired past grace period!")
