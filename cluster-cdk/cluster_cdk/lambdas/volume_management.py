@@ -19,8 +19,7 @@ CLUSTER_TAG = "KubernetesCluster"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S+00:00"
 REQUIRED_SNAPSHOT_TAGS = ("volume-delete-time", "snapshot-delete-time")
 
-CLUSTER_NAME = os.getenv("CLUSTER_NAME")
-LAB_SHORT_NAME = os.getenv("LAB_SHORT_NAME", "CLUSTER_NAME")
+LAB_SHORT_NAME = os.environ["LAB_SHORT_NAME"]  # Required
 SNAPSHOT_WARNING_DAYS = int(os.getenv("SNAPSHOT_WARNING_DAYS", "5"))
 SNAPSHOT_EXPIRY_GRACEPERIOD = int(os.getenv("SNAPSHOT_EXPIRY_GRACEPERIOD", "1"))
 SNS_ALERT_TOPIC_ARN = os.getenv("ALERT_SNS_TOPIC_ARN")
@@ -89,7 +88,7 @@ def email_concerning_issues():
 
     email_template = JINJA_LOADER.get_template("error_report_email.j2")
     email_template_params = {
-        "cluster_name": CLUSTER_NAME,
+        "lab_short_name": LAB_SHORT_NAME,
         "issues": CONCERNING_ISSUES,
     }
     email_payload = {
@@ -158,7 +157,7 @@ def get_eks_client():
             "eks",
             "update-kubeconfig",
             "--name",
-            CLUSTER_NAME,
+            LAB_SHORT_NAME,
             "--kubeconfig",
             KUBECONFIG,
             "--alias",
@@ -207,7 +206,7 @@ def delete_pvc(claim_user, all_pvcs, kube_client):
     if user_claim_id not in all_pvcs:
         add_concerning_issue(
             user=user_claim_id,
-            message=f"user pvc {user_claim_id} does not exist in {CLUSTER_NAME}",
+            message=f"user pvc {user_claim_id} does not exist in {LAB_SHORT_NAME}",
         )
         return False
 
@@ -218,7 +217,7 @@ def delete_pvc(claim_user, all_pvcs, kube_client):
             namespace="jupyter",
         )
     except kubernetes.client.rest.ApiException:
-        exception_message = f"Could not delete PVC {user_claim_id} in {CLUSTER_NAME}"
+        exception_message = f"Could not delete PVC {user_claim_id} in {LAB_SHORT_NAME}"
         add_concerning_issue(message=exception_message, user=claim_user)
         logger.exception(exception_message)
         return True
@@ -239,7 +238,7 @@ def filter_users(all_items):
             logger.debug("Skipping non-claim %s: %s", item.id, item_tags.get(CLAIM_TAG))
             continue
 
-        if CLUSTER_NAME and item_tags.get(CLUSTER_TAG, "") != CLUSTER_NAME:
+        if LAB_SHORT_NAME and item_tags.get(CLUSTER_TAG, "") != LAB_SHORT_NAME:
             # Wrong Cluster
             logger.debug(
                 "Skipping cross-cluster %s: %s", item.id, item_tags.get(CLUSTER_TAG)
@@ -455,7 +454,7 @@ def run_volume_management():
     set_sso_secret()
 
     # Loop up resources
-    logger.info("Setting up EKS Client for %s", CLUSTER_NAME)
+    logger.info("Setting up EKS Client for %s", LAB_SHORT_NAME)
     kube_client = get_eks_client()
 
     logger.info("Querying for Volumes...")
@@ -516,7 +515,7 @@ def alert_fatal_exception(exception_message):
         sns_client.publish(
             TopicArn=SNS_ALERT_TOPIC_ARN,
             Message=exception_message,
-            Subject=f"Exception alert from {CLUSTER_NAME}",
+            Subject=f"Exception alert from {LAB_SHORT_NAME}",
         )
     else:
         add_concerning_issue(message="No SNS topic configured")

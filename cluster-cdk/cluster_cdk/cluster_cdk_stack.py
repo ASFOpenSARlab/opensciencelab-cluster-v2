@@ -47,19 +47,18 @@ class ClusterCdkStack(Stack):
         # CDK provides the AWS Account number via self.account # "233535791844"
         # CDK provides the AWS Region va self.region
 
-        self.DEPLOY_PREFIX = str(os.getenv("DEPLOY_PREFIX")).lower()
+        self.LAB_SHORT_NAME = str(os.getenv("LAB_SHORT_NAME", "")).lower()
+        if not self.LAB_SHORT_NAME:
+            raise Exception("Lab short name is not defined")
+
         self.JUPYTER_HUB_DOCKER_TAG = os.getenv(
-            "JUPYTER_HUB_DOCKER_TAG", self.DEPLOY_PREFIX
+            "JUPYTER_HUB_DOCKER_TAG", self.LAB_SHORT_NAME
         )
         self.UI_IAM_USER = os.getenv("UI_IAM_USER", None)
 
         # Default cron schedule to top of every hour
         self.VOLUME_CRON_SCHEDULE = os.getenv("VOLUME_CRON_SCHEDULE", "0 * * * ? *")
         self.SNAPSHOT_WARNING_DAYS = os.getenv("SNAPSHOT_WARNING_DAYS", "5")
-
-        self.LAB_SHORT_NAME = str(os.getenv("LAB_SHORT_NAME", "")).lower()
-        if not self.LAB_SHORT_NAME:
-            raise Exception("Lab short name is not defined")
 
         self.ALLOWED_LAB_PROFILES = [
             profile.strip()
@@ -141,7 +140,7 @@ class ClusterCdkStack(Stack):
             self,
             "EksCluster",
             vpc=self.vpc,
-            cluster_name=f"eks-cluster-{self.LAB_SHORT_NAME}",
+            cluster_name=self.LAB_SHORT_NAME,
             version=eks.KubernetesVersion.V1_34,
             kubectl_provider_options=eks.KubectlProviderOptions(
                 kubectl_layer=self.kubectl_layer,
@@ -506,7 +505,7 @@ class ClusterCdkStack(Stack):
             values={
                 "controller": {
                     "extraCreateMetadata": True,
-                    "k8sTagClusterId": self.cluster.cluster_name,
+                    "k8sTagClusterId": self.LAB_SHORT_NAME,
                     "extraVolumeTags": {
                         "osl-billing": self.LAB_SHORT_NAME,
                     },
@@ -718,7 +717,6 @@ class ClusterCdkStack(Stack):
                     "LAB_PROFILES": json.dumps(self.osl_config["lab_profiles"]),
                     "DAYS_TILL_VOLUME_DELETION": self.DAYS_TILL_VOLUME_DELETION,
                     "DAYS_TILL_SNAPSHOT_DELETION": self.DAYS_TILL_SNAPSHOT_DELETION,
-                    "CLUSTER_NAME": self.cluster.cluster_name,
                     "AZ_NAME": f"{self.region}{self.AZ_LETTER}",
                     "COST_TAG_KEY": "osl-billing",
                     "COST_TAG_VALUE": self.LAB_SHORT_NAME,
@@ -818,7 +816,7 @@ class ClusterCdkStack(Stack):
             timeout=Duration.minutes(10),
             version=self.load_balancer_controller_version,
             values={
-                "clusterName": self.cluster.cluster_name,
+                "clusterName": self.LAB_SHORT_NAME,
                 "serviceAccount": {
                     "create": False,
                     "name": alb_sa.service_account_name,
@@ -896,9 +894,9 @@ class ClusterCdkStack(Stack):
 
         self.alert_sns_topic = sns.Topic(
             self,
-            f"{self.DEPLOY_PREFIX} Cluster Alerts",
-            display_name=f"{self.DEPLOY_PREFIX} Cluster Alerts",
-            topic_name=f"{self.DEPLOY_PREFIX}-cluster-alerts-sns",
+            f"{self.LAB_SHORT_NAME} Cluster Alerts",
+            display_name=f"{self.LAB_SHORT_NAME} Cluster Alerts",
+            topic_name=f"{self.LAB_SHORT_NAME}-cluster-alerts-sns",
         )
 
         #####################################################################
@@ -909,8 +907,8 @@ class ClusterCdkStack(Stack):
 
         self.volume_management_lambda = lambda_.Function(
             self,
-            description=f"{self.DEPLOY_PREFIX} Volume Management Lambda",
-            id=f"{self.DEPLOY_PREFIX}_volume_management",
+            description=f"{self.LAB_SHORT_NAME} Volume Management Lambda",
+            id=f"{self.LAB_SHORT_NAME}_volume_management",
             runtime=lambda_.Runtime.PYTHON_3_13,
             memory_size=1769,
             timeout=Duration.minutes(15),
@@ -919,7 +917,6 @@ class ClusterCdkStack(Stack):
                 path="cluster_cdk/lambdas/",
             ),
             environment={
-                "CLUSTER_NAME": self.cluster.cluster_name,
                 "LAB_SHORT_NAME": self.LAB_SHORT_NAME,
                 "SNAPSHOT_WARNING_DAYS": self.SNAPSHOT_WARNING_DAYS,
                 "PORTAL_DOMAINS": self.PORTAL_DOMAINS,
@@ -984,7 +981,7 @@ class ClusterCdkStack(Stack):
 
         self.cron_schedule_rule = events.Rule(
             self,
-            id=f"{self.DEPLOY_PREFIX}_volume_management_rule",
+            id=f"{self.LAB_SHORT_NAME}_volume_management_rule",
             schedule=events.Schedule.expression(f"cron({self.VOLUME_CRON_SCHEDULE})"),
             description="Triggers Volume Management Lambda",
         )
@@ -996,7 +993,7 @@ class ClusterCdkStack(Stack):
         # DLM configuration to create daily volume snapshots
         self.dlm_role = iam.Role(
             self,
-            id=f"{self.DEPLOY_PREFIX}_dlm_service_role",
+            id=f"{self.LAB_SHORT_NAME}_dlm_service_role",
             assumed_by=iam.ServicePrincipal("dlm.amazonaws.com"),
         )
 
@@ -1010,7 +1007,7 @@ class ClusterCdkStack(Stack):
         # Create DLM Policy - https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_dlm.html
         self.ebs_lifecycle_policy = dlm.CfnLifecyclePolicy(
             self,
-            id=f"{self.DEPLOY_PREFIX}_daily_snapshot",
+            id=f"{self.LAB_SHORT_NAME}_daily_snapshot",
             description="Daily backup policy for EBS volumes",
             execution_role_arn=self.dlm_role.role_arn,
             state="ENABLED",
@@ -1018,7 +1015,7 @@ class ClusterCdkStack(Stack):
                 resource_types=["VOLUME"],
                 # Target volumes from this cluster only
                 target_tags=[
-                    CfnTag(key="KubernetesCluster", value=self.cluster.cluster_name),
+                    CfnTag(key="KubernetesCluster", value=self.LAB_SHORT_NAME),
                 ],
                 schedules=[
                     dlm.CfnLifecyclePolicy.ScheduleProperty(
@@ -1026,7 +1023,7 @@ class ClusterCdkStack(Stack):
                         tags_to_add=[
                             CfnTag(
                                 key="CreatedBy",
-                                value=f"{self.DEPLOY_PREFIX}_daily_snapshot",
+                                value=f"{self.LAB_SHORT_NAME}_daily_snapshot",
                             ),
                         ],
                         create_rule=dlm.CfnLifecyclePolicy.CreateRuleProperty(

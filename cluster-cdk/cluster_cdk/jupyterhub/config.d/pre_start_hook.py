@@ -12,7 +12,6 @@ from kubernetes import config as k8s_config
 from kubernetes.client.rest import ApiException
 
 LAB_SHORT_NAME = os.environ["LAB_SHORT_NAME"]
-CLUSTER_NAME = os.environ["CLUSTER_NAME"]
 REGION_NAME = os.environ["AWS_REGION"]
 AZ_NAME = os.environ["AZ_NAME"]
 COST_TAG_KEY = os.environ["COST_TAG_KEY"]
@@ -104,7 +103,7 @@ def get_volume_for_pvc(pvc_name: str, ec2: boto3.Session.client) -> dict | None:
                 "Values": [pvc_name],
             },
             {
-                "Name": f"tag:kubernetes.io/cluster/{CLUSTER_NAME}",
+                "Name": f"tag:kubernetes.io/cluster/{LAB_SHORT_NAME}",
                 "Values": ["owned"],
             },
         ]
@@ -137,7 +136,7 @@ def get_snapshot_for_pvc(pvc_name: str, ec2: boto3.Session.client) -> dict | Non
                 "Values": [pvc_name],
             },
             {
-                "Name": f"tag:kubernetes.io/cluster/{CLUSTER_NAME}",
+                "Name": f"tag:kubernetes.io/cluster/{LAB_SHORT_NAME}",
                 "Values": ["owned"],
             },
             {"Name": "status", "Values": ["completed"]},
@@ -268,7 +267,7 @@ def get_user_volume(
                             "Value": f"user--{username}--{LAB_SHORT_NAME}",
                         },
                         {
-                            "Key": f"kubernetes.io/cluster/{CLUSTER_NAME}",
+                            "Key": f"kubernetes.io/cluster/{LAB_SHORT_NAME}",
                             "Value": "owned",
                         },
                         {
@@ -319,12 +318,12 @@ def get_user_volume(
                             "Value": f"user--{username}--{LAB_SHORT_NAME}",
                         },
                         {
-                            "Key": f"kubernetes.io/cluster/{CLUSTER_NAME}",
+                            "Key": f"kubernetes.io/cluster/{LAB_SHORT_NAME}",
                             "Value": "owned",
                         },
                         {
                             "Key": "KubernetesCluster",
-                            "Value": CLUSTER_NAME,
+                            "Value": LAB_SHORT_NAME,
                         },
                         {
                             "Key": "kubernetes.io/created-for/pvc/namespace",
@@ -355,7 +354,7 @@ def get_user_volume(
         "kind": "PersistentVolumeClaim",
         "metadata": {
             "annotations": annotations,
-            "cluster_name": CLUSTER_NAME,
+            "cluster_name": LAB_SHORT_NAME,
             "labels": labels,
             "name": pvc_name,
             "namespace": NAMESPACE,
@@ -374,7 +373,7 @@ def get_user_volume(
         "kind": "PersistentVolume",
         "metadata": {
             "annotations": pvc_manifest["metadata"]["annotations"],
-            "cluster_name": CLUSTER_NAME,
+            "cluster_name": LAB_SHORT_NAME,
             "labels": {
                 "topology.kubernetes.io/region": REGION_NAME,
                 "topology.kubernetes.io/zone": AZ_NAME,
@@ -447,7 +446,7 @@ def get_user_volume(
         Tags=[
             {"Key": "kubernetes.io/created-for/pv/name", "Value": vol_id},
             {"Key": "CSIVolumeName", "Value": vol_id},
-            {"Key": "KubernetesCluster", "Value": CLUSTER_NAME},
+            {"Key": "KubernetesCluster", "Value": LAB_SHORT_NAME},
             {"Key": "ebs.csi.aws.com/cluster", "Value": "true"},
         ],
     )
@@ -457,7 +456,7 @@ def server_starting_tag(pvc_name: str, **kwargs) -> None:
     session = boto3.Session(region_name=REGION_NAME)
     ec2 = session.client("ec2")
 
-    log.info(f"Updating starting tags to '{pvc_name}' in cluster '{CLUSTER_NAME}'...")
+    log.info(f"Updating starting tags to '{pvc_name}' in cluster '{LAB_SHORT_NAME}'...")
 
     volume = get_volume_for_pvc(pvc_name=pvc_name, ec2=ec2)
 

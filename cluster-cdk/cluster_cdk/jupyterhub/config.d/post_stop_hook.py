@@ -6,7 +6,7 @@ import datetime
 
 import logging
 
-CLUSTER_NAME = os.environ["CLUSTER_NAME"]
+LAB_SHORT_NAME = os.environ["LAB_SHORT_NAME"]
 REGION_NAME = os.environ["AWS_REGION"]
 DAYS_TILL_VOLUME_DELETION = int(os.environ["DAYS_TILL_VOLUME_DELETION"])
 DAYS_TILL_SNAPSHOT_DELETION = int(os.environ["DAYS_TILL_SNAPSHOT_DELETION"])
@@ -45,7 +45,7 @@ def get_volume_for_pvc(pvc_name: str, ec2: boto3.Session.client) -> dict | None:
                 "Values": [pvc_name],
             },
             {
-                "Name": f"tag:kubernetes.io/cluster/{CLUSTER_NAME}",
+                "Name": f"tag:kubernetes.io/cluster/{LAB_SHORT_NAME}",
                 "Values": ["owned"],
             },
         ]
@@ -67,7 +67,7 @@ def server_stopping_tags(pvc_name: str) -> None:
     session = boto3.Session(region_name=REGION_NAME)
     ec2 = session.client("ec2")
 
-    log.info(f"Updating stopping tags to '{pvc_name}' in cluster '{CLUSTER_NAME}'...")
+    log.info(f"Updating stopping tags to '{pvc_name}' in cluster '{LAB_SHORT_NAME}'...")
 
     volume = get_volume_for_pvc(pvc_name=pvc_name, ec2=ec2)
 

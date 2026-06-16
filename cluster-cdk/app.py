@@ -9,7 +9,7 @@ from cluster_cdk.cluster_cdk_stack import ClusterCdkStack
 app = cdk.App()
 ClusterCdkStack(
     app,
-    f"osl-eks-stack-{os.getenv('DEPLOY_PREFIX', 'UKN')}",
+    f"cdk-stack-{os.getenv('LAB_SHORT_NAME', 'UKN')}",
 )
 
 app.synth()

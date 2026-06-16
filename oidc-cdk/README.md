@@ -57,7 +57,7 @@ The following ENV VARS are exported to the docker run environment, but `AWS_DEFA
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 - `PROJECT_NAME`
-- `DEPLOY_PREFIX`
+- `LAB_SHORT_NAME`
 - `PROJECT_NAME`
 
 ```bash

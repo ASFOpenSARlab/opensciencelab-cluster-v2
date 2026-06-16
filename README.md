@@ -38,7 +38,7 @@ a CDK + Actions pipeline.
 
 ### Creation of User Volumes and Snapshots
 
-The following assumes that all EBS volumes and snapshots are tagged with `kubernetes.io/cluster/{cluster_name}=owned`.
+The following assumes that all EBS volumes and snapshots are tagged with `kubernetes.io/cluster/{LAB_SHORT_NAME}=owned`.
 
 Kubernetes handles user storage internally via the [kubernetes objects](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) Persistent Volume Claim (PVC) and Persistent Volume (PV). These map directly to AWS EBS volumes and snapshots. To ensure users don't lose their data, snapshots are taken often. On server startup, storage assigned to the user is checked accoring to four scenerios:
 
@@ -114,12 +114,11 @@ nano .env
 
 ```bash
 export AWS_PROFILE="profile_name"            # The profile configured to access AWS Account
-export DEPLOY_PREFIX="eg"                    # Short deployment prefix value, probably initials
+export LAB_SHORT_NAME="eg"                   # Short deployment prefix value, probably initials
 
 export JUPYTER_HUB_DOCKER_TAG="test"         # needs to exist for opensciencelab-jupyterhub image
 export UI_IAM_USER="AWSReservedSSO_Project"  # IAM Role used by admins in the AWS console
 
-export LAB_SHORT_NAME="eg"                   # Probably a duplicate of DEPLOY_PREFIX, not used for actions
 export ALLOWED_LAB_PROFILES="sar"            # Comma seperated list of profiles to enable
 export ADMIN_USERS="nobody, joe"             # Comma seperated list of users to embed into JH       
 export PORTAL_DOMAINS="https://...."         # Comma seperated list of approved portal domains

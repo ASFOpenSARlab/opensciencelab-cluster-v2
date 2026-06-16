@@ -50,9 +50,6 @@ IS_PROD ?= false
 JUPYTER_HUB_DOCKER_TAG ?= test
 UI_IAM_USER := $(UI_IAM_USER)
 
-# Extra env var for running volume management lambda
-CLUSTER_NAME ?= eks-cluster-$(DEPLOY_PREFIX)
-
 
 .PHONY := all
 all: help
@@ -94,7 +91,6 @@ cdk-shell:
 		-e AWS_DEFAULT_PROFILE -e AWS_PROFILE \
 		-e AWS_DEFAULT_REGION -e AWS_REGION \
 		-e AWS_DEFAULT_ACCOUNT \
-		-e DEPLOY_PREFIX \
 		-e JUPYTER_HUB_DOCKER_TAG \
 		-e UI_IAM_USER \
 		-e ADMIN_USERS \
@@ -106,7 +102,6 @@ cdk-shell:
 		-e DAYS_TILL_VOLUME_DELETION \
 		-e DAYS_TILL_SNAPSHOT_DELETION \
 		-e AWS_CLI_PATH \
-		-e CLUSTER_NAME \
 		-e SSO_SECRET_ARN \
 		-w /code/ \
 		--pull always \
@@ -162,26 +157,25 @@ bundle-deps:
 .PHONY := run-volume-lambda
 run-volume-lambda: bundle-deps
 	export PYTHONPATH="${BUILD_DEPS}:$${PYTHONPATH}" && \
-	export CLUSTER_NAME="${CLUSTER_NAME}" && \
 	python3 cluster-cdk/cluster_cdk/lambdas/volume_management.py
 
 .PHONY := test
 test: remove-cdk-out install-reqs bundle-deps
-	@echo "Running tests for Cluster (${DEPLOY_PREFIX})"
+	@echo "Running tests for Cluster (${LAB_SHORT_NAME})"
 
 .PHONY := synth-cluster
 synth-cluster: install-reqs bundle-deps
-	@echo "Synthesizing ${DEPLOY_PREFIX}/cluster-cdk"
+	@echo "Synthesizing ${LAB_SHORT_NAME}/cluster-cdk"
 	cd ./cluster-cdk && cdk synth
 
 .PHONY := deploy-cluster
 deploy-cluster: install-reqs bundle-deps
-	@echo "Deploying ${DEPLOY_PREFIX}/cluster-cdk"
+	@echo "Deploying ${LAB_SHORT_NAME}/cluster-cdk"
 	cd ./cluster-cdk && cdk --require-approval never deploy
 
 .PHONY := destroy-cluster
 destroy-cluster:
-	@echo "Destroying ${DEPLOY_PREFIX}/cluster-cdk"
+	@echo "Destroying ${LAB_SHORT_NAME}/cluster-cdk"
 	cd ./cluster-cdk && cdk destroy --force --all
 
 .PHONY := remove-cdk-out
@@ -195,12 +189,12 @@ clean:
 
 .PHONY := synth-oidc
 synth-oidc:
-	@echo "Synthesizing ${DEPLOY_PREFIX}/oidc-cdk"
+	@echo "Synthesizing ${LAB_SHORT_NAME}/oidc-cdk"
 	cd ./oidc-cdk && cdk synth
 
 .PHONY := deploy-oidc
 deploy-oidc:
-	@echo "Deploying ${DEPLOY_PREFIX}/oidc-cdk"
+	@echo "Deploying ${LAB_SHORT_NAME}/oidc-cdk"
 	cd ./oidc-cdk && cdk --require-approval never deploy
 
 .PHONY := aws-info
