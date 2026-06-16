@@ -82,6 +82,7 @@ def add_concerning_issue(**args):
     CONCERNING_ISSUES.append(args)
     return True
 
+
 def email_concerning_issues():
     if not CONCERNING_ISSUES:
         return True
@@ -193,7 +194,9 @@ def get_eks_client():
 def get_all_pvcs(kube_client):
     """Return a list of all PVC's in the jupyter namespace of the cluster"""
     all_pvcs = kube_client.list_namespaced_persistent_volume_claim(namespace="jupyter")
-    return [pvc.metadata.name for pvc in all_pvcs.items if pvc.metadata.name != 'hub-db-dir']
+    return [
+        pvc.metadata.name for pvc in all_pvcs.items if pvc.metadata.name != "hub-db-dir"
+    ]
 
 
 def delete_pvc(claim_user, all_pvcs, kube_client):
