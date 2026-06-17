@@ -219,22 +219,16 @@ def get_user_volume(
 
     vol_id = None
 
-    # Case 3: No PVC but existing volume. Any existing snapshots are ignored. Volume will be expanded to desired value if needed. A PVC and PV will be created later
+    # Case 3: No PVC but existing volume. Any existing snapshots are ignored. A PVC and PV will be created later
+    # Volume will not be expanded if desired since the PVC doesn't exist.
+    # Any subsequent runs will expand to the profile's storage value. While this might cause some delayed expansion, this case is rare enough not to matter.
     if volume and not has_pvc:
         log.warning(
             f"Volume found for '{username}' without pvc '{pvc_name}'. This is unusual."
         )
 
         vol_id = volume["VolumeId"]
-        vol_size = volume["Size"]
-
-        if desired_vol_size > vol_size:
-            log.info(
-                f"Expanding existing volume size from {vol_size}Gi to {desired_vol_size}Gi"
-            )
-            expand_volume(f"{desired_vol_size}Gi", pvc_name, api)
-        else:
-            desired_vol_size = vol_size
+        desired_vol_size = volume["Size"]
 
     # Case 4: No PVC, no existing volume, but an existing snapshot. Restore volume from snapshot
     elif snapshot and not volume and not has_pvc:
