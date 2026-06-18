@@ -320,7 +320,7 @@ def send_snapshot_warning(snapshot, claim_user):
         "username": claim_user,
         "lab_short_name": LAB_SHORT_NAME,
         "volume_delete_time": expiry_string,
-        "portal_domain_name": f"https://{PORTAL_DOMAIN}",
+        "portal_domain_name": PORTAL_DOMAIN,
     }
     email_payload = {
         "to": {"username": claim_user},
@@ -434,7 +434,7 @@ def get_user_snapshots():
 def send_email_to_portal(email_payload):
     """Proxy an email through portal endpoint"""
     encrypted_data = encryptedjwt.encrypt(email_payload, sso_token=SSO_SECRET)
-    portal_email_url = f"https://{PORTAL_DOMAIN}/portal/hub/user/email"
+    portal_email_url = f"{PORTAL_DOMAIN}/portal/hub/user/email"
 
     # Send Request
     response = requests.post(url=portal_email_url, data=encrypted_data, timeout=15)
