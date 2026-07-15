@@ -318,6 +318,14 @@ class ClusterCdkStack(Stack):
 
         # https://github.com/aws/aws-cdk/issues/37012eks.Cluster
         for node in self.osl_config["nodes"]:
+            ec2_tags = [
+                CfnTag(key="osl-billing", value=self.LAB_SHORT_NAME),
+                CfnTag(
+                    key="Name",
+                    value=f"{node['name']}--{self.LAB_SHORT_NAME}",
+                ),
+            ]
+
             node_type = node.get("node_type", "user")
             node_name_escaped = re.sub(r"[^A-Za-z0-9]", "00", node["name"].strip())
 
@@ -326,11 +334,63 @@ class ClusterCdkStack(Stack):
             if node_type == "core":
                 node_labels["hub.jupyter.org/node-purpose"] = "core"
                 node_labels["opensciencelab.local/node-type"] = "core"
+
+                ec2_tags += [
+                    # The core ec2 doesn't need to be under the autoscaler
+                    # CfnTag(key="k8s.io/cluster-autoscaler/enabled", value="false"),
+                ]
+
             elif node_type == "user":
                 node_labels["hub.jupyter.org/node-purpose"] = "user"
                 node_labels["opensciencelab.local/node-type"] = (
                     f"user-{node_name_escaped}"
                 )
+
+                ec2_tags += [
+                    # CfnTag(key="k8s.io/cluster-autoscaler/enabled", value="true"),
+                    CfnTag(
+                        key="k8s.io/cluster-autoscaler/node-template/label/opensciencelab.local/node-type",
+                        value=f"user-{node_name_escaped}",
+                    ),
+                    CfnTag(
+                        key="k8s.io/cluster-autoscaler/node-template/label/hub.jupyter.org/node-purpose",
+                        value="user",
+                    ),
+                    CfnTag(
+                        key="k8s.io/cluster-autoscaler/node-template/taint/hub.jupyter.org/dedicated",
+                        value="user:NoSchedule",
+                    ),
+                    # The target utilization percentage (CPU and memory) below which a node is considered a candidate for scale-down.
+                    CfnTag(
+                        key="k8s.io/cluster-autoscaler/node-template/autoscaling-options/scaledownutilizationthreshold",
+                        value="0.5",
+                    ),
+                    # The specific utilization percentage threshold for GPU resources.
+                    # If a node has GPUs, their utilization must fall below this percentage to trigger a scale-down.
+                    CfnTag(
+                        key="k8s.io/cluster-autoscaler/node-template/autoscaling-options/scaledowngpuutilizationthreshold",
+                        value="0.5",
+                    ),
+                    # Determines how long a node must remain unneeded (utilization stays below the threshold) before it is actually deleted. (Default is usually 10 minutes).
+                    CfnTag(
+                        key="k8s.io/cluster-autoscaler/node-template/autoscaling-options/scaledownunneededtime",
+                        value="10m0s",
+                    ),
+                    # Specifies how long an unready (or broken) node must be unready before it becomes eligible for scale-down. (Default is usually 20 minutes).
+                    # Nodes can be unready if they run out of memory or disk space.
+                    # The primary reason scaleDownUnreadyTime is set higher (often double) than scaledownunneededtime is to allow system administrators time to troubleshoot network, Kubelet, or hardware issues.
+                    CfnTag(
+                        key="k8s.io/cluster-autoscaler/node-template/autoscaling-options/scaledownunreadytime",
+                        value="20m0s",
+                    ),
+                    # When set to true, the autoscaler ignores pods running under DaemonSets when calculating a node's resource utilization.
+                    # This prevents DaemonSets (which run on every node anyway) from blocking scale-down.
+                    # Jupyter servers are deployed via k8s deployments not daemonsets and thus are not ignored.
+                    CfnTag(
+                        key="k8s.io/cluster-autoscaler/node-template/autoscaling-options/ignoredaemonsetsutilization",
+                        value="true",
+                    ),
+                ]
 
             # Define the Launch Template with the desired EC2 instance tags
             # These tags will be applied to the EC2 instances when they are launched by the Auto Scaling Group
@@ -345,13 +405,7 @@ class ClusterCdkStack(Stack):
                     tag_specifications=[
                         ec2.CfnLaunchTemplate.TagSpecificationProperty(
                             resource_type="instance",
-                            tags=[
-                                CfnTag(key="osl-billing", value=self.LAB_SHORT_NAME),
-                                CfnTag(
-                                    key="Name",
-                                    value=f"{node['name']}--{self.LAB_SHORT_NAME}",
-                                ),
-                            ],
+                            tags=ec2_tags,
                         ),
                         ec2.CfnLaunchTemplate.TagSpecificationProperty(
                             resource_type="volume",
@@ -385,6 +439,7 @@ class ClusterCdkStack(Stack):
                     version=launch_template.attr_latest_version_number,
                 ),
                 # Force the compute in the public subnet, in a single AZ
+                # Tbis also automagically adds the "k8s.io/cluster-autoscaler/CLUSTER_NAME: owned" tag to the ASG and thus EC2s
                 subnets=ec2.SubnetSelection(
                     subnet_type=ec2.SubnetType.PUBLIC,
                     availability_zones=[
@@ -409,6 +464,9 @@ class ClusterCdkStack(Stack):
 
                 # Needed so we can make a dependency later
                 self.core_nodegroup = node_group
+
+            elif node_type == "user":
+                self._add_policy_from_file(node_group.role, "user_node_policies.json")
 
         #####################################################################
         #
@@ -1039,6 +1097,37 @@ class ClusterCdkStack(Stack):
                     )
                 ],
             ),
+        )
+
+        #####################################################################
+        #
+        #    Setup EC2 Autoscaler
+        #
+        #    Autoscale down unused EC2s
+        #
+        #####################################################################
+
+        self.autoscaler_helm_version = "9.58.0"
+
+        # Note that other args are added via ASG tags
+        autoscaler_helm_chart_values = {
+            "autoDiscovery": {"clusterName": self.cluster.cluster_name},
+            "awsRegion": self.region,
+            "nodeSelector": {"hub.jupyter.org/node-purpose": "core"},
+            "cloudProvider": "aws",
+        }
+
+        # https://artifacthub.io/packages/helm/cluster-autoscaler/cluster-autoscaler
+        self.cluster.add_helm_chart(
+            "ClusterAutoscaler",
+            chart="cluster-autoscaler",
+            repository="https://kubernetes.github.io/autoscaler",
+            namespace="autoscaler",
+            wait=True,  # Until the pods are ready
+            atomic=False,
+            timeout=Duration.minutes(2),
+            version=self.autoscaler_helm_version,
+            values=autoscaler_helm_chart_values,
         )
 
         #####################################################################
