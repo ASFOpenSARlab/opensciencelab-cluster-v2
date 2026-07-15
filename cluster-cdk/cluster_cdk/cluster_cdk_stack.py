@@ -335,11 +335,6 @@ class ClusterCdkStack(Stack):
                 node_labels["hub.jupyter.org/node-purpose"] = "core"
                 node_labels["opensciencelab.local/node-type"] = "core"
 
-                ec2_tags += [
-                    # The core ec2 doesn't need to be under the autoscaler
-                    # CfnTag(key="k8s.io/cluster-autoscaler/enabled", value="false"),
-                ]
-
             elif node_type == "user":
                 node_labels["hub.jupyter.org/node-purpose"] = "user"
                 node_labels["opensciencelab.local/node-type"] = (
@@ -347,7 +342,6 @@ class ClusterCdkStack(Stack):
                 )
 
                 ec2_tags += [
-                    # CfnTag(key="k8s.io/cluster-autoscaler/enabled", value="true"),
                     CfnTag(
                         key="k8s.io/cluster-autoscaler/node-template/label/opensciencelab.local/node-type",
                         value=f"user-{node_name_escaped}",
@@ -360,6 +354,8 @@ class ClusterCdkStack(Stack):
                         key="k8s.io/cluster-autoscaler/node-template/taint/hub.jupyter.org/dedicated",
                         value="user:NoSchedule",
                     ),
+                    # !! The following autoscaling tags appear to be ignored though they shouldn't be.
+                    # !! Default chart values being used
                     # The target utilization percentage (CPU and memory) below which a node is considered a candidate for scale-down.
                     CfnTag(
                         key="k8s.io/cluster-autoscaler/node-template/autoscaling-options/scaledownutilizationthreshold",
@@ -374,7 +370,9 @@ class ClusterCdkStack(Stack):
                     # Determines how long a node must remain unneeded (utilization stays below the threshold) before it is actually deleted. (Default is usually 10 minutes).
                     CfnTag(
                         key="k8s.io/cluster-autoscaler/node-template/autoscaling-options/scaledownunneededtime",
-                        value="10m0s",
+                        value=node.get(
+                            "node_under_utilization_threshold_time", "10m0s"
+                        ),
                     ),
                     # Specifies how long an unready (or broken) node must be unready before it becomes eligible for scale-down. (Default is usually 20 minutes).
                     # Nodes can be unready if they run out of memory or disk space.
@@ -1035,6 +1033,7 @@ class ClusterCdkStack(Stack):
                     "ec2:DescribeSnapshots",
                     "ec2:CreateSnapshot",
                     "ec2:DeleteSnapshot",
+                    "ec2:CreateTags",
                 ],
                 resources=["*"],
             )
