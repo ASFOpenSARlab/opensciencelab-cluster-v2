@@ -318,14 +318,6 @@ class ClusterCdkStack(Stack):
 
         # https://github.com/aws/aws-cdk/issues/37012eks.Cluster
         for node in self.osl_config["nodes"]:
-            ec2_tags = [
-                CfnTag(key="osl-billing", value=self.LAB_SHORT_NAME),
-                CfnTag(
-                    key="Name",
-                    value=f"{node['name']}--{self.LAB_SHORT_NAME}",
-                ),
-            ]
-
             node_type = node.get("node_type", "user")
             node_name_escaped = re.sub(r"[^A-Za-z0-9]", "00", node["name"].strip())
 
@@ -341,55 +333,6 @@ class ClusterCdkStack(Stack):
                     f"user-{node_name_escaped}"
                 )
 
-                ec2_tags += [
-                    CfnTag(
-                        key="k8s.io/cluster-autoscaler/node-template/label/opensciencelab.local/node-type",
-                        value=f"user-{node_name_escaped}",
-                    ),
-                    CfnTag(
-                        key="k8s.io/cluster-autoscaler/node-template/label/hub.jupyter.org/node-purpose",
-                        value="user",
-                    ),
-                    CfnTag(
-                        key="k8s.io/cluster-autoscaler/node-template/taint/hub.jupyter.org/dedicated",
-                        value="user:NoSchedule",
-                    ),
-                    # !! The following autoscaling tags appear to be ignored though they shouldn't be.
-                    # !! Default chart values being used
-                    # The target utilization percentage (CPU and memory) below which a node is considered a candidate for scale-down.
-                    CfnTag(
-                        key="k8s.io/cluster-autoscaler/node-template/autoscaling-options/scaledownutilizationthreshold",
-                        value="0.5",
-                    ),
-                    # The specific utilization percentage threshold for GPU resources.
-                    # If a node has GPUs, their utilization must fall below this percentage to trigger a scale-down.
-                    CfnTag(
-                        key="k8s.io/cluster-autoscaler/node-template/autoscaling-options/scaledowngpuutilizationthreshold",
-                        value="0.5",
-                    ),
-                    # Determines how long a node must remain unneeded (utilization stays below the threshold) before it is actually deleted. (Default is usually 10 minutes).
-                    CfnTag(
-                        key="k8s.io/cluster-autoscaler/node-template/autoscaling-options/scaledownunneededtime",
-                        value=node.get(
-                            "node_under_utilization_threshold_time", "10m0s"
-                        ),
-                    ),
-                    # Specifies how long an unready (or broken) node must be unready before it becomes eligible for scale-down. (Default is usually 20 minutes).
-                    # Nodes can be unready if they run out of memory or disk space.
-                    # The primary reason scaleDownUnreadyTime is set higher (often double) than scaledownunneededtime is to allow system administrators time to troubleshoot network, Kubelet, or hardware issues.
-                    CfnTag(
-                        key="k8s.io/cluster-autoscaler/node-template/autoscaling-options/scaledownunreadytime",
-                        value="20m0s",
-                    ),
-                    # When set to true, the autoscaler ignores pods running under DaemonSets when calculating a node's resource utilization.
-                    # This prevents DaemonSets (which run on every node anyway) from blocking scale-down.
-                    # Jupyter servers are deployed via k8s deployments not daemonsets and thus are not ignored.
-                    CfnTag(
-                        key="k8s.io/cluster-autoscaler/node-template/autoscaling-options/ignoredaemonsetsutilization",
-                        value="true",
-                    ),
-                ]
-
             # Define the Launch Template with the desired EC2 instance tags
             # These tags will be applied to the EC2 instances when they are launched by the Auto Scaling Group
             launch_template = ec2.CfnLaunchTemplate(
@@ -403,7 +346,13 @@ class ClusterCdkStack(Stack):
                     tag_specifications=[
                         ec2.CfnLaunchTemplate.TagSpecificationProperty(
                             resource_type="instance",
-                            tags=ec2_tags,
+                            tags=[
+                                CfnTag(key="osl-billing", value=self.LAB_SHORT_NAME),
+                                CfnTag(
+                                    key="Name",
+                                    value=f"{node['name']}--{self.LAB_SHORT_NAME}",
+                                ),
+                            ],
                         ),
                         ec2.CfnLaunchTemplate.TagSpecificationProperty(
                             resource_type="volume",
@@ -1114,6 +1063,13 @@ class ClusterCdkStack(Stack):
             "awsRegion": self.region,
             "nodeSelector": {"hub.jupyter.org/node-purpose": "core"},
             "cloudProvider": "aws",
+            # List of extraArgs: https://github.com/kubernetes/autoscaler/blob/master/cluster-autoscaler/FAQ.md#what-are-the-parameters-to-ca
+            "extraArgs": {
+                "ignore-daemonsets-utilization": "true",
+                "scale-down-unneeded-time": "2m0s",
+                "scale-down-utilization-threshold": "0.5",
+                "scale-down-delay-after-add": "1m0s",
+            },
         }
 
         # https://artifacthub.io/packages/helm/cluster-autoscaler/cluster-autoscaler
