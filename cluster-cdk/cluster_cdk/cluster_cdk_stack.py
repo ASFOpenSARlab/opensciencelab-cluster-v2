@@ -1050,7 +1050,7 @@ class ClusterCdkStack(Stack):
         #
         #####################################################################
 
-        execwhacker_bucket = s3.Bucket(
+        s3.Bucket(
             self,
             "ExecwhackerConfigsBucket",
             bucket_name=f"cryptnono-execwhacker-configs-{self.region}-{self.cluster.cluster_name}-{self.LAB_SHORT_NAME}",
