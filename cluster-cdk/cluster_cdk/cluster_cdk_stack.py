@@ -16,6 +16,7 @@ from aws_cdk import (  # type: ignore
     Duration,
     Stack,
     SecretValue,
+    aws_s3 as s3,
     aws_eks_v2 as eks,
     aws_ec2 as ec2,
     aws_dlm as dlm,
@@ -1039,6 +1040,25 @@ class ClusterCdkStack(Stack):
                     )
                 ],
             ),
+        )
+
+        #####################################################################
+        #
+        #    Execwhacker - Monitor jupyterlab terminals for prohibited processes and kill them.
+        #
+        #    A list of prohibitted processes are stored in s3. This list is occasionally pulled into a configmap used by the execwhacker sidecar.
+        #
+        #####################################################################
+
+        execwhacker_bucket = s3.Bucket(
+            self,
+            "ExecwhackerConfigsBucket",
+            bucket_name=f"cryptnono-execwhacker-configs-{self.region}-{self.cluster.cluster_name}-{self.LAB_SHORT_NAME}",
+            versioned=False,
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            object_ownership=s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
+            removal_policy=RemovalPolicy.DESTROY,
+            auto_delete_objects=True,
         )
 
         #####################################################################
