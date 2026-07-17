@@ -1044,14 +1044,93 @@ class ClusterCdkStack(Stack):
 
         #####################################################################
         #
+        #    Add Services namespace to k8s. Include k8s permissions.
+        #
+        #####################################################################
+
+        services_ns_manifest = self.cluster.add_manifest(
+            "ServicesNamespace",
+            {
+                "apiVersion": "v1",
+                "kind": "Namespace",
+                "metadata": {"name": "services"},
+            },
+        )
+
+        # Modify the k8s permissions so the pods in the services namespace can do things
+        eks.KubernetesManifest(
+            self,
+            "CustomServicesClusterRole",
+            cluster=self.cluster,
+            overwrite=True,
+            manifest=[
+                {
+                    "apiVersion": "rbac.authorization.k8s.io/v1",
+                    "kind": "ClusterRole",
+                    "metadata": {
+                        "annotations": {
+                            "rbac.authorization.kubernetes.io/autoupdate": "true"
+                        },
+                        "labels": {"kubernetes.io/bootstrapping": "rbac-defaults"},
+                        "name": "custom-services",
+                    },
+                    "rules": [
+                        {
+                            # Permissions for execwhacker configmap update
+                            "apiGroups": [""],
+                            "resources": [
+                                "nodes",
+                                "pods",
+                                # "secrets",
+                                # "services",
+                                "events",
+                                "configmaps",
+                            ],
+                            "verbs": [
+                                "get",
+                                "watch",
+                                "list",
+                                "create",
+                                "delete",
+                                "patch",
+                                "update",
+                            ],
+                        },
+                    ],
+                }
+            ],
+        )
+
+        self.cluster.add_manifest(
+            "CustomServicesRoleBinding",
+            {
+                "kind": "ClusterRoleBinding",
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "metadata": {"name": "custom-services"},
+                "subjects": [
+                    {
+                        "kind": "ServiceAccount",
+                        "name": "default",
+                        "namespace": "services",
+                        "apiGroup": "",  # apiGroup is ""(core/v1) for service_account
+                    }
+                ],
+                "roleRef": {
+                    "apiGroup": "rbac.authorization.k8s.io",
+                    "kind": "ClusterRole",
+                    "name": "custom-services",
+                },
+            },
+        )
+
+        #####################################################################
+        #
         #    Execwhacker - Monitor jupyterlab terminals for prohibited processes and kill them.
         #
         #    A list of prohibitted processes are stored in s3. This list is occasionally pulled into a configmap used by the execwhacker sidecar.
         #
-        #    Cluster v1 has the following which may not be relevant anymore:
-        #        # Pull in latest cryptnono secrets by manually starting a cronjob
-        #        kubectl -n services create job --from=cronjob/cryptnono-cron cryptnono-manual-refesh-$CRONS_IMAGE_BUILD
-        #    The equivalent in cdk might be creating a `job` manifest that is dependent on the the cronjob manifest.
+        #    To manually run the cronjob from within cloudshell:
+        #        kubectl -n services create job --from=cronjob/update-execwhacker-config-cronjob execwacker-manual-refesh
         #
         #####################################################################
 
@@ -1066,22 +1145,12 @@ class ClusterCdkStack(Stack):
             auto_delete_objects=True,
         )
 
-        execwhacker_ns = "services"
         execwhacker_cron_schedule = "*/10 * * * *"  # Runs every 10 minutes
         execwhacker_image_name = (
             "ghcr.io/asfopensarlab/opensciencelab-update-execwhacker"
         )
         execwhacker_image_tag = "test"
-        execwhacker_args = f'python3 /app/update_execwhacker_config.py --cluster-name={self.cluster.cluster_name} --aws-region={self.region} --config-bucket-name="{execwhacker_bucket.bucket_name}"'
-
-        services_ns_manifest = self.cluster.add_manifest(
-            "ServicesNamespace",
-            {
-                "api_version": "v1",
-                "kind": "Namespace",
-                "metadata": {"name": execwhacker_ns},
-            },
-        )
+        execwhacker_args = f'python3 /app/update_execwhacker_config.py --aws-region={self.region} --config-bucket-name="{execwhacker_bucket.bucket_name}"'
 
         # k8s Cronjob that pulls from s3 and updates configmap in cluster
         execwhacker_manifest = self.cluster.add_manifest(
@@ -1091,7 +1160,7 @@ class ClusterCdkStack(Stack):
                 "kind": "CronJob",
                 "metadata": {
                     "name": "update-execwhacker-config-cronjob",
-                    "namespace": execwhacker_ns,
+                    "namespace": "services",
                 },
                 "spec": {
                     "schedule": execwhacker_cron_schedule,
@@ -1109,11 +1178,8 @@ class ClusterCdkStack(Stack):
                                     "containers": [
                                         {
                                             "name": "update-execwhacker-worker",
-                                            "image": {
-                                                "name": execwhacker_image_name,
-                                                "tag": execwhacker_image_tag,
-                                                "pullPolicy": "Always",
-                                            },
+                                            "image": f"{execwhacker_image_name}:{execwhacker_image_tag}",
+                                            "imagePullPolicy": "Always",
                                             "command": ["sh", "-c"],
                                             "args": [execwhacker_args],
                                         }
@@ -1126,7 +1192,7 @@ class ClusterCdkStack(Stack):
             },
         )
 
-        execwhacker_manifest.add_dependency(services_ns_manifest)
+        execwhacker_manifest.node.add_dependency(services_ns_manifest)
 
         ## Build out piece-wise
         # cryptnono_helm_values = {
@@ -1153,7 +1219,7 @@ class ClusterCdkStack(Stack):
         #     chart="cryptnono/cryptnono",
         #     release=f"cryptnono-{self.LAB_SHORT_NAME}",  # type: ignore
         #     version=self.jupyterhub_helm_version,
-        #     namespace=execwhacker_ns,
+        #     namespace="services",
         #     wait=True,
         #     timeout=Duration.minutes(2),
         #     values=cryptnono_helm_values,
