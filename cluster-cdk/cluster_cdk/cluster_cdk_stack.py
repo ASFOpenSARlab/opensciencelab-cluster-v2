@@ -1048,6 +1048,11 @@ class ClusterCdkStack(Stack):
         #
         #    A list of prohibitted processes are stored in s3. This list is occasionally pulled into a configmap used by the execwhacker sidecar.
         #
+        #    Cluster v1 has the following which may not be relevant anymore:
+        #        # Pull in latest cryptnono secrets by manually starting a cronjob
+        #        kubectl -n services create job --from=cronjob/cryptnono-cron cryptnono-manual-refesh-$CRONS_IMAGE_BUILD
+        #    The equivalent in cdk might be creating a `job` manifest that is dependent on the the cronjob manifest.
+        #
         #####################################################################
 
         execwhacker_bucket = s3.Bucket(
@@ -1062,12 +1067,14 @@ class ClusterCdkStack(Stack):
         )
 
         execwhacker_ns = "services"
-        execwhacker_cron_schedule = ("*/10 * * * *",)  # Runs every 10 minutes
-        execwhacker_image_name = "ghcr.io/opensciencelab-update-execwhacker"
+        execwhacker_cron_schedule = "*/10 * * * *"  # Runs every 10 minutes
+        execwhacker_image_name = (
+            "ghcr.io/asfopensarlab/opensciencelab-update-execwhacker"
+        )
         execwhacker_image_tag = "test"
         execwhacker_args = f'python3 /app/update_execwhacker_config.py --cluster-name={self.cluster.cluster_name} --aws-region={self.region} --config-bucket-name="{execwhacker_bucket.bucket_name}"'
 
-        self.cluster.add_manifest(
+        services_ns_manifest = self.cluster.add_manifest(
             "ServicesNamespace",
             {
                 "api_version": "v1",
@@ -1077,7 +1084,7 @@ class ClusterCdkStack(Stack):
         )
 
         # k8s Cronjob that pulls from s3 and updates configmap in cluster
-        self.cluster.add_manifest(
+        execwhacker_manifest = self.cluster.add_manifest(
             "UpdateExecwhackerConfigCronJobManifest",
             {
                 "apiVersion": "batch/v1",
@@ -1118,6 +1125,41 @@ class ClusterCdkStack(Stack):
                 },
             },
         )
+
+        execwhacker_manifest.add_dependency(services_ns_manifest)
+
+        ## Build out piece-wise
+        # cryptnono_helm_values = {
+        #     "nodeSelector": {"hub.jupyter.org/node-purpose": "user"},
+        #     # This will override what is in the Secrets Manager.
+        #     # Therefore, after the cryptnono has been setup, the cron should be manually ran to pull in the latest secrets.
+        #     "detectors": {
+        #         "execwhacker": {
+        #             "configs": {
+        #                 "noop": {"bannedCommandStrings": []},
+        #                 "data": {
+        #                     "bannedCommandStrings": [],
+        #                     "allowedCommandPatterns": [],
+        #                 },
+        #             }
+        #         }
+        #     },
+        # }
+
+        # self.cryptnono_helm_chart = self.cluster.add_helm_chart(
+        #     "CryptnonoHelmChart",
+        #     repository="https://cryptnono.github.io/cryptnono/",
+        #     atomic=False,
+        #     chart="cryptnono/cryptnono",
+        #     release=f"cryptnono-{self.LAB_SHORT_NAME}",  # type: ignore
+        #     version=self.jupyterhub_helm_version,
+        #     namespace=execwhacker_ns,
+        #     wait=True,
+        #     timeout=Duration.minutes(2),
+        #     values=cryptnono_helm_values,
+        # )
+
+        # self.cryptnono_helm_chart.node.add_dependency(execwhacker_manifest)
 
         #####################################################################
         #
