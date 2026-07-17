@@ -1050,7 +1050,7 @@ class ClusterCdkStack(Stack):
         #
         #####################################################################
 
-        s3.Bucket(
+        execwhacker_bucket = s3.Bucket(
             self,
             "ExecwhackerConfigsBucket",
             bucket_name=f"cryptnono-execwhacker-configs-{self.region}-{self.cluster.cluster_name}-{self.LAB_SHORT_NAME}",
@@ -1059,6 +1059,64 @@ class ClusterCdkStack(Stack):
             object_ownership=s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
             removal_policy=RemovalPolicy.DESTROY,
             auto_delete_objects=True,
+        )
+
+        execwhacker_ns = "services"
+        execwhacker_cron_schedule = ("*/10 * * * *",)  # Runs every 10 minutes
+        execwhacker_image_name = "ghcr.io/opensciencelab-update-execwhacker"
+        execwhacker_image_tag = "test"
+        execwhacker_args = f'python3 /app/update_execwhacker_config.py --cluster-name={self.cluster.cluster_name} --aws-region={self.region} --config-bucket-name="{execwhacker_bucket.bucket_name}"'
+
+        self.cluster.add_manifest(
+            "ServicesNamespace",
+            {
+                "api_version": "v1",
+                "kind": "Namespace",
+                "metadata": {"name": execwhacker_ns},
+            },
+        )
+
+        # k8s Cronjob that pulls from s3 and updates configmap in cluster
+        self.cluster.add_manifest(
+            "UpdateExecwhackerConfigCronJobManifest",
+            {
+                "apiVersion": "batch/v1",
+                "kind": "CronJob",
+                "metadata": {
+                    "name": "update-execwhacker-config-cronjob",
+                    "namespace": execwhacker_ns,
+                },
+                "spec": {
+                    "schedule": execwhacker_cron_schedule,
+                    "concurrencyPolicy": "Forbid",
+                    "successfulJobsHistoryLimit": 2,
+                    "failedJobsHistoryLimit": 1,
+                    "jobTemplate": {
+                        "spec": {
+                            "template": {
+                                "spec": {
+                                    "restartPolicy": "OnFailure",
+                                    "nodeSelector": {
+                                        "opensciencelab.local/node-type": "core"
+                                    },
+                                    "containers": [
+                                        {
+                                            "name": "update-execwhacker-worker",
+                                            "image": {
+                                                "name": execwhacker_image_name,
+                                                "tag": execwhacker_image_tag,
+                                                "pullPolicy": "Always",
+                                            },
+                                            "command": ["sh", "-c"],
+                                            "args": [execwhacker_args],
+                                        }
+                                    ],
+                                }
+                            }
+                        }
+                    },
+                },
+            },
         )
 
         #####################################################################
