@@ -1132,9 +1132,15 @@ class ClusterCdkStack(Stack):
         #    Execwhacker - Monitor jupyterlab terminals for prohibited processes and kill them.
         #
         #    A list of prohibitted processes are stored in s3. This list is occasionally pulled into a configmap used by the execwhacker sidecar.
+        #    https://github.com/cryptnono/cryptnono
         #
         #    To manually run the cronjob from within cloudshell:
         #        kubectl -n cryptnono create job --from=cronjob/update-execwhacker-config-cronjob execwacker-manual-refesh
+        #
+        #    To test, open user JupyterLab server terminal and run command `sh -c 'sleep 1 && echo thisisabannedstring'`. This will return `Killed`.
+        #
+        #    Get logs in pod:
+        #        kubectl -n cryptnono logs -l app.kubernetes.io/instance=cryptnono -c execwhacker
         #
         #####################################################################
 
