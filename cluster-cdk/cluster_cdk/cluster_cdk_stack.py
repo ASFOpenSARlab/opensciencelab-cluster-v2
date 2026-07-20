@@ -386,7 +386,7 @@ class ClusterCdkStack(Stack):
                     version=launch_template.attr_latest_version_number,
                 ),
                 # Force the compute in the public subnet, in a single AZ
-                # Tbis also automagically adds the "k8s.io/cluster-autoscaler/CLUSTER_NAME: owned" tag to the ASG and thus EC2s
+                # This also automagically adds the "k8s.io/cluster-autoscaler/CLUSTER_NAME: owned" tag to the ASG and thus EC2s
                 subnets=ec2.SubnetSelection(
                     subnet_type=ec2.SubnetType.PUBLIC,
                     availability_zones=[
