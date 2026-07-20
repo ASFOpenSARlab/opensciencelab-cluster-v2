@@ -330,6 +330,7 @@ class ClusterCdkStack(Stack):
             if node_type == "core":
                 node_labels["hub.jupyter.org/node-purpose"] = "core"
                 node_labels["opensciencelab.local/node-type"] = "core"
+
             elif node_type == "user":
                 node_labels["hub.jupyter.org/node-purpose"] = "user"
                 node_labels["opensciencelab.local/node-type"] = (
@@ -392,6 +393,7 @@ class ClusterCdkStack(Stack):
                     version=launch_template.attr_latest_version_number,
                 ),
                 # Force the compute in the public subnet, in a single AZ
+                # This also automagically adds the "k8s.io/cluster-autoscaler/CLUSTER_NAME: owned" tag to the ASG and thus EC2s
                 subnets=ec2.SubnetSelection(
                     subnet_type=ec2.SubnetType.PUBLIC,
                     availability_zones=[
@@ -416,6 +418,9 @@ class ClusterCdkStack(Stack):
 
                 # Needed so we can make a dependency later
                 self.core_nodegroup = node_group
+
+            elif node_type == "user":
+                self._add_policy_from_file(node_group.role, "user_node_policies.json")
 
         #####################################################################
         #
@@ -984,6 +989,7 @@ class ClusterCdkStack(Stack):
                     "ec2:DescribeSnapshots",
                     "ec2:CreateSnapshot",
                     "ec2:DeleteSnapshot",
+                    "ec2:CreateTags",
                 ],
                 resources=["*"],
             )
@@ -1232,6 +1238,44 @@ class ClusterCdkStack(Stack):
         )
 
         self.cryptnono_helm_chart.node.add_dependency(execwhacker_manifest)
+
+        #####################################################################
+        #
+        #    Setup EC2 Autoscaler
+        #
+        #    Autoscale down unused EC2s
+        #
+        #####################################################################
+
+        self.autoscaler_helm_version = "9.58.0"
+
+        # Note that other args are added via ASG tags
+        autoscaler_helm_chart_values = {
+            "autoDiscovery": {"clusterName": self.cluster.cluster_name},
+            "awsRegion": self.region,
+            "nodeSelector": {"hub.jupyter.org/node-purpose": "core"},
+            "cloudProvider": "aws",
+            # List of extraArgs: https://github.com/kubernetes/autoscaler/blob/master/cluster-autoscaler/FAQ.md#what-are-the-parameters-to-ca
+            "extraArgs": {
+                "ignore-daemonsets-utilization": "true",
+                "scale-down-unneeded-time": "2m0s",
+                "scale-down-utilization-threshold": "0.5",
+                "scale-down-delay-after-add": "1m0s",
+            },
+        }
+
+        # https://artifacthub.io/packages/helm/cluster-autoscaler/cluster-autoscaler
+        self.cluster.add_helm_chart(
+            "ClusterAutoscaler",
+            chart="cluster-autoscaler",
+            repository="https://kubernetes.github.io/autoscaler",
+            namespace="autoscaler",
+            wait=True,  # Until the pods are ready
+            atomic=False,
+            timeout=Duration.minutes(2),
+            version=self.autoscaler_helm_version,
+            values=autoscaler_helm_chart_values,
+        )
 
         #####################################################################
         #
