@@ -9,6 +9,11 @@ on: # yamllint disable-line rule:truthy
         required: false
         default: test
 
+      execwhacker-image-tag:
+        description: "image tag of `opensciencelab-update-execwhacker` (ex. 'dp', 'v1.0.2', etc.)"
+        required: false
+        default: test
+
       envOverride:
         description: "Environment override / Lab short name"
         type: environment
@@ -41,7 +46,8 @@ jobs:
       contents: read
     env:
       DEPLOY_PREFIX: ${{ needs.setup.outputs.deploy_prefix }}
-      JUPYTER_HUB_DOCKER_TAG: ${{ github.event.inputs.jupyterhub-image-tag || needs.setup.outputs.deploy_prefix }}
+      JUPYTER_HUB_DOCKER_TAG: ${{ github.event.inputs.jupyterhub-image-tag }}
+      EXECWHACKER_CRON_DOCKER_TAG: ${{ github.event.inputs.execwhacker-image-tag }}
       AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       UI_IAM_USER: ${{ vars.UI_IAM_USER }}
       ADMIN_USERS: ${{ vars.ADMIN_USERS }}

@@ -16,6 +16,7 @@ from aws_cdk import (  # type: ignore
     Duration,
     Stack,
     SecretValue,
+    aws_s3 as s3,
     aws_eks_v2 as eks,
     aws_ec2 as ec2,
     aws_dlm as dlm,
@@ -50,6 +51,9 @@ class ClusterCdkStack(Stack):
         self.DEPLOY_PREFIX = str(os.getenv("DEPLOY_PREFIX")).lower()
         self.JUPYTER_HUB_DOCKER_TAG = os.getenv(
             "JUPYTER_HUB_DOCKER_TAG", self.DEPLOY_PREFIX
+        )
+        self.EXECWHACKER_CRON_DOCKER_TAG = os.getenv(
+            "EXECWHACKER_CRON_DOCKER_TAG", self.DEPLOY_PREFIX
         )
         self.UI_IAM_USER = os.getenv("UI_IAM_USER", None)
 
@@ -331,6 +335,9 @@ class ClusterCdkStack(Stack):
                 node_labels["hub.jupyter.org/node-purpose"] = "user"
                 node_labels["opensciencelab.local/node-type"] = (
                     f"user-{node_name_escaped}"
+                )
+                node_labels["opensciencelab.local/cryptnono-enabled"] = node.get(
+                    "cryptnono_enabled", "true"
                 )
 
             # Define the Launch Template with the desired EC2 instance tags
@@ -1046,6 +1053,191 @@ class ClusterCdkStack(Stack):
                 ],
             ),
         )
+
+        #####################################################################
+        #
+        #    Add Cryptnono namespace to k8s. Include k8s permissions.
+        #
+        #####################################################################
+
+        cryptnono_ns_manifest = self.cluster.add_manifest(
+            "CustomCryptnonoNamespace",
+            {
+                "apiVersion": "v1",
+                "kind": "Namespace",
+                "metadata": {"name": "cryptnono"},
+            },
+        )
+
+        # Modify the k8s permissions so the pods in the cryptnono namespace can do things
+        eks.KubernetesManifest(
+            self,
+            "CustomCryptnonoClusterRole",
+            cluster=self.cluster,
+            overwrite=True,
+            manifest=[
+                {
+                    "apiVersion": "rbac.authorization.k8s.io/v1",
+                    "kind": "ClusterRole",
+                    "metadata": {
+                        "annotations": {
+                            "rbac.authorization.kubernetes.io/autoupdate": "true"
+                        },
+                        "labels": {"kubernetes.io/bootstrapping": "rbac-defaults"},
+                        "name": "custom-cryptnono",
+                    },
+                    "rules": [
+                        {
+                            # Permissions for execwhacker configmap update
+                            "apiGroups": [""],
+                            "resources": [
+                                "nodes",
+                                "pods",
+                                "events",
+                                "configmaps",
+                            ],
+                            "verbs": [
+                                "get",
+                                "watch",
+                                "list",
+                                "create",
+                                "delete",
+                                "patch",
+                                "update",
+                            ],
+                        },
+                    ],
+                }
+            ],
+        )
+
+        self.cluster.add_manifest(
+            "CustomCryptnonoRoleBinding",
+            {
+                "kind": "ClusterRoleBinding",
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "metadata": {"name": "custom-cryptnono"},
+                "subjects": [
+                    {
+                        "kind": "ServiceAccount",
+                        "name": "default",
+                        "namespace": "cryptnono",
+                        "apiGroup": "",  # apiGroup is ""(core/v1) for service_account
+                    }
+                ],
+                "roleRef": {
+                    "apiGroup": "rbac.authorization.k8s.io",
+                    "kind": "ClusterRole",
+                    "name": "custom-cryptnono",
+                },
+            },
+        )
+
+        #####################################################################
+        #
+        #    Execwhacker - Monitor jupyterlab terminals for prohibited processes and kill them.
+        #
+        #    A list of prohibitted processes are stored in s3. This list is occasionally pulled into a configmap used by the execwhacker sidecar.
+        #    https://github.com/cryptnono/cryptnono
+        #
+        #    To manually run the cronjob from within cloudshell:
+        #        kubectl -n cryptnono create job --from=cronjob/update-execwhacker-config-cronjob execwacker-manual-refesh
+        #
+        #    To test, open user JupyterLab server terminal and run command `sh -c 'sleep 1 && echo thisisabannedstring'`. This will return `Killed`.
+        #
+        #    Get logs in pod:
+        #        kubectl -n cryptnono logs -l app.kubernetes.io/instance=cryptnono -c execwhacker
+        #
+        #####################################################################
+
+        execwhacker_bucket = s3.Bucket(
+            self,
+            "ExecwhackerConfigsBucket",
+            bucket_name=f"cryptnono-execwhacker-configs-{self.region}-{self.cluster.cluster_name}-{self.LAB_SHORT_NAME}",
+            versioned=False,
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            object_ownership=s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
+            removal_policy=RemovalPolicy.DESTROY,
+            auto_delete_objects=True,
+        )
+
+        execwhacker_cron_schedule = "*/10 * * * *"  # Runs every 10 minutes
+        execwhacker_image_name = (
+            "ghcr.io/asfopensarlab/opensciencelab-update-execwhacker"
+        )
+        execwhacker_args = f'python3 /app/update_execwhacker_config.py --aws-region={self.region} --config-bucket-name="{execwhacker_bucket.bucket_name}"'
+
+        # k8s Cronjob that pulls from s3 and updates configmap in cluster
+        execwhacker_manifest = self.cluster.add_manifest(
+            "UpdateExecwhackerConfigCronJobManifest",
+            {
+                "apiVersion": "batch/v1",
+                "kind": "CronJob",
+                "metadata": {
+                    "name": "update-execwhacker-config-cronjob",
+                    "namespace": "cryptnono",
+                },
+                "spec": {
+                    "schedule": execwhacker_cron_schedule,
+                    "concurrencyPolicy": "Forbid",
+                    "successfulJobsHistoryLimit": 2,
+                    "failedJobsHistoryLimit": 1,
+                    "jobTemplate": {
+                        "spec": {
+                            "template": {
+                                "spec": {
+                                    "restartPolicy": "OnFailure",
+                                    "nodeSelector": {
+                                        "opensciencelab.local/node-type": "core"
+                                    },
+                                    "containers": [
+                                        {
+                                            "name": "update-execwhacker-worker",
+                                            "image": f"{execwhacker_image_name}:{self.EXECWHACKER_CRON_DOCKER_TAG}",
+                                            "imagePullPolicy": "Always",
+                                            "command": ["sh", "-c"],
+                                            "args": [execwhacker_args],
+                                        }
+                                    ],
+                                }
+                            }
+                        }
+                    },
+                },
+            },
+        )
+
+        execwhacker_manifest.node.add_dependency(cryptnono_ns_manifest)
+
+        cryptnono_helm_values = {
+            "nodeSelector": {"opensciencelab.local/cryptnono-enabled": "true"},
+            "detectors": {
+                "execwhacker": {
+                    "configs": {
+                        "noop": {"bannedCommandStrings": []},
+                        "data": {
+                            "bannedCommandStrings": [],
+                            "allowedCommandPatterns": [],
+                        },
+                    }
+                }
+            },
+        }
+
+        self.cryptnono_helm_chart = self.cluster.add_helm_chart(
+            "CryptnonoHelmChart",
+            repository="https://cryptnono.github.io/cryptnono/",
+            atomic=False,
+            chart="cryptnono",
+            release="cryptnono",  # type: ignore
+            version="v0.3.1",
+            namespace="cryptnono",
+            wait=True,
+            timeout=Duration.minutes(2),
+            values=cryptnono_helm_values,
+        )
+
+        self.cryptnono_helm_chart.node.add_dependency(execwhacker_manifest)
 
         #####################################################################
         #
