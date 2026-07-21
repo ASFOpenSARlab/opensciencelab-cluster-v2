@@ -4,16 +4,6 @@ name: Deploy Cluster CDK
 on: # yamllint disable-line rule:truthy
   workflow_dispatch:
     inputs:
-      jupyterhub-image-tag:
-        description: "image tag of `opensciencelab-jupyterhub` (ex. 'dp', 'v1.0.2', etc.)"
-        required: false
-        default: test
-
-      execwhacker-image-tag:
-        description: "image tag of `opensciencelab-update-execwhacker` (ex. 'dp', 'v1.0.2', etc.)"
-        required: false
-        default: test
-
       envOverride:
         description: "Environment override / Lab short name"
         type: environment
@@ -46,8 +36,8 @@ jobs:
       contents: read
     env:
       DEPLOY_PREFIX: ${{ needs.setup.outputs.deploy_prefix }}
-      JUPYTER_HUB_DOCKER_TAG: ${{ github.event.inputs.jupyterhub-image-tag }}
-      EXECWHACKER_CRON_DOCKER_TAG: ${{ github.event.inputs.execwhacker-image-tag }}
+      JUPYTER_HUB_IMAGE: ${{ vars.jupyterhub-image }}
+      EXECWHACKER_CRON_IMAGE: ${{ vars.execwhacker-image }}
       AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       UI_IAM_USER: ${{ vars.UI_IAM_USER }}
       ADMIN_USERS: ${{ vars.ADMIN_USERS }}
