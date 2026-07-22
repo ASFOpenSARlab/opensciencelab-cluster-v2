@@ -63,10 +63,10 @@ class ClusterCdkStack(Stack):
         )
         self.EXECWHACKER_CRON_IMAGE_TAG = os.getenv("EXECWHACKER_CRON_IMAGE_TAG", None)
 
-        self.IS_CRYPTONONO_ENABLED = (
-            os.getenv("IS_CRYPTONONO_ENABLED", "true").strip().lower() == "true"
+        self.IS_CRYPTNONO_ENABLED = (
+            os.getenv("IS_CRYPTNONO_ENABLED", "true").strip().lower() == "true"
         )
-        if self.IS_CRYPTONONO_ENABLED and (
+        if self.IS_CRYPTNONO_ENABLED and (
             not self.EXECWHACKER_CRON_IMAGE_PATH or not self.EXECWHACKER_CRON_IMAGE_TAG
         ):
             raise Exception(
@@ -355,7 +355,7 @@ class ClusterCdkStack(Stack):
                     f"user-{node_name_escaped}"
                 )
                 node_labels["opensciencelab.local/cryptnono-enabled"] = str(
-                    self.IS_CRYPTONONO_ENABLED
+                    self.IS_CRYPTNONO_ENABLED
                 )
 
             # Define the Launch Template with the desired EC2 instance tags
@@ -1096,7 +1096,7 @@ class ClusterCdkStack(Stack):
         #
         #####################################################################
 
-        if self.IS_CRYPTONONO_ENABLED:
+        if self.IS_CRYPTNONO_ENABLED:
             # Add Cryptnono namespace to k8s. Include k8s permissions.
             cryptnono_ns_manifest = self.cluster.add_manifest(
                 "CustomCryptnonoNamespace",
