@@ -65,6 +65,7 @@ instance = ["t3a.medium"]
 group_desired_size = 1
 group_min_size = 1
 group_max_size = 1
+root_volume_size=10
 
 [ nodes.sar ]
 node_type = "user"

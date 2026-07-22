@@ -358,12 +358,35 @@ class ClusterCdkStack(Stack):
                     self.IS_CRYPTNONO_ENABLED
                 )
 
+            # Root volume of EC2 defaults to 20GiB. If defined as something else, it must be within EBS's storage range.
+            root_volume_size = int(node.get("root_volume_size", "20"))
+            if root_volume_size < 1:
+                raise Exception(
+                    f"root_volume_size has value of {root_volume_size} and is less than 1 GiB"
+                )
+            elif root_volume_size > 16345:
+                raise Exception(
+                    f"root_volume_size has value of {root_volume_size} and is greater than 16345 GiB"
+                )
+
             # Define the Launch Template with the desired EC2 instance tags
             # These tags will be applied to the EC2 instances when they are launched by the Auto Scaling Group
             launch_template = ec2.CfnLaunchTemplate(
                 self,
                 f"{node['name']}-LaunchTemplate-{self.LAB_SHORT_NAME}",
                 launch_template_data=ec2.CfnLaunchTemplate.LaunchTemplateDataProperty(
+                    # Configure Block Device Mappings (Storage)
+                    block_device_mappings=[
+                        ec2.CfnLaunchTemplate.BlockDeviceMappingProperty(
+                            device_name="/dev/xvda",
+                            ebs=ec2.CfnLaunchTemplate.EbsProperty(
+                                volume_size=root_volume_size,
+                                volume_type="gp3",
+                                encrypted=False,
+                                delete_on_termination=True,
+                            ),
+                        )
+                    ],
                     metadata_options=ec2.CfnLaunchTemplate.MetadataOptionsProperty(
                         http_put_response_hop_limit=2,  # Set hop limit here
                         http_tokens="required",  # Recommended for IMDSv2
