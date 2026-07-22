@@ -125,7 +125,7 @@ export ADMIN_USERS="nobody, joe"             # Comma seperated list of users to 
 export PORTAL_DOMAINS="https://...."         # Comma seperated list of approved portal domains
 
 export VOLUME_CRON_SCHEDULE="0 * * * ? *"    # Schedule to run the volume management lambda
-export SNAPSHOT_WARNING_DAYS="5"             # Number of days before delete to warn for old snapshots
+export SNAPSHOT_WARNING_DAYS="5,3,1"         # Number of days before delete to warn for old snapshots
 
 export DAYS_TILL_VOLUME_DELETION=2           # Number of days after server stop when the user's volume will be deleted
 export DAYS_TILL_SNAPSHOT_DELETION=7         # Number of days after server stop when the user's snapshot will be deleted

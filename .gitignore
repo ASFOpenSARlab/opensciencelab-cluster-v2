@@ -6,6 +6,7 @@
 .venv
 .env
 __pycache__
+.vscode
 
 # Ignore Node stuff:
 node_modules/

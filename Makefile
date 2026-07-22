@@ -180,7 +180,7 @@ deploy-cluster: install-reqs bundle-deps
 	cd ./cluster-cdk && cdk --require-approval never deploy
 
 .PHONY := destroy-cluster
-destroy-cluster:
+destroy-cluster: install-reqs
 	@echo "Destroying ${DEPLOY_PREFIX}/cluster-cdk"
 	cd ./cluster-cdk && cdk destroy --force --all
 
