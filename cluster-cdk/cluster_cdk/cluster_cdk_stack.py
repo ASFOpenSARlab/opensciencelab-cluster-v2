@@ -51,17 +51,28 @@ class ClusterCdkStack(Stack):
 
         self.DEPLOY_PREFIX = str(os.getenv("DEPLOY_PREFIX")).lower()
 
-        self.JUPYTER_HUB_IMAGE = os.getenv("JUPYTER_HUB_IMAGE")
-        if not self.JUPYTER_HUB_IMAGE:
-            raise Exception("Jupyterhub hub image is not defined")
+        self.JUPYTER_HUB_IMAGE_PATH = os.getenv("JUPYTER_HUB_IMAGE_PATH")
+        if not self.JUPYTER_HUB_IMAGE_PATH:
+            raise Exception("Jupyterhub hub image path is not defined")
 
-        self.EXECWHACKER_CRON_IMAGE = os.getenv("EXECWHACKER_CRON_IMAGE")
-        self.IS_CRYPTONONO_ENABLED = True
-        if not self.EXECWHACKER_CRON_IMAGE:
-            print(
-                "EXECWHACKER_CRON_IMAGE is not defined. Therefore, cryptnono will not be enabled."
+        self.JUPYTER_HUB_IMAGE_TAG = os.getenv("JUPYTER_HUB_IMAGE_TAG")
+        if not self.JUPYTER_HUB_IMAGE_TAG:
+            raise Exception("Jupyterhub hub image tag is not defined")
+
+        self.EXECWHACKER_CRON_IMAGE_PATH = os.getenv(
+            "EXECWHACKER_CRON_IMAGE_PATH", None
+        )
+        self.EXECWHACKER_CRON_IMAGE_TAG = os.getenv("EXECWHACKER_CRON_IMAGE_TAG", None)
+
+        self.IS_CRYPTONONO_ENABLED = (
+            os.getenv("IS_CRYPTONONO_ENABLED", "true").strip().lower() == "true"
+        )
+        if self.IS_CRYPTONONO_ENABLED and (
+            not self.EXECWHACKER_CRON_IMAGE_PATH or not self.EXECWHACKER_CRON_IMAGE_TAG
+        ):
+            raise Exception(
+                "You cannot run crytnono without defining EXECWHACKER_CRON_IMAGE_TAG or EXECWHACKER_CRON_IMAGE_PATH"
             )
-            self.IS_CRYPTONONO_ENABLED = False
 
         self.UI_IAM_USER = os.getenv("UI_IAM_USER", None)
 
@@ -344,8 +355,8 @@ class ClusterCdkStack(Stack):
                 node_labels["opensciencelab.local/node-type"] = (
                     f"user-{node_name_escaped}"
                 )
-                node_labels["opensciencelab.local/cryptnono-enabled"] = node.get(
-                    "cryptnono_enabled", "true"
+                node_labels["opensciencelab.local/cryptnono-enabled"] = str(
+                    self.IS_CRYPTONONO_ENABLED
                 )
 
             # Define the Launch Template with the desired EC2 instance tags
@@ -385,8 +396,7 @@ class ClusterCdkStack(Stack):
 
             # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/NodegroupOptions.html
             node_group = self.cluster.add_nodegroup_capacity(
-                node["name"],
-                nodegroup_name=f"{node['name']}-NodeGroup-{self.LAB_SHORT_NAME}",
+                f"{node['name']}{self.LAB_SHORT_NAME}",
                 ami_type=eks.NodegroupAmiType.AL2023_X86_64_STANDARD,
                 capacity_type=eks.CapacityType.ON_DEMAND,
                 desired_size=node.get("group_desired_size", 0),
@@ -553,16 +563,6 @@ class ClusterCdkStack(Stack):
 
         self.jupyterhub_helm_version = "4.3.2"
 
-        # The jupyterhub helm values require the image path and tag to be seperated
-        # We need to be careful about possible schemes being included.
-        parsed_jupyterhub_image_url = urlparse(self.JUPYTER_HUB_IMAGE)
-        jupyterhub_image_netloc_and_path = (
-            parsed_jupyterhub_image_url.netloc + parsed_jupyterhub_image_url.path
-        )
-        jupyterhub_image_path, jupyterhub_image_tag = (
-            jupyterhub_image_netloc_and_path.rsplit(":", 1)
-        )
-
         # Modify the k8s permissions so the volumes can be modified in place
         # Patching existing clusterroles is difficult. So we are fully replacing the original from jupyterhub.
         # This particular action adds the verb "patch" to PVC
@@ -703,8 +703,8 @@ class ClusterCdkStack(Stack):
             },
             "hub": {
                 "image": {
-                    "name": jupyterhub_image_path,
-                    "tag": jupyterhub_image_tag,
+                    "name": self.JUPYTER_HUB_IMAGE_PATH,
+                    "tag": self.JUPYTER_HUB_IMAGE_TAG,
                     "pullPolicy": "Always",
                 },
                 "db": {
@@ -1213,7 +1213,7 @@ class ClusterCdkStack(Stack):
                                         "containers": [
                                             {
                                                 "name": "update-execwhacker-worker",
-                                                "image": self.EXECWHACKER_CRON_IMAGE,
+                                                "image": f"{self.EXECWHACKER_CRON_IMAGE_PATH}:{self.EXECWHACKER_CRON_IMAGE_TAG}",
                                                 "imagePullPolicy": "Always",
                                                 "command": ["sh", "-c"],
                                                 "args": [execwhacker_args],

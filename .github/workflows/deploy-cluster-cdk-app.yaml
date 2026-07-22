@@ -36,8 +36,11 @@ jobs:
       contents: read
     env:
       DEPLOY_PREFIX: ${{ needs.setup.outputs.deploy_prefix }}
-      JUPYTER_HUB_IMAGE: ${{ vars.jupyterhub-image }}
-      EXECWHACKER_CRON_IMAGE: ${{ vars.execwhacker-image }}
+      JUPYTER_HUB_IMAGE_PATH: ${{ vars.jupyterhub_image_path }}
+      JUPYTER_HUB_IMAGE_TAG: ${{ vars.jupyterhub_image_tag }}
+      EXECWHACKER_CRON_IMAGE_PATH: ${{ vars.execwhacker_image_path }}
+      EXECWHACKER_CRON_IMAGE_TAG: ${{ vars.execwhacker_image_tag }}
+      IS_CRYPTONONO_ENABLED: ${{ vars.is_cryptnono_enabled }}
       AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       UI_IAM_USER: ${{ vars.UI_IAM_USER }}
       ADMIN_USERS: ${{ vars.ADMIN_USERS }}

@@ -61,7 +61,7 @@ storage_capacity = "15Gi"
 [ nodes.core ]
 required = true
 node_type = "core"
-instance = ["t3a.medium"]
+instance = ["t3a.large"]
 group_desired_size = 1
 group_min_size = 1
 group_max_size = 1
