@@ -376,6 +376,9 @@ class ClusterCdkStack(Stack):
                 f"{node['name']}-LaunchTemplate-{self.LAB_SHORT_NAME}",
                 launch_template_data=ec2.CfnLaunchTemplate.LaunchTemplateDataProperty(
                     # Configure Block Device Mappings (Storage)
+                    # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/block-device-mapping-concepts.html
+                    # Note that the volume size here must be equal or bigger than the node's AMI's root volume snapshot
+                    # Otherwise you will get an error like "Volume of size 10GB is smaller than snapshot 'snap-013c0e96ad509b9e2', expect size >= 20GB"
                     block_device_mappings=[
                         ec2.CfnLaunchTemplate.BlockDeviceMappingProperty(
                             device_name="/dev/xvda",
