@@ -103,7 +103,9 @@ You can generate AWS Access Keys from the IAM console:
 
 You can deploy a new stack without conflicting with any others.
 
-First, create your environments file from the example:
+First, create your environment. You can create a file for local development or add environment variables to GitHub.
+
+For local developement create a file from the example:
 
 ```bash
 cp dev.env.example .env
@@ -113,25 +115,33 @@ nano .env
 `.env`:
 
 ```bash
-export AWS_PROFILE="profile_name"            # The profile configured to access AWS Account
-export DEPLOY_PREFIX="eg"                    # Short deployment prefix value, probably initials
+# Required make variables
+export AWS_DEFAULT_PROFILE=me                  # The profile configured to access AWS Account
+export DEPLOY_PREFIX=dd                        # Short deployment prefix value, should be the same a LAB_SHORT_NAME
 
-export JUPYTER_HUB_DOCKER_TAG="test"         # needs to exist for opensciencelab-jupyterhub image
-export UI_IAM_USER="AWSReservedSSO_Project"  # IAM Role used by admins in the AWS console
+# Infrastructure Configuration
+export JUPYTER_HUB_IMAGE_PATH="ghcr.io/asfopensarlab/opensciencelab-jupyterhub"  # Needs to exist for opensciencelab-jupyterhub image
+export JUPYTER_HUB_IMAGE_TAG="test"            # Needs to exist for opensciencelab-jupyterhub image
+export EXECWHACKER_CRON_IMAGE_PATH="ghcr.io/asfopensarlab/opensciencelab-update-execwhacker"  # Needs to exist for opensciencelab-update-execwhacker image
+export EXECWHACKER_CRON_IMAGE_TAG="test"       # Needs to exist for opensciencelab-update-execwhacker image
+export IS_CRYPTNONO_ENABLED="true"             # Is cryptnono deployed within the cluster?
+export UI_IAM_USER="AWSReservedSSO_Project.."  # IAM Role used by admins in the AWS console
+export LAB_SHORT_NAME="dd"                     # Short deployment prefix value
+export ALLOWED_LAB_PROFILES="sar"              # Comma seperated list of profiles to enable
+export ADMIN_USERS="nobody"                    # Comma seperated list of users to embed into JH
+export PORTAL_DOMAINS="<CLOUDFRONT-URL>"       # Comma seperated list of approved portal domains
 
-export LAB_SHORT_NAME="eg"                   # Probably a duplicate of DEPLOY_PREFIX, not used for actions
-export ALLOWED_LAB_PROFILES="sar"            # Comma seperated list of profiles to enable
-export ADMIN_USERS="nobody, joe"             # Comma seperated list of users to embed into JH       
-export PORTAL_DOMAINS="https://...."         # Comma seperated list of approved portal domains
+# volume Management Lambda - default values listed
+export VOLUME_CRON_SCHEDULE="0 * * * ? *"      # Schedule to run the volume management lambda
+export SNAPSHOT_WARNING_DAYS="5"               # Number of days before delete to warn for old snapshots
 
-export VOLUME_CRON_SCHEDULE="0 * * * ? *"    # Schedule to run the volume management lambda
-export SNAPSHOT_WARNING_DAYS="5"             # Number of days before delete to warn for old snapshots
+# Volume and snapshot lifecycle times
+export DAYS_TILL_VOLUME_DELETION=2             # Number of days after server stop when the user's volume will be deleted
+export DAYS_TILL_SNAPSHOT_DELETION=7           # Number of days after server stop when the user's snapshot will be deleted
 
-export DAYS_TILL_VOLUME_DELETION=2           # Number of days after server stop when the user's volume will be deleted
-export DAYS_TILL_SNAPSHOT_DELETION=7         # Number of days after server stop when the user's snapshot will be deleted
-
-export AWS_CLI_PATH=/usr/local/bin/aws       # Path to your installation of awscli
-export SSO_SECRET_ARN=arn:aws:.....          # Arn location of cluster SSO secret
+# For running storage management lambda outside AWS
+export AWS_CLI_PATH=/usr/local/bin/aws         # Path to your installation of awscli
+export SSO_SECRET_ARN=arn:aws:.....            # Arn location of cluster SSO secret
 ```
 
 For example configurations, see the [GitHub Environments](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/settings/environments)
