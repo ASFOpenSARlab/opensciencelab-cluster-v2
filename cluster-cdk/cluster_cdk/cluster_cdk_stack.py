@@ -112,7 +112,13 @@ class ClusterCdkStack(Stack):
 
         self.K8s_NAMESPACE = "jupyter"
 
-        self.OPENSCIENCELAB_CONFIG_FILE = self.HOME_DIR / "opensciencelab.toml"
+        self.NODE_DEFINTIONS = os.getenv("NODE_DEFINTIONS", None)
+        if not self.NODE_DEFINTIONS:
+            raise Exception("Node definitions is not defined")
+
+        self.PROFILE_DEFINTIONS = os.getenv("PROFILE_DEFINTIONS", None)
+        if not self.PROFILE_DEFINTIONS:
+            raise Exception("Profile definitions is not defined")
 
         # Determine the selected lab config values
         self.osl_config = self._get_reduced_osl_config()
@@ -1352,21 +1358,15 @@ class ClusterCdkStack(Stack):
 
     def _get_reduced_osl_config(self) -> dict:
         """
-        Return a subset of profiles and nodes found in opensciencelab.toml based on list of lab profiles given in GitHub env.
+        Return a subset of profiles and nodes based on list of lab profiles given in GitHub env.
 
         Also include required nodes (like core) that don't match for any particular profile.
 
         """
-        with open(self.OPENSCIENCELAB_CONFIG_FILE, "rb") as f:
-            osl_config: dict = tomllib.load(f)
 
-        possible_profiles = osl_config.get("lab_profiles", None)
-        if not possible_profiles:
-            raise Exception("No lab profiles found in the osl toml config")
+        possible_profiles = tomllib.loads(self.PROFILE_DEFINTIONS)
 
-        all_nodes = osl_config.get("nodes", None)
-        if not all_nodes:
-            raise Exception("No nodes found in the osl toml config")
+        all_nodes = tomllib.loads(self.NODE_DEFINTIONS)
 
         # Put config data into a format better for code interactions
         # { "name": "hello", "attr": "value", ... }
