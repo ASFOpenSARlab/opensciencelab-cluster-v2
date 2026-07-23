@@ -356,7 +356,7 @@ class ClusterCdkStack(Stack):
                 )
                 node_labels["opensciencelab.local/cryptnono-enabled"] = str(
                     self.IS_CRYPTNONO_ENABLED
-                )
+                ).lower()
 
             # Root volume of EC2 defaults to 20GiB. If defined as something else, it must be within EBS's storage range.
             root_volume_size = int(node.get("root_volume_size", "20"))
