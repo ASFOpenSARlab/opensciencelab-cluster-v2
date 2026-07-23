@@ -36,8 +36,8 @@ jobs:
       contents: read
     env:
       DEPLOY_PREFIX: ${{ needs.setup.outputs.deploy_prefix }}
-      PROFILE_DEFINTIONS: ${{ vars.PROFILE_DEFINTIONS }}
-      NODE_DEFINTIONS: ${{ vars.NODE_DEFINTIONS }}
+      PROFILE_DEFINITIONS: ${{ vars.PROFILE_DEFINITIONS }}
+      NODE_DEFINITIONS: ${{ vars.NODE_DEFINITIONS }}
       JUPYTER_HUB_IMAGE_PATH: ${{ vars.JUPYTER_HUB_IMAGE_PATH }}
       JUPYTER_HUB_IMAGE_TAG: ${{ vars.JUPYTER_HUB_IMAGE_TAG }}
       EXECWHACKER_CRON_IMAGE_PATH: ${{ vars.EXECWHACKER_CRON_IMAGE_PATH }}

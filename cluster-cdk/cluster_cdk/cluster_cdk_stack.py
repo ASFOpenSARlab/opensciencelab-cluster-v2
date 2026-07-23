@@ -112,12 +112,12 @@ class ClusterCdkStack(Stack):
 
         self.K8s_NAMESPACE = "jupyter"
 
-        self.NODE_DEFINTIONS = os.getenv("NODE_DEFINTIONS", None)
-        if not self.NODE_DEFINTIONS:
+        self.NODE_DEFINITIONS = os.getenv("NODE_DEFINITIONS", None)
+        if not self.NODE_DEFINITIONS:
             raise Exception("Node definitions is not defined")
 
-        self.PROFILE_DEFINTIONS = os.getenv("PROFILE_DEFINTIONS", None)
-        if not self.PROFILE_DEFINTIONS:
+        self.PROFILE_DEFINITIONS = os.getenv("PROFILE_DEFINITIONS", None)
+        if not self.PROFILE_DEFINITIONS:
             raise Exception("Profile definitions is not defined")
 
         # Determine the selected lab config values
@@ -1364,9 +1364,9 @@ class ClusterCdkStack(Stack):
 
         """
 
-        possible_profiles = tomllib.loads(self.PROFILE_DEFINTIONS)
+        possible_profiles = tomllib.loads(self.PROFILE_DEFINITIONS)
 
-        all_nodes = tomllib.loads(self.NODE_DEFINTIONS)
+        all_nodes = tomllib.loads(self.NODE_DEFINITIONS)
 
         # Put config data into a format better for code interactions
         # { "name": "hello", "attr": "value", ... }
