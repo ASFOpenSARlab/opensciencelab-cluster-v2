@@ -1,15 +1,19 @@
 import pytest
+from unittest.mock import Mock, patch
 from moto import mock_aws
 import datetime
 
-from cluster_cdk.lambdas.volume_management import should_send_snapshot_warning_email, DATE_FORMAT
+from cluster_cdk.lambdas.volume_management import DATE_FORMAT, should_send_snapshot_warning_email, send_snapshot_warning
 
 class mock_snapshot:
-    tags={}
+    tags=[]
+    @classmethod
+    def create_tags(self, Tags : list[dict]):
+        return NotImplementedError
 
 @mock_aws
-class TestVolumeManagement:
-    def test_should_send_snapshot_warning_email_no_warning_sent_before_first_warning_time(self, monkeypatch):
+class TestShouldSendSnapshotWarning:
+    def test_no_warning_sent_before_first_warning_time(self, monkeypatch):
         class MockDatetime(datetime.datetime):
             @classmethod
             def now(cls, tz=None):
@@ -31,7 +35,7 @@ class TestVolumeManagement:
         should_send = should_send_snapshot_warning_email(snap)
         assert should_send == False
 
-    def test_should_send_snapshot_warning_email_no_warning_sent_after_first_warning_time(self, monkeypatch):
+    def test_no_warning_sent_after_first_warning_time(self, monkeypatch):
         class MockDatetime(datetime.datetime):
             @classmethod
             def now(cls, tz=None):
@@ -53,7 +57,7 @@ class TestVolumeManagement:
         should_send = should_send_snapshot_warning_email(snap)
         assert should_send == True
 
-    def test_should_send_snapshot_warning_email_one_warning_sent_after_first_warning_time(self, monkeypatch):
+    def test_one_warning_sent_after_first_warning_time(self, monkeypatch):
         class MockDatetime(datetime.datetime):
             @classmethod
             def now(cls, tz=None):
@@ -79,7 +83,7 @@ class TestVolumeManagement:
         should_send = should_send_snapshot_warning_email(snap)
         assert should_send == False
 
-    def test_should_send_snapshot_warning_email_one_warning_sent_after_second_warning_time(self, monkeypatch):
+    def test_one_warning_sent_after_second_warning_time(self, monkeypatch):
         class MockDatetime(datetime.datetime):
             @classmethod
             def now(cls, tz=None):
@@ -105,7 +109,7 @@ class TestVolumeManagement:
         should_send = should_send_snapshot_warning_email(snap)
         assert should_send == True
 
-    def test_should_send_snapshot_warning_email_one_warning_sent_after_third_warning_time(self, monkeypatch):
+    def test_one_warning_sent_after_third_warning_time(self, monkeypatch):
         class MockDatetime(datetime.datetime):
             @classmethod
             def now(cls, tz=None):
@@ -131,7 +135,7 @@ class TestVolumeManagement:
         should_send = should_send_snapshot_warning_email(snap)
         assert should_send == True
 
-    def test_should_send_snapshot_warning_email_all_warning_sent_after_all_warning_time(self, monkeypatch):
+    def test_all_warning_sent_after_all_warning_time(self, monkeypatch):
         class MockDatetime(datetime.datetime):
             @classmethod
             def now(cls, tz=None):
@@ -141,7 +145,7 @@ class TestVolumeManagement:
 
         MONKEYPATCH_SNAPSHOT_WARNING_DAYS = [10, 5, 3, 1]
         monkeypatch.setattr("cluster_cdk.lambdas.volume_management.SNAPSHOT_WARNING_DAYS", MONKEYPATCH_SNAPSHOT_WARNING_DAYS)
- 
+
         snap = mock_snapshot()
         snap.tags = [
             {
@@ -156,3 +160,29 @@ class TestVolumeManagement:
 
         should_send = should_send_snapshot_warning_email(snap)
         assert should_send == False
+
+@mock_aws
+class TestSendSnapshotWarning:
+    def test_send_snapshot_warning(self, monkeypatch):
+        snap = mock_snapshot()
+
+        class MockDatetime(datetime.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime.datetime.strptime("2026-01-10 01:00:00+00:00", DATE_FORMAT)
+        monkeypatch.setattr("cluster_cdk.lambdas.volume_management.datetime.datetime", MockDatetime)
+
+        monkeypatch.setattr("cluster_cdk.lambdas.volume_management.send_email_to_portal", lambda *args, **kwargs: None)
+
+        claim_user = "testuser"
+        with patch.object(mock_snapshot, "create_tags", autospec=True) as m:
+            success = send_snapshot_warning(snap, claim_user)
+            m.assert_called_once_with(
+                Tags=[
+                    {
+                        'Key': 'last-snapshot-warning-date', 'Value': '2026-01-10 01:00:00+00:00'
+                    }
+                ]
+            )
+
+        assert success

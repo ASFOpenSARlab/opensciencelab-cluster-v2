@@ -350,7 +350,7 @@ def send_snapshot_warning(snapshot, claim_user):
     # send email to portal
     send_email_to_portal(email_payload)
 
-    # Add reported tag
+    # Update last warning tag
     snapshot.create_tags(
         Tags=[
             {"Key": "last-snapshot-warning-date", "Value": datetime.datetime.now().strftime(DATE_FORMAT)},
@@ -528,7 +528,7 @@ def run_volume_management():
             logger.info(" - Snapshot is in expired grace period!")
             send_snapshot_delete(snapshot, claim_user)
         elif should_send_snapshot_warning_email(snapshot):
-            logger.info(" - Snapshot is expiring!")
+            logger.info(" - Sending a snapshot warning email!")
             send_snapshot_warning(snapshot, claim_user)
 
 
