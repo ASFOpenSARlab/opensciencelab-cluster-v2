@@ -51,12 +51,7 @@ class ClusterCdkStack(Stack):
         self.DEPLOY_PREFIX = str(os.getenv("DEPLOY_PREFIX")).lower()
 
         self.JUPYTER_HUB_IMAGE_PATH = os.getenv("JUPYTER_HUB_IMAGE_PATH")
-        if not self.JUPYTER_HUB_IMAGE_PATH:
-            raise Exception("Jupyterhub hub image path is not defined")
-
         self.JUPYTER_HUB_IMAGE_TAG = os.getenv("JUPYTER_HUB_IMAGE_TAG")
-        if not self.JUPYTER_HUB_IMAGE_TAG:
-            raise Exception("Jupyterhub hub image tag is not defined")
 
         self.EXECWHACKER_CRON_IMAGE_PATH = os.getenv(
             "EXECWHACKER_CRON_IMAGE_PATH", None
@@ -66,12 +61,6 @@ class ClusterCdkStack(Stack):
         self.IS_CRYPTNONO_ENABLED = (
             os.getenv("IS_CRYPTNONO_ENABLED", "true").strip().lower() == "true"
         )
-        if self.IS_CRYPTNONO_ENABLED and (
-            not self.EXECWHACKER_CRON_IMAGE_PATH or not self.EXECWHACKER_CRON_IMAGE_TAG
-        ):
-            raise Exception(
-                "You cannot run crytnono without defining EXECWHACKER_CRON_IMAGE_TAG or EXECWHACKER_CRON_IMAGE_PATH"
-            )
 
         self.UI_IAM_USER = os.getenv("UI_IAM_USER", None)
 
@@ -87,23 +76,17 @@ class ClusterCdkStack(Stack):
             profile.strip()
             for profile in os.getenv("ALLOWED_LAB_PROFILES", "").split(",")
         ]
-        if self.ALLOWED_LAB_PROFILES == [""]:
-            raise Exception("Allowed Lab Profiles are not defined")
 
         self.ADMIN_USERS = [
             username.strip() for username in os.getenv("ADMIN_USERS", "").split(",")
         ]
-        if self.ADMIN_USERS == [""]:
-            raise Exception("Admin users are not defined")
 
         self.PORTAL_DOMAINS = os.getenv("PORTAL_DOMAINS", None)
-        if not self.PORTAL_DOMAINS:
-            raise Exception("Portal domains is not defined")
 
-        self.DAYS_TILL_VOLUME_DELETION = os.getenv("DAYS_TILL_VOLUME_DELETION", "3600")
+        self.DAYS_TILL_VOLUME_DELETION = os.getenv("DAYS_TILL_VOLUME_DELETION", None)
 
         self.DAYS_TILL_SNAPSHOT_DELETION = os.getenv(
-            "DAYS_TILL_SNAPSHOT_DELETION", "3600"
+            "DAYS_TILL_SNAPSHOT_DELETION", None
         )
 
         # Make sure everything happens in a particular AZ.
@@ -113,12 +96,8 @@ class ClusterCdkStack(Stack):
         self.K8s_NAMESPACE = "jupyter"
 
         self.NODE_DEFINITIONS = os.getenv("NODE_DEFINITIONS", None)
-        if not self.NODE_DEFINITIONS:
-            raise Exception("Node definitions is not defined")
 
         self.PROFILE_DEFINITIONS = os.getenv("PROFILE_DEFINITIONS", None)
-        if not self.PROFILE_DEFINITIONS:
-            raise Exception("Profile definitions is not defined")
 
         # Determine the selected lab config values
         self.osl_config = self._get_reduced_osl_config()
@@ -430,9 +409,8 @@ class ClusterCdkStack(Stack):
                 f"{node['name']}{self.LAB_SHORT_NAME}",
                 ami_type=eks.NodegroupAmiType.AL2023_X86_64_STANDARD,
                 capacity_type=eks.CapacityType.ON_DEMAND,
-                desired_size=node.get("group_desired_size", 0),
-                max_size=node.get("group_max_size", 100),
-                min_size=node.get("group_min_size", 0),
+                max_size=node.get("group_max_size"),
+                min_size=node.get("group_min_size"),
                 # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_ec2/InstanceClass.html
                 instance_types=[
                     ec2.InstanceType(instance) for instance in node["instance"]

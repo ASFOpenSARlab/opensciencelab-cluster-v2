@@ -110,6 +110,7 @@ cdk-shell:
 		-e SNAPSHOT_WARNING_DAYS \
 		-e DAYS_TILL_VOLUME_DELETION \
 		-e DAYS_TILL_SNAPSHOT_DELETION \
+		-e AZ_LETTER \
 		-e AWS_CLI_PATH \
 		-e CLUSTER_NAME \
 		-e SSO_SECRET_ARN \
@@ -171,16 +172,21 @@ run-volume-lambda: bundle-deps
 	python3 cluster-cdk/cluster_cdk/lambdas/volume_management.py
 
 .PHONY := test
-test: remove-cdk-out install-reqs bundle-deps
+test: remove-cdk-out install-reqs bundle-deps validate-env
 	@echo "Running tests for Cluster (${DEPLOY_PREFIX})"
 
+.PHONY := validate-env
+validate-env:
+	@echo "Validating environment variables"
+	cd ./cluster-cdk/cluster_cdk && python validate_env.py
+
 .PHONY := synth-cluster
-synth-cluster: install-reqs bundle-deps
+synth-cluster: install-reqs bundle-deps validate-env
 	@echo "Synthesizing ${DEPLOY_PREFIX}/cluster-cdk"
 	cd ./cluster-cdk && cdk synth
 
 .PHONY := deploy-cluster
-deploy-cluster: install-reqs bundle-deps
+deploy-cluster: install-reqs bundle-deps validate-env
 	@echo "Deploying ${DEPLOY_PREFIX}/cluster-cdk"
 	cd ./cluster-cdk && cdk --require-approval never deploy
 
