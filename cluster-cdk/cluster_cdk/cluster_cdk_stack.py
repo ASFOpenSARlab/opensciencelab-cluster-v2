@@ -1369,14 +1369,12 @@ class ClusterCdkStack(Stack):
 
                 if not node_for_profile:
                     raise Exception(
-                        f"Desired lab profile name '{profile['name']}' for '{self.LAB_SHORT_NAME}' does not have a valid node assigned."
+                        f"Configured lab profile '{profile['name']}' for '{self.LAB_SHORT_NAME}' does not have a valid node assigned. This should not happen. Did you forget to validate the nodes and profiles?"
                     )
-
-                desired_nodes.append(node_for_profile)
 
             else:
                 print(
-                    f"Desired lab profile name '{profile['name']}' for '{self.LAB_SHORT_NAME}' does not match any selected profile names."
+                    f"Configured lab profile '{profile['name']}' for '{self.LAB_SHORT_NAME}' does not match any ALLOWED_LAB_PROFILES. Skipping build."
                 )
 
         # Add any required nodes (like core)
