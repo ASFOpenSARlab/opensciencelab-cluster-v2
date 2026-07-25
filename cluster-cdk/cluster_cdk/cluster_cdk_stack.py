@@ -73,10 +73,6 @@ class ClusterCdkStack(Stack):
 
         self.LAB_SHORT_NAME = os.environ["LAB_SHORT_NAME"].lower()
 
-        self.ALLOWED_LAB_PROFILES = [
-            profile.strip() for profile in os.environ["ALLOWED_LAB_PROFILES"].split(",")
-        ]
-
         self.ADMIN_USERS = [
             username.strip() for username in os.environ["ADMIN_USERS"].split(",")
         ]
@@ -96,8 +92,8 @@ class ClusterCdkStack(Stack):
         self.K8s_NAMESPACE = "jupyter"
 
         # Get nodes and profiles
-        profiles = tomllib.loads(os.environ["NODE_DEFINITIONS"])
-        nodes = tomllib.loads(os.environ["PROFILE_DEFINITIONS"])
+        profiles = tomllib.loads(os.environ["PROFILE_DEFINITIONS"])
+        nodes = tomllib.loads(os.environ["NODE_DEFINITIONS"])
 
         # Put config data into a format better for code interactions
         # { "name": "hello", "attr": "value", ... }
@@ -109,7 +105,8 @@ class ClusterCdkStack(Stack):
 
         self.kubectl_layer = lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl")
 
-        print(vars(self))
+        for v in vars(self):
+            print(v)
 
         #####################################################################
         #

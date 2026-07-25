@@ -333,7 +333,6 @@ def validate_other_environment_variables() -> None:
 
     ENVS_TO_SHOW = [
         "ADMIN_USERS",
-        "ALLOWED_LAB_PROFILES",
         "AZ_LETTER",
         "DAYS_TILL_SNAPSHOT_DELETION",
         "DAYS_TILL_VOLUME_DELETION",
@@ -363,13 +362,6 @@ def validate_other_environment_variables() -> None:
     ]
     if admin_users == [""]:
         raise Exception("ADMIN_USERS are not defined")
-
-    print("Checking ALLOWED_LAB_PROFILES ....")
-    allowed_lab_profiles = [
-        profile.strip() for profile in os.getenv("ALLOWED_LAB_PROFILES", "").split(",")
-    ]
-    if allowed_lab_profiles == [""]:
-        raise Exception("ALLOWED_LAB_PROFILES are not defined")
 
     print("Checking AZ_LETTER (optional) ....")
     # Make sure everything happens in a particular AZ.

@@ -127,7 +127,6 @@ export EXECWHACKER_CRON_IMAGE_TAG="test"       # Needs to exist for opensciencel
 export IS_CRYPTNONO_ENABLED="true"             # Is cryptnono deployed within the cluster?
 export UI_IAM_USER="AWSReservedSSO_Project.."  # IAM Role used by admins in the AWS console
 export LAB_SHORT_NAME="dd"                     # Short deployment prefix value
-export ALLOWED_LAB_PROFILES="sar"              # Comma seperated list of profiles to enable
 export ADMIN_USERS="nobody"                    # Comma seperated list of users to embed into JH
 export PORTAL_DOMAINS="<CLOUDFRONT-URL>"       # Comma seperated list of approved portal domains
 

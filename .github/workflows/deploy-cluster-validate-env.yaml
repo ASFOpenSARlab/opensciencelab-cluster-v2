@@ -42,7 +42,6 @@ jobs:
       UI_IAM_USER: ${{ vars.UI_IAM_USER }}
       ADMIN_USERS: ${{ vars.ADMIN_USERS }}
       PORTAL_DOMAINS: ${{ vars.PORTAL_DOMAINS }}
-      ALLOWED_LAB_PROFILES: ${{ vars.ALLOWED_LAB_PROFILES }}
       LAB_SHORT_NAME: ${{ inputs.envOverride || needs.setup.outputs.environment }}
       VOLUME_CRON_SCHEDULE: ${{ vars.VOLUME_CRON_SCHEDULE }}
       SNAPSHOT_WARNING_DAYS: ${{ vars.SNAPSHOT_WARNING_DAYS }}
