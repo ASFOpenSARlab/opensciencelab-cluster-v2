@@ -105,8 +105,10 @@ class ClusterCdkStack(Stack):
 
         self.kubectl_layer = lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl")
 
-        for v in vars(self):
-            print(v)
+        print("vars within CDK...")
+        for k, v in vars(self).items():
+            print(k, v)
+        print("....")
 
         #####################################################################
         #
