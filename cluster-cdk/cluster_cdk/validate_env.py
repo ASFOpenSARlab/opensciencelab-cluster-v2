@@ -361,10 +361,11 @@ def validate_other_environment_variables() -> None:
     print("Checking AZ_LETTER (optional) ....")
     # Make sure everything happens in a particular AZ.
     # This is normally 'a' but can be 'b' or 'c' if more than one cluster is deployed in an account and resources will be limited.
-    az_letter = os.getenv("AZ_LETTER", "a")
-    assert az_letter in ["a", "b", "c"], (
-        "The availability zone letter AZ_LETTER must be 'a', 'b', or 'c'"
-    )
+    az_letter = os.getenv("AZ_LETTER")
+    if az_letter:
+        assert az_letter in ["a", "b", "c"], (
+            "The availability zone letter AZ_LETTER must be 'a', 'b', or 'c'"
+        )
 
     print("Checking DAYS_TILL_SNAPSHOT_DELETION ....")
     days_till_snapshot_deletion = os.getenv("DAYS_TILL_SNAPSHOT_DELETION", None)
@@ -389,15 +390,15 @@ def validate_other_environment_variables() -> None:
     execwhacker_cron_image_tag = os.getenv("EXECWHACKER_CRON_IMAGE_TAG", None)
 
     print("Checking IS_CRYPTNONO_ENABLED (optional) ....")
-    is_cryptnono_enabled = (
-        os.getenv("IS_CRYPTNONO_ENABLED", "true").strip().lower() == "true"
-    )
-    if is_cryptnono_enabled and (
-        not execwhacker_cron_image_path or not execwhacker_cron_image_tag
-    ):
-        raise Exception(
-            "You cannot run crytnono without defining EXECWHACKER_CRON_IMAGE_TAG or EXECWHACKER_CRON_IMAGE_PATH"
-        )
+    is_cryptnono_enabled = os.getenv("IS_CRYPTNONO_ENABLED")
+    if is_cryptnono_enabled:
+        is_cryptnono_enabled = is_cryptnono_enabled.strip().lower() == "true"
+        if is_cryptnono_enabled and (
+            not execwhacker_cron_image_path or not execwhacker_cron_image_tag
+        ):
+            raise Exception(
+                "You cannot run crytnono without defining EXECWHACKER_CRON_IMAGE_TAG or EXECWHACKER_CRON_IMAGE_PATH"
+            )
 
     print("Checking JUPYTER_HUB_IMAGE_PATH ....")
     jupyter_hub_image_path = os.getenv("JUPYTER_HUB_IMAGE_PATH")
