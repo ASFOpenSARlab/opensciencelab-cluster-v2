@@ -282,6 +282,7 @@ def validate_profiles_and_nodes() -> None:
 
     for profile in profiles:
         print(f"Checking user profile: {profile}")
+
         assert "node" in profile, "Profile node is required"
         assert profile["node"] in [node["name"] for node in nodes], (
             "Profile node must match an existing node name"

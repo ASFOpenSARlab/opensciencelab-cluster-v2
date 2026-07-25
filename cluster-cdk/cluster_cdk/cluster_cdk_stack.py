@@ -95,12 +95,14 @@ class ClusterCdkStack(Stack):
 
         self.K8s_NAMESPACE = "jupyter"
 
-        self.NODE_DEFINITIONS = os.environ["NODE_DEFINITIONS"]
+        # Get nodes and profiles
+        profiles = tomllib.loads(os.environ["NODE_DEFINITIONS"])
+        nodes = tomllib.loads(os.environ["PROFILE_DEFINITIONS"])
 
-        self.PROFILE_DEFINITIONS = os.environ["PROFILE_DEFINITIONS"]
-
-        # Determine the selected lab config values
-        self.osl_config = self._get_reduced_osl_config()
+        # Put config data into a format better for code interactions
+        # { "name": "hello", "attr": "value", ... }
+        self.lab_profiles = [{"name": name} | body for name, body in profiles.items()]
+        self.lab_nodes = [{"name": name} | body for name, body in nodes.items()]
 
         # All resources in this specific stack will get this tag
         Tags.of(self).add("osl-billing", self.LAB_SHORT_NAME)  # type: ignore
@@ -324,7 +326,7 @@ class ClusterCdkStack(Stack):
         #####################################################################
 
         # https://github.com/aws/aws-cdk/issues/37012eks.Cluster
-        for node in self.osl_config["nodes"]:
+        for node in self.lab_nodes:
             node_type = node.get("node_type", "user")
             node_name_escaped = re.sub(r"[^A-Za-z0-9]", "00", node["name"].strip())
 
@@ -754,7 +756,7 @@ class ClusterCdkStack(Stack):
                     "LAB_SHORT_NAME": self.LAB_SHORT_NAME,
                     "JUPYTERHUB_LAB_PREFIX": f"/lab/{self.LAB_SHORT_NAME}",
                     "PORTAL_DOMAINS": self.PORTAL_DOMAINS,
-                    "LAB_PROFILES": json.dumps(self.osl_config["lab_profiles"]),
+                    "LAB_PROFILES": json.dumps(self.lab_profiles),
                     "DAYS_TILL_VOLUME_DELETION": self.DAYS_TILL_VOLUME_DELETION,
                     "DAYS_TILL_SNAPSHOT_DELETION": self.DAYS_TILL_SNAPSHOT_DELETION,
                     "CLUSTER_NAME": self.cluster.cluster_name,
@@ -1333,68 +1335,6 @@ class ClusterCdkStack(Stack):
             value=self.jupyterhub_helm_version,
             description="The version of the JupyterHub Helm Chart version",
         )
-
-    def _get_reduced_osl_config(self) -> dict:
-        """
-        Return a subset of profiles and nodes based on list of lab profiles given in GitHub env.
-
-        Also include required nodes (like core) that don't match for any particular profile.
-
-        """
-
-        possible_profiles = tomllib.loads(self.PROFILE_DEFINITIONS)
-
-        all_nodes = tomllib.loads(self.NODE_DEFINITIONS)
-
-        # Put config data into a format better for code interactions
-        # { "name": "hello", "attr": "value", ... }
-        possible_profiles = [
-            {"name": name} | body for name, body in possible_profiles.items()
-        ]
-
-        all_nodes = [{"name": name} | body for name, body in all_nodes.items()]
-
-        desired_profiles = []
-        desired_nodes = []
-
-        for profile in possible_profiles:
-            if profile["name"] in self.ALLOWED_LAB_PROFILES:
-                desired_profiles.append(profile)
-
-                # See if there is a proper node configuration for the profile
-                node_for_profile = None
-                for node_body in all_nodes:
-                    if profile["node"] == node_body["name"]:
-                        node_for_profile = node_body
-
-                if not node_for_profile:
-                    raise Exception(
-                        f"Configured lab profile '{profile['name']}' for '{self.LAB_SHORT_NAME}' does not have a valid node assigned. This should not happen. Did you forget to validate the nodes and profiles?"
-                    )
-
-            else:
-                print(
-                    f"Configured lab profile '{profile['name']}' for '{self.LAB_SHORT_NAME}' does not match any ALLOWED_LAB_PROFILES. Skipping build."
-                )
-
-        # Add any required nodes (like core)
-        for node in all_nodes:
-            if node.get("required", False):
-                desired_nodes.append(node)
-
-        # Get rid of duplicates
-        desired_profiles = [
-            profile
-            for n, profile in enumerate(desired_profiles)
-            if desired_profiles.index(profile) == n
-        ]
-        desired_nodes = [
-            node
-            for n, node in enumerate(desired_nodes)
-            if desired_nodes.index(node) == n
-        ]
-
-        return {"lab_profiles": desired_profiles, "nodes": desired_nodes}
 
     def _add_policy_from_file(self, the_role: iam.Role, file_name: str) -> None:
         """
