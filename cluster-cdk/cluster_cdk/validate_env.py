@@ -318,6 +318,103 @@ def validate_other_environment_variables() -> None:
 #
 ##############\n""")
 
+    ENVS_TO_SHOW = [
+        "ADMIN_USERS",
+        "ALLOWED_LAB_PROFILES",
+        "AZ_LETTER",
+        "DAYS_TILL_SNAPSHOT_DELETION",
+        "DAYS_TILL_VOLUME_DELETION",
+        "EXECWHACKER_CRON_IMAGE_PATH",
+        "EXECWHACKER_CRON_IMAGE_TAG",
+        "IS_CRYPTNONO_ENABLED",
+        "JUPYTER_HUB_IMAGE_PATH",
+        "JUPYTER_HUB_IMAGE_TAG",
+        "LAB_SHORT_NAME",
+        "PORTAL_DOMAINS",
+        "SNAPSHOT_WARNING_DAYS",
+        "UI_IAM_USER",
+        "VOLUME_CRON_SCHEDULE",
+    ]
+    for key in ENVS_TO_SHOW:
+        value = os.getenv(key, None)
+        if value:
+            print(f"{key:<40} {value:<40}")
+        else:
+            print(f"{key:<40}")
+
+    print("\n")
+
+    print("Checking ADMIN_USERS ....")
+    admin_users = [
+        username.strip() for username in os.getenv("ADMIN_USERS", "").split(",")
+    ]
+    if admin_users == [""]:
+        raise Exception("ADMIN_USERS are not defined")
+
+    print("Checking ALLOWED_LAB_PROFILES ....")
+    allowed_lab_profiles = [
+        profile.strip() for profile in os.getenv("ALLOWED_LAB_PROFILES", "").split(",")
+    ]
+    if allowed_lab_profiles == [""]:
+        raise Exception("ALLOWED_LAB_PROFILES are not defined")
+
+    print("Checking AZ_LETTER (optional) ....")
+    # Make sure everything happens in a particular AZ.
+    # This is normally 'a' but can be 'b' or 'c' if more than one cluster is deployed in an account and resources will be limited.
+    az_letter = os.getenv("AZ_LETTER", "a")
+    assert az_letter in ["a", "b", "c"], (
+        "The availability zone letter AZ_LETTER must be 'a', 'b', or 'c'"
+    )
+
+    print("Checking DAYS_TILL_SNAPSHOT_DELETION ....")
+    days_till_snapshot_deletion = os.getenv("DAYS_TILL_SNAPSHOT_DELETION", None)
+    if not days_till_snapshot_deletion:
+        raise Exception("DAYS_TILL_SNAPSHOT_DELETION is not defined")
+    assert int(days_till_snapshot_deletion), (
+        "DAYS_TILL_SNAPSHOT_DELETION must be an integer value"
+    )
+
+    print("Checking DAYS_TILL_VOLUME_DELETION ....")
+    days_till_volume_deletion = os.getenv("DAYS_TILL_VOLUME_DELETION", None)
+    if not days_till_volume_deletion:
+        raise Exception("DAYS_TILL_VOLUME_DELETION is not defined")
+    assert int(days_till_volume_deletion), (
+        "DAYS_TILL_VOLUME_DELETION must be an integer value"
+    )
+
+    print("Checking EXECWHACKER_CRON_IMAGE_PATH (optional) ....")
+    execwhacker_cron_image_path = os.getenv("EXECWHACKER_CRON_IMAGE_PATH", None)
+
+    print("Checking EXECWHACKER_CRON_IMAGE_TAG (optional) ....")
+    execwhacker_cron_image_tag = os.getenv("EXECWHACKER_CRON_IMAGE_TAG", None)
+
+    print("Checking IS_CRYPTNONO_ENABLED (optional) ....")
+    is_cryptnono_enabled = (
+        os.getenv("IS_CRYPTNONO_ENABLED", "true").strip().lower() == "true"
+    )
+    if is_cryptnono_enabled and (
+        not execwhacker_cron_image_path or not execwhacker_cron_image_tag
+    ):
+        raise Exception(
+            "You cannot run crytnono without defining EXECWHACKER_CRON_IMAGE_TAG or EXECWHACKER_CRON_IMAGE_PATH"
+        )
+
+    print("Checking JUPYTER_HUB_IMAGE_PATH ....")
+    jupyter_hub_image_path = os.getenv("JUPYTER_HUB_IMAGE_PATH")
+    if not jupyter_hub_image_path:
+        raise Exception("Jupyterhub hub image path is not defined")
+
+    print("Checking JUPYTER_HUB_IMAGE_TAG ....")
+    jupyter_hub_image_tag = os.getenv("JUPYTER_HUB_IMAGE_TAG")
+    if not jupyter_hub_image_tag:
+        raise Exception("Jupyterhub hub image tag is not defined")
+
+    print("Checking LAB_SHORT_NAME ....")
+    lab_short_name = os.getenv("LAB_SHORT_NAME", None)
+    if not lab_short_name:
+        raise Exception("LAB_SHORT_NAME is not defined")
+    assert is_url_friendly(lab_short_name), "LAB_SHORT_NAME must be url-friendly"
+
     print("Checking PORTAL_DOMAINS ....")
     portal_domains = os.getenv("PORTAL_DOMAINS")
     if not portal_domains:
@@ -335,51 +432,15 @@ def validate_other_environment_variables() -> None:
             "Domains within PORTAL_DOMAINS must be in a valid format"
         )
 
-    print("Checking JUPYTER_HUB_IMAGE_PATH ....")
-    jupyter_hub_image_path = os.getenv("JUPYTER_HUB_IMAGE_PATH")
-    if not jupyter_hub_image_path:
-        raise Exception("Jupyterhub hub image path is not defined")
+    print("Checking SNAPSHOT_WARNING_DAYS ....")
+    snapshot_warning_days = os.getenv("SNAPSHOT_WARNING_DAYS", None)
+    if not snapshot_warning_days:
+        raise Exception("SNAPSHOT_WARNING_DAYS is not defined")
 
-    print("Checking JUPYTER_HUB_IMAGE_TAG ....")
-    jupyter_hub_image_tag = os.getenv("JUPYTER_HUB_IMAGE_TAG")
-    if not jupyter_hub_image_tag:
-        raise Exception("Jupyterhub hub image tag is not defined")
-
-    print("Checking optional EXECWHACKER_CRON_IMAGE_PATH ....")
-    execwhacker_cron_image_path = os.getenv("EXECWHACKER_CRON_IMAGE_PATH", None)
-
-    print("Checking optional EXECWHACKER_CRON_IMAGE_TAG ....")
-    execwhacker_cron_image_tag = os.getenv("EXECWHACKER_CRON_IMAGE_TAG", None)
-
-    print("Checking optional IS_CRYPTNONO_ENABLED ....")
-    is_cryptnono_enabled = (
-        os.getenv("IS_CRYPTNONO_ENABLED", "true").strip().lower() == "true"
-    )
-    if is_cryptnono_enabled and (
-        not execwhacker_cron_image_path or not execwhacker_cron_image_tag
-    ):
-        raise Exception(
-            "You cannot run crytnono without defining EXECWHACKER_CRON_IMAGE_TAG or EXECWHACKER_CRON_IMAGE_PATH"
-        )
-
-    print("Checking ALLOWED_LAB_PROFILES ....")
-    allowed_lab_profiles = [
-        profile.strip() for profile in os.getenv("ALLOWED_LAB_PROFILES", "").split(",")
-    ]
-    if allowed_lab_profiles == [""]:
-        raise Exception("ALLOWED_LAB_PROFILES are not defined")
-
-    print("Checking ADMIN_USERS ....")
-    admin_users = [
-        username.strip() for username in os.getenv("ADMIN_USERS", "").split(",")
-    ]
-    if admin_users == [""]:
-        raise Exception("ADMIN_USERS are not defined")
-
-    print("Checking PORTAL_DOMAINS ....")
-    portal_domains = os.getenv("PORTAL_DOMAINS", None)
-    if not portal_domains:
-        raise Exception("PORTAL_DOMAINS is not defined")
+    print("Checking UI_IAM_USER ....")
+    ui_iam_user = os.getenv("UI_IAM_USER", None)
+    if not ui_iam_user:
+        raise Exception("UI_IAM_USER is not defined")
 
     print("Checking VOLUME_CRON_SCHEDULE ....")
     volume_cron_schedule = os.getenv("VOLUME_CRON_SCHEDULE", None)
@@ -387,46 +448,6 @@ def validate_other_environment_variables() -> None:
         raise Exception("VOLUME_CRON_SCHEDULE is not defined")
     assert validate_ssm_cron_pure(volume_cron_schedule), (
         "VOLUME_CRON_SCHEDULE must be in valid AWS SSM cron format"
-    )
-
-    print("Checking SNAPSHOT_WARNING_DAYS ....")
-    snapshot_warning_days = os.getenv("SNAPSHOT_WARNING_DAYS", None)
-    if not snapshot_warning_days:
-        raise Exception("SNAPSHOT_WARNING_DAYS is not defined")
-
-    print("Checking LAB_SHORT_NAME ....")
-    lab_short_name = os.getenv("LAB_SHORT_NAME", None)
-    if not lab_short_name:
-        raise Exception("LAB_SHORT_NAME is not defined")
-    assert is_url_friendly(lab_short_name), "LAB_SHORT_NAME must be url-friendly"
-
-    print("Checking UI_IAM_USER ....")
-    ui_iam_user = os.getenv("UI_IAM_USER", None)
-    if not ui_iam_user:
-        raise Exception("UI_IAM_USER is not defined")
-
-    print("Checking DAYS_TILL_VOLUME_DELETION ....")
-    days_till_volume_deletion = os.getenv("DAYS_TILL_VOLUME_DELETION", None)
-    if not days_till_volume_deletion:
-        raise Exception("DAYS_TILL_VOLUME_DELETION is not defined")
-    assert int(days_till_volume_deletion), (
-        "DAYS_TILL_VOLUME_DELETION must be an integer value"
-    )
-
-    print("Checking DAYS_TILL_SNAPSHOT_DELETION ....")
-    days_till_snapshot_deletion = os.getenv("DAYS_TILL_SNAPSHOT_DELETION", None)
-    if not days_till_snapshot_deletion:
-        raise Exception("DAYS_TILL_SNAPSHOT_DELETION is not defined")
-    assert int(days_till_snapshot_deletion), (
-        "DAYS_TILL_SNAPSHOT_DELETION must be an integer value"
-    )
-
-    print("Checking optional AZ_LETTER ....")
-    # Make sure everything happens in a particular AZ.
-    # This is normally 'a' but can be 'b' or 'c' if more than one cluster is deployed in an account and resources will be limited.
-    az_letter = os.getenv("AZ_LETTER", "a")
-    assert az_letter in ["a", "b", "c"], (
-        "The availability zone letter AZ_LETTER must be 'a', 'b', or 'c'"
     )
 
     print("\n... All good!")
