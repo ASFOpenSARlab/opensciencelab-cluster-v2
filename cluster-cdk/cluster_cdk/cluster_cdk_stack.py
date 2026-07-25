@@ -1102,7 +1102,7 @@ class ClusterCdkStack(Stack):
         #    Get logs in pod:
         #        kubectl -n cryptnono logs -l app.kubernetes.io/instance=cryptnono -c execwhacker
         #
-        #    Do to the nature of CDK, we can enable/disable cryptnono via changesets using simple if statements. This allowd for clean confiuration code.
+        #    Due to the nature of CDK, we can enable/disable cryptnono via changesets using simple 'if' statements. This allows for clean configuration code.
         #
         #####################################################################
 
