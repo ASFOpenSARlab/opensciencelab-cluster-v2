@@ -6,6 +6,7 @@ import re
 import os
 import tomllib  # type: ignore
 import textwrap
+from urllib.parse import urlparse
 
 #####
 #
@@ -81,22 +82,33 @@ def is_url_friendly(value: str) -> bool:
     return bool(re.match(pattern, value))
 
 
-def is_valid_domain(domain: str) -> bool:
-    # Overall domain length must not exceed 253 characters
-    if not domain or len(domain) > 253:
+def is_valid_fqdn_with_path(value: str) -> bool:
+    # Remove leading/trailing spaces
+    value = value.strip()
+    if not value:
         return False
 
-    # Remove scheme
-    domain = domain.replace("https://", "").replace("http://", "")
+    # If no scheme is provided, prepend http:// for proper parsing
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", value):
+        test_url = "http://" + value
+    else:
+        test_url = value
 
-    # Must end with a valid Top-Level Domain (TLD) at least 2 characters long
-    # Labels must be 1-63 characters, start/end with alphanumeric, and can contain hyphens
-    pattern = r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$"
+    parsed = urlparse(test_url)
+    domain = parsed.hostname
 
-    return bool(re.match(pattern, domain))
+    if not domain:
+        return False
+
+    # Standard FQDN regex check on the extracted hostname
+    fqdn_regex = re.compile(
+        r"^(?=.{1,253}$)(([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)\.)+[a-zA-Z]{2,}$"
+    )
+
+    return bool(fqdn_regex.match(domain))
 
 
-def validate_ssm_cron_pure(cron_str):
+def validate_aws_ssm_cron_format(cron_str):
     cron_str = cron_str.strip()
 
     # If wrapped in cron(...), extract the inner expression string
@@ -385,6 +397,10 @@ def validate_other_environment_variables() -> None:
 
     print("Checking EXECWHACKER_CRON_IMAGE_PATH (optional) ....")
     execwhacker_cron_image_path = os.getenv("EXECWHACKER_CRON_IMAGE_PATH", None)
+    if execwhacker_cron_image_path:
+        assert is_valid_docker_ref_safe(execwhacker_cron_image_path), (
+            "EXECWHACKER_CRON_IMAGE_PATH needs to be a valid image path"
+        )
 
     print("Checking EXECWHACKER_CRON_IMAGE_TAG (optional) ....")
     execwhacker_cron_image_tag = os.getenv("EXECWHACKER_CRON_IMAGE_TAG", None)
@@ -393,17 +409,23 @@ def validate_other_environment_variables() -> None:
     is_cryptnono_enabled = os.getenv("IS_CRYPTNONO_ENABLED")
     if is_cryptnono_enabled:
         is_cryptnono_enabled = is_cryptnono_enabled.strip().lower() == "true"
-        if is_cryptnono_enabled and (
-            not execwhacker_cron_image_path or not execwhacker_cron_image_tag
+        if not (
+            is_cryptnono_enabled
+            and execwhacker_cron_image_path
+            and execwhacker_cron_image_tag
         ):
             raise Exception(
-                "You cannot run crytnono without defining EXECWHACKER_CRON_IMAGE_TAG or EXECWHACKER_CRON_IMAGE_PATH"
+                "You cannot run crytnono without defining EXECWHACKER_CRON_IMAGE_TAG and EXECWHACKER_CRON_IMAGE_PATH"
             )
 
     print("Checking JUPYTER_HUB_IMAGE_PATH ....")
     jupyter_hub_image_path = os.getenv("JUPYTER_HUB_IMAGE_PATH")
     if not jupyter_hub_image_path:
         raise Exception("Jupyterhub hub image path is not defined")
+    if jupyter_hub_image_path:
+        assert is_valid_docker_ref_safe(jupyter_hub_image_path), (
+            "JUPYTER_HUB_IMAGE_PATH needs to be a valid image path"
+        )
 
     print("Checking JUPYTER_HUB_IMAGE_TAG ....")
     jupyter_hub_image_tag = os.getenv("JUPYTER_HUB_IMAGE_TAG")
@@ -429,7 +451,7 @@ def validate_other_environment_variables() -> None:
         assert domain.startswith(("http://", "https://")), (
             "Domains within PORTAL_DOMAINS must start with 'http://' or 'https://'"
         )
-        assert is_valid_domain(domain), (
+        assert is_valid_fqdn_with_path(domain), (
             "Domains within PORTAL_DOMAINS must be in a valid format"
         )
 
@@ -437,6 +459,7 @@ def validate_other_environment_variables() -> None:
     snapshot_warning_days = os.getenv("SNAPSHOT_WARNING_DAYS", None)
     if not snapshot_warning_days:
         raise Exception("SNAPSHOT_WARNING_DAYS is not defined")
+    assert int(snapshot_warning_days), "SNAPSHOT_WARNING_DAYS must be an integer value"
 
     print("Checking UI_IAM_USER ....")
     ui_iam_user = os.getenv("UI_IAM_USER", None)
@@ -447,7 +470,7 @@ def validate_other_environment_variables() -> None:
     volume_cron_schedule = os.getenv("VOLUME_CRON_SCHEDULE", None)
     if not volume_cron_schedule:
         raise Exception("VOLUME_CRON_SCHEDULE is not defined")
-    assert validate_ssm_cron_pure(volume_cron_schedule), (
+    assert validate_aws_ssm_cron_format(volume_cron_schedule), (
         "VOLUME_CRON_SCHEDULE must be in valid AWS SSM cron format"
     )
 

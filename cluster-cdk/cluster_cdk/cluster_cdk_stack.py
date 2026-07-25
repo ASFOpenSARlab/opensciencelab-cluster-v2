@@ -48,56 +48,56 @@ class ClusterCdkStack(Stack):
         # CDK provides the AWS Account number via self.account # "233535791844"
         # CDK provides the AWS Region va self.region
 
-        self.DEPLOY_PREFIX = str(os.getenv("DEPLOY_PREFIX")).lower()
+        self.DEPLOY_PREFIX = os.environ["DEPLOY_PREFIX"].lower()
 
-        self.JUPYTER_HUB_IMAGE_PATH = os.getenv("JUPYTER_HUB_IMAGE_PATH")
-        self.JUPYTER_HUB_IMAGE_TAG = os.getenv("JUPYTER_HUB_IMAGE_TAG")
+        self.JUPYTER_HUB_IMAGE_PATH = os.environ["JUPYTER_HUB_IMAGE_PATH"]
+        self.JUPYTER_HUB_IMAGE_TAG = os.environ["JUPYTER_HUB_IMAGE_TAG"]
 
         self.EXECWHACKER_CRON_IMAGE_PATH = os.getenv(
             "EXECWHACKER_CRON_IMAGE_PATH", None
         )
         self.EXECWHACKER_CRON_IMAGE_TAG = os.getenv("EXECWHACKER_CRON_IMAGE_TAG", None)
 
+        # Be somewhat aggressive in only enabling cryptnono if explicitly "true" and EXECWAHCKER path and tag are defined
         self.IS_CRYPTNONO_ENABLED = (
-            os.getenv("IS_CRYPTNONO_ENABLED", "true").strip().lower() == "true"
+            os.getenv("IS_CRYPTNONO_ENABLED", "false").strip().lower() == "true"
+            and self.EXECWHACKER_CRON_IMAGE_PATH
+            and self.EXECWHACKER_CRON_IMAGE_TAG
         )
 
-        self.UI_IAM_USER = os.getenv("UI_IAM_USER", None)
+        self.UI_IAM_USER = os.environ["UI_IAM_USER"]
 
         # Default cron schedule to top of every hour
-        self.VOLUME_CRON_SCHEDULE = os.getenv("VOLUME_CRON_SCHEDULE", "0 * * * ? *")
-        self.SNAPSHOT_WARNING_DAYS = os.getenv("SNAPSHOT_WARNING_DAYS", "5")
+        self.VOLUME_CRON_SCHEDULE = os.environ["VOLUME_CRON_SCHEDULE"]
+        self.SNAPSHOT_WARNING_DAYS = os.environ["SNAPSHOT_WARNING_DAYS"]
 
-        self.LAB_SHORT_NAME = str(os.getenv("LAB_SHORT_NAME", "")).lower()
-        if not self.LAB_SHORT_NAME:
-            raise Exception("Lab short name is not defined")
+        self.LAB_SHORT_NAME = os.environ["LAB_SHORT_NAME"].lower()
 
         self.ALLOWED_LAB_PROFILES = [
-            profile.strip()
-            for profile in os.getenv("ALLOWED_LAB_PROFILES", "").split(",")
+            profile.strip() for profile in os.environ["ALLOWED_LAB_PROFILES"].split(",")
         ]
 
         self.ADMIN_USERS = [
-            username.strip() for username in os.getenv("ADMIN_USERS", "").split(",")
+            username.strip() for username in os.environ["ADMIN_USERS"].split(",")
         ]
 
-        self.PORTAL_DOMAINS = os.getenv("PORTAL_DOMAINS", None)
+        self.PORTAL_DOMAINS = os.environ["PORTAL_DOMAINS"]
 
-        self.DAYS_TILL_VOLUME_DELETION = os.getenv("DAYS_TILL_VOLUME_DELETION", None)
+        self.DAYS_TILL_VOLUME_DELETION = os.environ["DAYS_TILL_VOLUME_DELETION"]
 
-        self.DAYS_TILL_SNAPSHOT_DELETION = os.getenv(
-            "DAYS_TILL_SNAPSHOT_DELETION", None
-        )
+        self.DAYS_TILL_SNAPSHOT_DELETION = os.environ["DAYS_TILL_SNAPSHOT_DELETION"]
 
         # Make sure everything happens in a particular AZ.
         # This is normally 'a' but can be 'b' or 'c' if more than one cluster is deployed in an account and resources will be limited.
-        self.AZ_LETTER = os.getenv("AZ_LETTER", "a")
+        self.AZ_LETTER = os.getenv("AZ_LETTER", None)
+        if not self.AZ_LETTER:
+            self.AZ_LETTER = "a"
 
         self.K8s_NAMESPACE = "jupyter"
 
-        self.NODE_DEFINITIONS = os.getenv("NODE_DEFINITIONS", None)
+        self.NODE_DEFINITIONS = os.environ["NODE_DEFINITIONS"]
 
-        self.PROFILE_DEFINITIONS = os.getenv("PROFILE_DEFINITIONS", None)
+        self.PROFILE_DEFINITIONS = os.environ["PROFILE_DEFINITIONS"]
 
         # Determine the selected lab config values
         self.osl_config = self._get_reduced_osl_config()
