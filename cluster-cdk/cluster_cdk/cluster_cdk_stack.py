@@ -16,6 +16,7 @@ from aws_cdk import (  # type: ignore
     Duration,
     Stack,
     SecretValue,
+    aws_s3 as s3,
     aws_eks_v2 as eks,
     aws_ec2 as ec2,
     aws_dlm as dlm,
@@ -48,9 +49,30 @@ class ClusterCdkStack(Stack):
         # CDK provides the AWS Region va self.region
 
         self.DEPLOY_PREFIX = str(os.getenv("DEPLOY_PREFIX")).lower()
-        self.JUPYTER_HUB_DOCKER_TAG = os.getenv(
-            "JUPYTER_HUB_DOCKER_TAG", self.DEPLOY_PREFIX
+
+        self.JUPYTER_HUB_IMAGE_PATH = os.getenv("JUPYTER_HUB_IMAGE_PATH")
+        if not self.JUPYTER_HUB_IMAGE_PATH:
+            raise Exception("Jupyterhub hub image path is not defined")
+
+        self.JUPYTER_HUB_IMAGE_TAG = os.getenv("JUPYTER_HUB_IMAGE_TAG")
+        if not self.JUPYTER_HUB_IMAGE_TAG:
+            raise Exception("Jupyterhub hub image tag is not defined")
+
+        self.EXECWHACKER_CRON_IMAGE_PATH = os.getenv(
+            "EXECWHACKER_CRON_IMAGE_PATH", None
         )
+        self.EXECWHACKER_CRON_IMAGE_TAG = os.getenv("EXECWHACKER_CRON_IMAGE_TAG", None)
+
+        self.IS_CRYPTNONO_ENABLED = (
+            os.getenv("IS_CRYPTNONO_ENABLED", "true").strip().lower() == "true"
+        )
+        if self.IS_CRYPTNONO_ENABLED and (
+            not self.EXECWHACKER_CRON_IMAGE_PATH or not self.EXECWHACKER_CRON_IMAGE_TAG
+        ):
+            raise Exception(
+                "You cannot run crytnono without defining EXECWHACKER_CRON_IMAGE_TAG or EXECWHACKER_CRON_IMAGE_PATH"
+            )
+
         self.UI_IAM_USER = os.getenv("UI_IAM_USER", None)
 
         # Default cron schedule to top of every hour
@@ -332,6 +354,20 @@ class ClusterCdkStack(Stack):
                 node_labels["opensciencelab.local/node-type"] = (
                     f"user-{node_name_escaped}"
                 )
+                node_labels["opensciencelab.local/cryptnono-enabled"] = str(
+                    self.IS_CRYPTNONO_ENABLED
+                ).lower()
+
+            # Root volume of EC2 defaults to 20GiB. If defined as something else, it must be within EBS's storage range.
+            root_volume_size = int(node.get("root_volume_size", "20"))
+            if root_volume_size < 1:
+                raise Exception(
+                    f"root_volume_size has value of {root_volume_size} and is less than 1 GiB"
+                )
+            elif root_volume_size > 16345:
+                raise Exception(
+                    f"root_volume_size has value of {root_volume_size} and is greater than 16345 GiB"
+                )
 
             # Define the Launch Template with the desired EC2 instance tags
             # These tags will be applied to the EC2 instances when they are launched by the Auto Scaling Group
@@ -339,6 +375,21 @@ class ClusterCdkStack(Stack):
                 self,
                 f"{node['name']}-LaunchTemplate-{self.LAB_SHORT_NAME}",
                 launch_template_data=ec2.CfnLaunchTemplate.LaunchTemplateDataProperty(
+                    # Configure Block Device Mappings (Storage)
+                    # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/block-device-mapping-concepts.html
+                    # Note that the volume size here must be equal or bigger than the node's AMI's root volume snapshot
+                    # Otherwise you will get an error like "Volume of size 10GB is smaller than snapshot 'snap-013c0e96ad509b9e2', expect size >= 20GB"
+                    block_device_mappings=[
+                        ec2.CfnLaunchTemplate.BlockDeviceMappingProperty(
+                            device_name="/dev/xvda",
+                            ebs=ec2.CfnLaunchTemplate.EbsProperty(
+                                volume_size=root_volume_size,
+                                volume_type="gp3",
+                                encrypted=False,
+                                delete_on_termination=True,
+                            ),
+                        )
+                    ],
                     metadata_options=ec2.CfnLaunchTemplate.MetadataOptionsProperty(
                         http_put_response_hop_limit=2,  # Set hop limit here
                         http_tokens="required",  # Recommended for IMDSv2
@@ -370,8 +421,7 @@ class ClusterCdkStack(Stack):
 
             # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/NodegroupOptions.html
             node_group = self.cluster.add_nodegroup_capacity(
-                node["name"],
-                nodegroup_name=f"{node['name']}-NodeGroup-{self.LAB_SHORT_NAME}",
+                f"{node['name']}{self.LAB_SHORT_NAME}",
                 ami_type=eks.NodegroupAmiType.AL2023_X86_64_STANDARD,
                 capacity_type=eks.CapacityType.ON_DEMAND,
                 desired_size=node.get("group_desired_size", 0),
@@ -678,8 +728,8 @@ class ClusterCdkStack(Stack):
             },
             "hub": {
                 "image": {
-                    "name": "ghcr.io/asfopensarlab/opensciencelab-jupyterhub",
-                    "tag": self.JUPYTER_HUB_DOCKER_TAG,
+                    "name": self.JUPYTER_HUB_IMAGE_PATH,
+                    "tag": self.JUPYTER_HUB_IMAGE_TAG,
                     "pullPolicy": "Always",
                 },
                 "db": {
@@ -1046,6 +1096,194 @@ class ClusterCdkStack(Stack):
                 ],
             ),
         )
+
+        #####################################################################
+        #
+        #    Setup Cryptnono
+        #
+        #    Cryptnono is a libarary that checks JupyterLab terminal inputs for cryptomining commands. https://github.com/cryptnono/cryptnono.
+        #
+        #    It contains many parts of which
+        #
+        #    Execwhacker - Monitor jupyterlab terminals for prohibited processes and kill them.
+        #
+        #    A list of prohibitted processes are stored in s3. This list is occasionally pulled into a configmap used by the execwhacker sidecar.
+        #
+        #
+        #    To manually run the cronjob from within cloudshell:
+        #        kubectl -n cryptnono create job --from=cronjob/update-execwhacker-config-cronjob execwacker-manual-refesh
+        #
+        #    To test, open user JupyterLab server terminal and run command `sh -c 'sleep 1 && echo thisisabannedstring'`. This will return `Killed`.
+        #
+        #    Get logs in pod:
+        #        kubectl -n cryptnono logs -l app.kubernetes.io/instance=cryptnono -c execwhacker
+        #
+        #    Due to the nature of CDK, we can enable/disable cryptnono via changesets using simple 'if' statements. This allows for clean configuration code.
+        #
+        #####################################################################
+
+        if self.IS_CRYPTNONO_ENABLED:
+            # Add Cryptnono namespace to k8s. Include k8s permissions.
+            cryptnono_ns_manifest = self.cluster.add_manifest(
+                "CustomCryptnonoNamespace",
+                {
+                    "apiVersion": "v1",
+                    "kind": "Namespace",
+                    "metadata": {"name": "cryptnono"},
+                },
+            )
+
+            # Modify the k8s permissions so the pods in the cryptnono namespace can do things
+            eks.KubernetesManifest(
+                self,
+                "CustomCryptnonoClusterRole",
+                cluster=self.cluster,
+                overwrite=True,
+                manifest=[
+                    {
+                        "apiVersion": "rbac.authorization.k8s.io/v1",
+                        "kind": "ClusterRole",
+                        "metadata": {
+                            "annotations": {
+                                "rbac.authorization.kubernetes.io/autoupdate": "true"
+                            },
+                            "labels": {"kubernetes.io/bootstrapping": "rbac-defaults"},
+                            "name": "custom-cryptnono",
+                        },
+                        "rules": [
+                            {
+                                # Permissions for execwhacker configmap update
+                                "apiGroups": [""],
+                                "resources": [
+                                    "nodes",
+                                    "pods",
+                                    "events",
+                                    "configmaps",
+                                ],
+                                "verbs": [
+                                    "get",
+                                    "watch",
+                                    "list",
+                                    "create",
+                                    "delete",
+                                    "patch",
+                                    "update",
+                                ],
+                            },
+                        ],
+                    }
+                ],
+            )
+
+            self.cluster.add_manifest(
+                "CustomCryptnonoRoleBinding",
+                {
+                    "kind": "ClusterRoleBinding",
+                    "apiVersion": "rbac.authorization.k8s.io/v1",
+                    "metadata": {"name": "custom-cryptnono"},
+                    "subjects": [
+                        {
+                            "kind": "ServiceAccount",
+                            "name": "default",
+                            "namespace": "cryptnono",
+                            "apiGroup": "",  # apiGroup is ""(core/v1) for service_account
+                        }
+                    ],
+                    "roleRef": {
+                        "apiGroup": "rbac.authorization.k8s.io",
+                        "kind": "ClusterRole",
+                        "name": "custom-cryptnono",
+                    },
+                },
+            )
+
+            # Bucket that contains configmap files used by cryptnono
+            execwhacker_bucket = s3.Bucket(
+                self,
+                "ExecwhackerConfigsBucket",
+                bucket_name=f"cryptnono-execwhacker-configs-{self.region}-{self.cluster.cluster_name}-{self.LAB_SHORT_NAME}",
+                versioned=False,
+                block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+                object_ownership=s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
+                removal_policy=RemovalPolicy.DESTROY,
+                auto_delete_objects=True,
+            )
+
+            execwhacker_cron_schedule = "*/10 * * * *"  # Runs every 10 minutes
+            execwhacker_args = f'python3 /app/update_execwhacker_config.py --aws-region={self.region} --config-bucket-name="{execwhacker_bucket.bucket_name}"'
+
+            # k8s Cronjob that pulls from s3 and updates configmap in cluster
+            execwhacker_manifest = self.cluster.add_manifest(
+                "UpdateExecwhackerConfigCronJobManifest",
+                {
+                    "apiVersion": "batch/v1",
+                    "kind": "CronJob",
+                    "metadata": {
+                        "name": "update-execwhacker-config-cronjob",
+                        "namespace": "cryptnono",
+                    },
+                    "spec": {
+                        "schedule": execwhacker_cron_schedule,
+                        "concurrencyPolicy": "Forbid",
+                        "successfulJobsHistoryLimit": 2,
+                        "failedJobsHistoryLimit": 1,
+                        "jobTemplate": {
+                            "spec": {
+                                "template": {
+                                    "spec": {
+                                        "restartPolicy": "OnFailure",
+                                        "nodeSelector": {
+                                            "opensciencelab.local/node-type": "core"
+                                        },
+                                        "containers": [
+                                            {
+                                                "name": "update-execwhacker-worker",
+                                                "image": f"{self.EXECWHACKER_CRON_IMAGE_PATH}:{self.EXECWHACKER_CRON_IMAGE_TAG}",
+                                                "imagePullPolicy": "Always",
+                                                "command": ["sh", "-c"],
+                                                "args": [execwhacker_args],
+                                            }
+                                        ],
+                                    }
+                                }
+                            }
+                        },
+                    },
+                },
+            )
+
+            execwhacker_manifest.node.add_dependency(cryptnono_ns_manifest)
+
+            # Install crytnono helm chart with values
+            cryptnono_helm_values = {
+                "nodeSelector": {"opensciencelab.local/cryptnono-enabled": "true"},
+                "detectors": {
+                    "execwhacker": {
+                        "configs": {
+                            "noop": {"bannedCommandStrings": []},
+                            "data": {
+                                "bannedCommandStrings": [],
+                                "allowedCommandPatterns": [],
+                            },
+                        }
+                    }
+                },
+            }
+
+            self.cryptnono_helm_chart = self.cluster.add_helm_chart(
+                "CryptnonoHelmChart",
+                repository="https://cryptnono.github.io/cryptnono/",
+                atomic=False,
+                chart="cryptnono",
+                release="cryptnono",  # type: ignore
+                version="v0.3.1",
+                namespace="cryptnono",
+                wait=True,
+                timeout=Duration.minutes(2),
+                values=cryptnono_helm_values,
+            )
+
+            self.cryptnono_helm_chart.node.add_dependency(execwhacker_manifest)
 
         #####################################################################
         #
