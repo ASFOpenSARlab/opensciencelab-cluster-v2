@@ -20,7 +20,7 @@ flowchart TD
     J -->|Get Snapshot| K([Snapshot])
     K --> L{User Claim?}
     L -->|No| J
-    L -->|Yes| M{Expired?}
+    L -->|Yes| M{Current time after `snapshot-delete-time`?}
     M -->|Yes| M1{Has grace\n period expired?}
     
     M1 -->|Yes| M2(Delete Snapshot)
@@ -32,10 +32,9 @@ flowchart TD
     M4 --> M5(Add delete email Tag)
     M5 --> J
    
-    M -->|No| N{Expiring?}
-    N -->|Yes| O{Has Email\n Sent Tag?}
-    O -->|No| P(Send Expiring Email)
-    P --> Q(Add Expiring Tag)
-    O -->|Yes| J
-    Q --> J
+    M -->|No| N{Current time greater than the time to send next warning?}
+    N -->|No| J
+    N -->|Yes| O(Send Expiring Email)
+    O --> P(Update last warning sent date tag)
+    P --> J
 ```

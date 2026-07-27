@@ -1,6 +1,6 @@
 ---
 # yamllint disable rule:line-length
-name: Deploy Cluster CDK
+name: Validate Cluster Environment
 on: # yamllint disable-line rule:truthy
   workflow_dispatch:
     inputs:
@@ -8,11 +8,6 @@ on: # yamllint disable-line rule:truthy
         description: "Environment override / Lab short name"
         type: environment
         default: test
-
-      runTestSuite:
-        description: "Run test suite on build. Note that Test always runs tests."
-        type: boolean
-        default: false
 
   push:
     branches:
@@ -67,11 +62,6 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_NUMBER }}:role/deploy_cluster_stack_role
           aws-region: ${{ vars.AWS_DEFAULT_REGION }}
 
-      - name: Run Cluster Testsuite
-        if: contains(fromJSON('["test"]'), inputs.envOverride || needs.setup.outputs.environment ) || inputs.runTestSuite == true
-        run: |
-          make test
-
-      - name: CDK Deploy Cluster
+      - name: Validate Environment
         run: |-
-          make deploy-cluster
+          make validate-env

@@ -93,6 +93,8 @@ cdk-shell:
 		-e AWS_DEFAULT_PROFILE -e AWS_PROFILE \
 		-e AWS_DEFAULT_REGION -e AWS_REGION \
 		-e AWS_DEFAULT_ACCOUNT \
+		-e NODE_DEFINITIONS \
+		-e PROFILE_DEFINITIONS \
 		-e DEPLOY_PREFIX \
 		-e JUPYTER_HUB_IMAGE_PATH \
 		-e JUPYTER_HUB_IMAGE_TAG \
@@ -102,12 +104,12 @@ cdk-shell:
 		-e UI_IAM_USER \
 		-e ADMIN_USERS \
 		-e PORTAL_DOMAINS \
-		-e ALLOWED_LAB_PROFILES \
 		-e LAB_SHORT_NAME \
 		-e VOLUME_CRON_SCHEDULE \
 		-e SNAPSHOT_WARNING_DAYS \
 		-e DAYS_TILL_VOLUME_DELETION \
 		-e DAYS_TILL_SNAPSHOT_DELETION \
+		-e AZ_LETTER \
 		-e AWS_CLI_PATH \
 		-e CLUSTER_NAME \
 		-e SSO_SECRET_ARN \
@@ -169,16 +171,21 @@ run-volume-lambda: bundle-deps
 	python3 cluster-cdk/cluster_cdk/lambdas/volume_management.py
 
 .PHONY := test
-test: remove-cdk-out install-reqs bundle-deps
+test: remove-cdk-out validate-env install-reqs bundle-deps
 	@echo "Running tests for Cluster (${DEPLOY_PREFIX})"
 
+.PHONY := validate-env
+validate-env:
+	@echo "Validating environment variables"
+	cd ./cluster-cdk/cluster_cdk && python validate_env.py
+
 .PHONY := synth-cluster
-synth-cluster: install-reqs bundle-deps
+synth-cluster: validate-env install-reqs bundle-deps
 	@echo "Synthesizing ${DEPLOY_PREFIX}/cluster-cdk"
 	cd ./cluster-cdk && cdk synth
 
 .PHONY := deploy-cluster
-deploy-cluster: install-reqs bundle-deps
+deploy-cluster: validate-env install-reqs bundle-deps
 	@echo "Deploying ${DEPLOY_PREFIX}/cluster-cdk"
 	cd ./cluster-cdk && cdk --require-approval never deploy
 
