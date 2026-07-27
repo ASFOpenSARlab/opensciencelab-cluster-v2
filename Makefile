@@ -171,7 +171,7 @@ run-volume-lambda: bundle-deps
 	python3 cluster-cdk/cluster_cdk/lambdas/volume_management.py
 
 .PHONY := test
-test: remove-cdk-out install-reqs bundle-deps validate-env
+test: remove-cdk-out validate-env install-reqs bundle-deps
 	@echo "Running tests for Cluster (${DEPLOY_PREFIX})"
 
 .PHONY := validate-env
