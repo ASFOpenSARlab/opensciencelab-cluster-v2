@@ -48,81 +48,67 @@ class ClusterCdkStack(Stack):
         # CDK provides the AWS Account number via self.account # "233535791844"
         # CDK provides the AWS Region va self.region
 
-        self.DEPLOY_PREFIX = str(os.getenv("DEPLOY_PREFIX")).lower()
+        self.DEPLOY_PREFIX = os.environ["DEPLOY_PREFIX"].lower()
 
-        self.JUPYTER_HUB_IMAGE_PATH = os.getenv("JUPYTER_HUB_IMAGE_PATH")
-        if not self.JUPYTER_HUB_IMAGE_PATH:
-            raise Exception("Jupyterhub hub image path is not defined")
-
-        self.JUPYTER_HUB_IMAGE_TAG = os.getenv("JUPYTER_HUB_IMAGE_TAG")
-        if not self.JUPYTER_HUB_IMAGE_TAG:
-            raise Exception("Jupyterhub hub image tag is not defined")
+        self.JUPYTER_HUB_IMAGE_PATH = os.environ["JUPYTER_HUB_IMAGE_PATH"]
+        self.JUPYTER_HUB_IMAGE_TAG = os.environ["JUPYTER_HUB_IMAGE_TAG"]
 
         self.EXECWHACKER_CRON_IMAGE_PATH = os.getenv(
             "EXECWHACKER_CRON_IMAGE_PATH", None
         )
         self.EXECWHACKER_CRON_IMAGE_TAG = os.getenv("EXECWHACKER_CRON_IMAGE_TAG", None)
 
+        # Be somewhat aggressive in only enabling cryptnono if explicitly "true" and EXECWAHCKER path and tag are defined
         self.IS_CRYPTNONO_ENABLED = (
-            os.getenv("IS_CRYPTNONO_ENABLED", "true").strip().lower() == "true"
+            os.getenv("IS_CRYPTNONO_ENABLED", "false").strip().lower() == "true"
+            and self.EXECWHACKER_CRON_IMAGE_PATH
+            and self.EXECWHACKER_CRON_IMAGE_TAG
         )
-        if self.IS_CRYPTNONO_ENABLED and (
-            not self.EXECWHACKER_CRON_IMAGE_PATH or not self.EXECWHACKER_CRON_IMAGE_TAG
-        ):
-            raise Exception(
-                "You cannot run crytnono without defining EXECWHACKER_CRON_IMAGE_TAG or EXECWHACKER_CRON_IMAGE_PATH"
-            )
 
-        self.UI_IAM_USER = os.getenv("UI_IAM_USER", None)
+        self.UI_IAM_USER = os.environ["UI_IAM_USER"]
 
         # Default cron schedule to top of every hour
-        self.VOLUME_CRON_SCHEDULE = os.getenv("VOLUME_CRON_SCHEDULE", "0 * * * ? *")
-        self.SNAPSHOT_WARNING_DAYS = os.getenv("SNAPSHOT_WARNING_DAYS", "5")
+        self.VOLUME_CRON_SCHEDULE = os.environ["VOLUME_CRON_SCHEDULE"]
+        self.SNAPSHOT_WARNING_DAYS = os.environ["SNAPSHOT_WARNING_DAYS"]
 
-        self.LAB_SHORT_NAME = str(os.getenv("LAB_SHORT_NAME", "")).lower()
-        if not self.LAB_SHORT_NAME:
-            raise Exception("Lab short name is not defined")
-
-        self.ALLOWED_LAB_PROFILES = [
-            profile.strip()
-            for profile in os.getenv("ALLOWED_LAB_PROFILES", "").split(",")
-        ]
-        if self.ALLOWED_LAB_PROFILES == [""]:
-            raise Exception("Allowed Lab Profiles are not defined")
+        self.LAB_SHORT_NAME = os.environ["LAB_SHORT_NAME"].lower()
 
         self.ADMIN_USERS = [
-            username.strip() for username in os.getenv("ADMIN_USERS", "").split(",")
+            username.strip() for username in os.environ["ADMIN_USERS"].split(",")
         ]
-        if self.ADMIN_USERS == [""]:
-            raise Exception("Admin users are not defined")
 
-        self.PORTAL_DOMAINS = os.getenv("PORTAL_DOMAINS", None)
-        if not self.PORTAL_DOMAINS:
-            raise Exception("Portal domains is not defined")
+        self.PORTAL_DOMAINS = os.environ["PORTAL_DOMAINS"]
 
-        self.DAYS_TILL_VOLUME_DELETION = os.getenv("DAYS_TILL_VOLUME_DELETION", "3600")
+        self.DAYS_TILL_VOLUME_DELETION = os.environ["DAYS_TILL_VOLUME_DELETION"]
 
-        self.DAYS_TILL_SNAPSHOT_DELETION = os.getenv(
-            "DAYS_TILL_SNAPSHOT_DELETION", "3600"
-        )
+        self.DAYS_TILL_SNAPSHOT_DELETION = os.environ["DAYS_TILL_SNAPSHOT_DELETION"]
 
         # Make sure everything happens in a particular AZ.
         # This is normally 'a' but can be 'b' or 'c' if more than one cluster is deployed in an account and resources will be limited.
-        self.AZ_LETTER = os.getenv("AZ_LETTER", "a")
+        self.AZ_LETTER = os.getenv("AZ_LETTER", None)
+        if not self.AZ_LETTER:
+            self.AZ_LETTER = "a"
 
         self.K8s_NAMESPACE = "jupyter"
 
-        self.OPENSCIENCELAB_CONFIG_FILE = self.HOME_DIR / "opensciencelab.toml"
+        # Get nodes and profiles
+        profiles = tomllib.loads(os.environ["PROFILE_DEFINITIONS"])
+        nodes = tomllib.loads(os.environ["NODE_DEFINITIONS"])
 
-        # Determine the selected lab config values
-        self.osl_config = self._get_reduced_osl_config()
+        # Put config data into a format better for code interactions
+        # { "name": "hello", "attr": "value", ... }
+        self.lab_profiles = [{"name": name} | body for name, body in profiles.items()]
+        self.lab_nodes = [{"name": name} | body for name, body in nodes.items()]
 
         # All resources in this specific stack will get this tag
         Tags.of(self).add("osl-billing", self.LAB_SHORT_NAME)  # type: ignore
 
         self.kubectl_layer = lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl")
 
-        print(vars(self))
+        print("vars within CDK...")
+        for k, v in vars(self).items():
+            print(k, v)
+        print("....")
 
         #####################################################################
         #
@@ -339,7 +325,7 @@ class ClusterCdkStack(Stack):
         #####################################################################
 
         # https://github.com/aws/aws-cdk/issues/37012eks.Cluster
-        for node in self.osl_config["nodes"]:
+        for node in self.lab_nodes:
             node_type = node.get("node_type", "user")
             node_name_escaped = re.sub(r"[^A-Za-z0-9]", "00", node["name"].strip())
 
@@ -424,9 +410,8 @@ class ClusterCdkStack(Stack):
                 f"{node['name']}{self.LAB_SHORT_NAME}",
                 ami_type=eks.NodegroupAmiType.AL2023_X86_64_STANDARD,
                 capacity_type=eks.CapacityType.ON_DEMAND,
-                desired_size=node.get("group_desired_size", 0),
-                max_size=node.get("group_max_size", 100),
-                min_size=node.get("group_min_size", 0),
+                max_size=node.get("group_max_size"),
+                min_size=node.get("group_min_size"),
                 # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_ec2/InstanceClass.html
                 instance_types=[
                     ec2.InstanceType(instance) for instance in node["instance"]
@@ -770,7 +755,7 @@ class ClusterCdkStack(Stack):
                     "LAB_SHORT_NAME": self.LAB_SHORT_NAME,
                     "JUPYTERHUB_LAB_PREFIX": f"/lab/{self.LAB_SHORT_NAME}",
                     "PORTAL_DOMAINS": self.PORTAL_DOMAINS,
-                    "LAB_PROFILES": json.dumps(self.osl_config["lab_profiles"]),
+                    "LAB_PROFILES": json.dumps(self.lab_profiles),
                     "DAYS_TILL_VOLUME_DELETION": self.DAYS_TILL_VOLUME_DELETION,
                     "DAYS_TILL_SNAPSHOT_DELETION": self.DAYS_TILL_SNAPSHOT_DELETION,
                     "CLUSTER_NAME": self.cluster.cluster_name,
@@ -1349,76 +1334,6 @@ class ClusterCdkStack(Stack):
             value=self.jupyterhub_helm_version,
             description="The version of the JupyterHub Helm Chart version",
         )
-
-    def _get_reduced_osl_config(self) -> dict:
-        """
-        Return a subset of profiles and nodes found in opensciencelab.toml based on list of lab profiles given in GitHub env.
-
-        Also include required nodes (like core) that don't match for any particular profile.
-
-        """
-        with open(self.OPENSCIENCELAB_CONFIG_FILE, "rb") as f:
-            osl_config: dict = tomllib.load(f)
-
-        possible_profiles = osl_config.get("lab_profiles", None)
-        if not possible_profiles:
-            raise Exception("No lab profiles found in the osl toml config")
-
-        all_nodes = osl_config.get("nodes", None)
-        if not all_nodes:
-            raise Exception("No nodes found in the osl toml config")
-
-        # Put config data into a format better for code interactions
-        # { "name": "hello", "attr": "value", ... }
-        possible_profiles = [
-            {"name": name} | body for name, body in possible_profiles.items()
-        ]
-
-        all_nodes = [{"name": name} | body for name, body in all_nodes.items()]
-
-        desired_profiles = []
-        desired_nodes = []
-
-        for profile in possible_profiles:
-            if profile["name"] in self.ALLOWED_LAB_PROFILES:
-                desired_profiles.append(profile)
-
-                # See if there is a proper node configuration for the profile
-                node_for_profile = None
-                for node_body in all_nodes:
-                    if profile["node"] == node_body["name"]:
-                        node_for_profile = node_body
-
-                if not node_for_profile:
-                    raise Exception(
-                        f"Desired lab profile name '{profile['name']}' for '{self.LAB_SHORT_NAME}' does not have a valid node assigned."
-                    )
-
-                desired_nodes.append(node_for_profile)
-
-            else:
-                print(
-                    f"Desired lab profile name '{profile['name']}' for '{self.LAB_SHORT_NAME}' does not match any selected profile names."
-                )
-
-        # Add any required nodes (like core)
-        for node in all_nodes:
-            if node.get("required", False):
-                desired_nodes.append(node)
-
-        # Get rid of duplicates
-        desired_profiles = [
-            profile
-            for n, profile in enumerate(desired_profiles)
-            if desired_profiles.index(profile) == n
-        ]
-        desired_nodes = [
-            node
-            for n, node in enumerate(desired_nodes)
-            if desired_nodes.index(node) == n
-        ]
-
-        return {"lab_profiles": desired_profiles, "nodes": desired_nodes}
 
     def _add_policy_from_file(self, the_role: iam.Role, file_name: str) -> None:
         """
