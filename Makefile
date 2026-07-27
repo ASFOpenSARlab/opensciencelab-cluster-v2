@@ -180,12 +180,12 @@ validate-env:
 	cd ./cluster-cdk/cluster_cdk && python validate_env.py
 
 .PHONY := synth-cluster
-synth-cluster: install-reqs bundle-deps validate-env
+synth-cluster: validate-env install-reqs bundle-deps
 	@echo "Synthesizing ${DEPLOY_PREFIX}/cluster-cdk"
 	cd ./cluster-cdk && cdk synth
 
 .PHONY := deploy-cluster
-deploy-cluster: install-reqs bundle-deps validate-env
+deploy-cluster: validate-env install-reqs bundle-deps
 	@echo "Deploying ${DEPLOY_PREFIX}/cluster-cdk"
 	cd ./cluster-cdk && cdk --require-approval never deploy
 
