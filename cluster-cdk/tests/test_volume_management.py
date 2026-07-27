@@ -92,7 +92,7 @@ class TestShouldSendSnapshotWarning:
         snap = mock_snapshot()
         snap.tags = [
             {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"},
-            {"Key": "last-snapshot-warning-date", "Value": "2026-01-21 01:00:00+00:00"}
+            {"Key": "last-snapshot-warning-date", "Value": "2026-01-21 01:00:00+00:00"},
         ]
 
         should_send = should_send_snapshot_warning_email(snap)
@@ -119,7 +119,7 @@ class TestShouldSendSnapshotWarning:
         snap = mock_snapshot()
         snap.tags = [
             {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"},
-            {"Key": "last-snapshot-warning-date", "Value": "2026-01-21 01:00:00+00:00"}
+            {"Key": "last-snapshot-warning-date", "Value": "2026-01-21 01:00:00+00:00"},
         ]
 
         should_send = should_send_snapshot_warning_email(snap)
@@ -146,7 +146,7 @@ class TestShouldSendSnapshotWarning:
         snap = mock_snapshot()
         snap.tags = [
             {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"},
-            {"Key": "last-snapshot-warning-date", "Value": "2026-01-21 01:00:00+00:00"}
+            {"Key": "last-snapshot-warning-date", "Value": "2026-01-21 01:00:00+00:00"},
         ]
 
         should_send = should_send_snapshot_warning_email(snap)
@@ -162,7 +162,7 @@ class TestShouldSendSnapshotWarning:
 
         monkeypatch.setattr(
             "cluster_cdk.lambdas.volume_management.datetime.datetime", MockDatetime
-            )
+        )
 
         MONKEYPATCH_SNAPSHOT_WARNING_DAYS = [10, 5, 3, 1]
         monkeypatch.setattr(
@@ -172,10 +172,8 @@ class TestShouldSendSnapshotWarning:
 
         snap = mock_snapshot()
         snap.tags = [
-            {
-                "Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"
-            },
-            {"Key": "last-snapshot-warning-date", "Value": "2026-01-30 02:00:00+00:00"}
+            {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"},
+            {"Key": "last-snapshot-warning-date", "Value": "2026-01-30 02:00:00+00:00"},
         ]
 
         should_send = should_send_snapshot_warning_email(snap)

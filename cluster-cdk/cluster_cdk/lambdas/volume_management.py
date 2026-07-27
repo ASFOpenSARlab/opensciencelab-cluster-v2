@@ -416,7 +416,7 @@ def should_send_snapshot_warning_email(snapshot):
     last_warning_date = datetime.datetime.strptime(
         tags.get(
             "last-snapshot-warning-date",
-            datetime.datetime.fromtimestamp(0).strftime(DATE_FORMAT)
+            datetime.datetime.fromtimestamp(0).strftime(DATE_FORMAT),
         ),
         DATE_FORMAT,
     )
