@@ -131,8 +131,8 @@ export ALLOWED_LAB_PROFILES="sar"              # Comma seperated list of profile
 export ADMIN_USERS="nobody"                    # Comma seperated list of users to embed into JH
 export PORTAL_DOMAINS="<CLOUDFRONT-URL>"       # Comma seperated list of approved portal domains
 
-export VOLUME_CRON_SCHEDULE="0 * * * ? *"    # Schedule to run the volume management lambda
-export SNAPSHOT_WARNING_DAYS="5,3,1"         # Number of days before delete to warn for old snapshots
+export VOLUME_CRON_SCHEDULE="0 * * * ? *"      # Schedule to run the volume management lambda
+export SNAPSHOT_WARNING_DAYS="5,3,1"           # Number of days before delete to warn for old snapshots
 
 # Volume and snapshot lifecycle times
 export DAYS_TILL_VOLUME_DELETION=2             # Number of days after server stop when the user's volume will be deleted
