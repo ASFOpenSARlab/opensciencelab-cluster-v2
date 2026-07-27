@@ -21,7 +21,9 @@ REQUIRED_SNAPSHOT_TAGS = ("volume-delete-time", "snapshot-delete-time")
 
 CLUSTER_NAME = os.getenv("CLUSTER_NAME")
 LAB_SHORT_NAME = os.getenv("LAB_SHORT_NAME", "CLUSTER_NAME")
-SNAPSHOT_WARNING_DAYS: list[int] = list(set([int(num) for num in os.getenv("SNAPSHOT_WARNING_DAYS", "5").split(",")]))
+SNAPSHOT_WARNING_DAYS: list[int] = list(
+    set([int(num) for num in os.getenv("SNAPSHOT_WARNING_DAYS", "5").split(",")])
+)
 SNAPSHOT_EXPIRY_GRACEPERIOD = int(os.getenv("SNAPSHOT_EXPIRY_GRACEPERIOD", "1"))
 SNS_ALERT_TOPIC_ARN = os.getenv("ALERT_SNS_TOPIC_ARN")
 PORTAL_DOMAIN = os.getenv("PORTAL_DOMAINS", "").split(",")[0].strip()
@@ -353,7 +355,10 @@ def send_snapshot_warning(snapshot, claim_user):
     # Update last warning tag
     snapshot.create_tags(
         Tags=[
-            {"Key": "last-snapshot-warning-date", "Value": datetime.datetime.now().strftime(DATE_FORMAT)},
+            {
+                "Key": "last-snapshot-warning-date",
+                "Value": datetime.datetime.now().strftime(DATE_FORMAT),
+            },
         ]
     )
 
@@ -403,10 +408,17 @@ def should_send_snapshot_warning_email(snapshot):
     expiry = expiry_time(tags.get("snapshot-delete-time"))
 
     # All datetimes a warning email should be sent
-    warning_dates = [expiry - datetime.timedelta(days=day) for day in SNAPSHOT_WARNING_DAYS]
+    warning_dates = [
+        expiry - datetime.timedelta(days=day) for day in SNAPSHOT_WARNING_DAYS
+    ]
 
     # Last datetime a warning email was sent
-    last_warning_date = datetime.datetime.strptime(tags.get("last-snapshot-warning-date", datetime.datetime.fromtimestamp(0).strftime(DATE_FORMAT)), DATE_FORMAT)
+    last_warning_date = datetime.datetime.strptime(
+        tags.get(
+            "last-snapshot-warning-date",
+            datetime.datetime.fromtimestamp(0).strftime(DATE_FORMAT)),
+            DATE_FORMAT,
+        )
 
     # Get next datetime a warning email should be sent out, None if there are no more emails to send
     next_warning_date = None
