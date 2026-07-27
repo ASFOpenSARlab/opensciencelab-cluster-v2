@@ -416,9 +416,10 @@ def should_send_snapshot_warning_email(snapshot):
     last_warning_date = datetime.datetime.strptime(
         tags.get(
             "last-snapshot-warning-date",
-            datetime.datetime.fromtimestamp(0).strftime(DATE_FORMAT)),
-            DATE_FORMAT,
-        )
+            datetime.datetime.fromtimestamp(0).strftime(DATE_FORMAT)
+        ),
+        DATE_FORMAT,
+    )
 
     # Get next datetime a warning email should be sent out, None if there are no more emails to send
     next_warning_date = None

@@ -5,7 +5,7 @@ import datetime
 from cluster_cdk.lambdas.volume_management import (
     DATE_FORMAT,
     should_send_snapshot_warning_email,
-    send_snapshot_warning
+    send_snapshot_warning,
 )
 
 
@@ -34,14 +34,12 @@ class TestShouldSendSnapshotWarning:
         MONKEYPATCH_SNAPSHOT_WARNING_DAYS = [10, 5, 3, 1]
         monkeypatch.setattr(
             "cluster_cdk.lambdas.volume_management.SNAPSHOT_WARNING_DAYS",
-            MONKEYPATCH_SNAPSHOT_WARNING_DAYS
+            MONKEYPATCH_SNAPSHOT_WARNING_DAYS,
         )
- 
+
         snap = mock_snapshot()
         snap.tags = [
-            {
-                "Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"
-            }
+            {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"}
         ]
 
         should_send = should_send_snapshot_warning_email(snap)
@@ -62,14 +60,12 @@ class TestShouldSendSnapshotWarning:
         MONKEYPATCH_SNAPSHOT_WARNING_DAYS = [10, 5, 3, 1]
         monkeypatch.setattr(
             "cluster_cdk.lambdas.volume_management.SNAPSHOT_WARNING_DAYS",
-            MONKEYPATCH_SNAPSHOT_WARNING_DAYS
+            MONKEYPATCH_SNAPSHOT_WARNING_DAYS,
         )
- 
+
         snap = mock_snapshot()
         snap.tags = [
-            {
-                "Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"
-            }
+            {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"}
         ]
 
         should_send = should_send_snapshot_warning_email(snap)
@@ -90,17 +86,13 @@ class TestShouldSendSnapshotWarning:
         MONKEYPATCH_SNAPSHOT_WARNING_DAYS = [10, 5, 3, 1]
         monkeypatch.setattr(
             "cluster_cdk.lambdas.volume_management.SNAPSHOT_WARNING_DAYS",
-            MONKEYPATCH_SNAPSHOT_WARNING_DAYS
+            MONKEYPATCH_SNAPSHOT_WARNING_DAYS,
         )
- 
+
         snap = mock_snapshot()
         snap.tags = [
-            {
-                "Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"
-            },
-            {
-                "Key": "last-snapshot-warning-date", "Value": "2026-01-21 01:00:00+00:00"
-            }
+            {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"},
+            {"Key": "last-snapshot-warning-date", "Value": "2026-01-21 01:00:00+00:00"}
         ]
 
         should_send = should_send_snapshot_warning_email(snap)
@@ -121,17 +113,13 @@ class TestShouldSendSnapshotWarning:
         MONKEYPATCH_SNAPSHOT_WARNING_DAYS = [10, 5, 3, 1]
         monkeypatch.setattr(
             "cluster_cdk.lambdas.volume_management.SNAPSHOT_WARNING_DAYS",
-            MONKEYPATCH_SNAPSHOT_WARNING_DAYS
+            MONKEYPATCH_SNAPSHOT_WARNING_DAYS,
         )
- 
+
         snap = mock_snapshot()
         snap.tags = [
-            {
-                "Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"
-            },
-            {
-                "Key": "last-snapshot-warning-date", "Value": "2026-01-21 01:00:00+00:00"
-            }
+            {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"},
+            {"Key": "last-snapshot-warning-date", "Value": "2026-01-21 01:00:00+00:00"}
         ]
 
         should_send = should_send_snapshot_warning_email(snap)
@@ -152,17 +140,13 @@ class TestShouldSendSnapshotWarning:
         MONKEYPATCH_SNAPSHOT_WARNING_DAYS = [10, 5, 3, 1]
         monkeypatch.setattr(
             "cluster_cdk.lambdas.volume_management.SNAPSHOT_WARNING_DAYS",
-            MONKEYPATCH_SNAPSHOT_WARNING_DAYS
+            MONKEYPATCH_SNAPSHOT_WARNING_DAYS,
         )
- 
+
         snap = mock_snapshot()
         snap.tags = [
-            {
-                "Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"
-            },
-            {
-                "Key": "last-snapshot-warning-date", "Value": "2026-01-21 01:00:00+00:00"
-            }
+            {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"},
+            {"Key": "last-snapshot-warning-date", "Value": "2026-01-21 01:00:00+00:00"}
         ]
 
         should_send = should_send_snapshot_warning_email(snap)
@@ -183,19 +167,15 @@ class TestShouldSendSnapshotWarning:
         MONKEYPATCH_SNAPSHOT_WARNING_DAYS = [10, 5, 3, 1]
         monkeypatch.setattr(
             "cluster_cdk.lambdas.volume_management.SNAPSHOT_WARNING_DAYS",
-            MONKEYPATCH_SNAPSHOT_WARNING_DAYS
+            MONKEYPATCH_SNAPSHOT_WARNING_DAYS,
         )
 
         snap = mock_snapshot()
         snap.tags = [
             {
-                "Key": "snapshot-delete-time",
-                "Value": "2026-01-30 01:00:00+00:00"
+                "Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"
             },
-            {
-                "Key": "last-snapshot-warning-date",
-                "Value": "2026-01-30 02:00:00+00:00"
-            }
+            {"Key": "last-snapshot-warning-date", "Value": "2026-01-30 02:00:00+00:00"}
         ]
 
         should_send = should_send_snapshot_warning_email(snap)
@@ -213,13 +193,14 @@ class TestSendSnapshotWarning:
                 return datetime.datetime.strptime(
                     "2026-01-10 01:00:00+00:00", DATE_FORMAT
                 )
+
         monkeypatch.setattr(
             "cluster_cdk.lambdas.volume_management.datetime.datetime", MockDatetime
         )
 
         monkeypatch.setattr(
             "cluster_cdk.lambdas.volume_management.send_email_to_portal",
-            lambda *args, **kwargs: None
+            lambda *args, **kwargs: None,
         )
 
         claim_user = "testuser"
@@ -228,8 +209,8 @@ class TestSendSnapshotWarning:
             m.assert_called_once_with(
                 Tags=[
                     {
-                        'Key': 'last-snapshot-warning-date',
-                        'Value': '2026-01-10 01:00:00+00:00',
+                        "Key": "last-snapshot-warning-date",
+                        "Value": "2026-01-10 01:00:00+00:00",
                     }
                 ]
             )
