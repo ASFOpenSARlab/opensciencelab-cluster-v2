@@ -78,6 +78,14 @@ Various EBS tags are created on server start and stop. Some relevant ones are
 
 ### Deploying the Cluster
 
+#### My Cluster is inaccessible for some reason
+
+Did you
+
+1. Change your SSO secret?
+1. Respawn the hub pod after changing SSO secret, or any other variables?
+1. Double check your portal lab card has the correct cluster deployment url?
+
 #### Ensure AWS credentials are present
 
 The Makefile + Docker process will need to communicate with AWS. In actions, this is done through an

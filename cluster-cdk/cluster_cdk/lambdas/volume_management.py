@@ -22,8 +22,9 @@ REQUIRED_SNAPSHOT_TAGS = ("volume-delete-time", "snapshot-delete-time")
 CLUSTER_NAME = os.getenv("CLUSTER_NAME")
 LAB_SHORT_NAME = os.getenv("LAB_SHORT_NAME", "CLUSTER_NAME")
 SNAPSHOT_WARNING_DAYS: list[int] = sorted(list(
-    set([int(num) for num in os.getenv("SNAPSHOT_WARNING_DAYS", "5").split(",")])
-), reverse=True)
+    set([int(num) for num in os.getenv("SNAPSHOT_WARNING_DAYS", "5").split(",")])),
+    reverse=True,
+)
 SNAPSHOT_EXPIRY_GRACEPERIOD = int(os.getenv("SNAPSHOT_EXPIRY_GRACEPERIOD", "1"))
 SNS_ALERT_TOPIC_ARN = os.getenv("ALERT_SNS_TOPIC_ARN")
 PORTAL_DOMAIN = os.getenv("PORTAL_DOMAINS", "").split(",")[0].strip()
