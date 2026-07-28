@@ -50,7 +50,7 @@ IS_PROD ?= false
 UI_IAM_USER := $(UI_IAM_USER)
 
 # Extra env var for running volume management lambda
-CLUSTER_NAME ?= eks-cluster-$(DEPLOY_PREFIX)
+CLUSTER_NAME ?= $(LAB_SHORT_NAME)
 
 
 .PHONY := all

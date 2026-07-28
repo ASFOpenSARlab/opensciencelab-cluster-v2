@@ -50,14 +50,14 @@ roles = [
 
 #### Using Dockerized CDK Environment
 
-The following ENV VARS are exported to the docker run environment, but `AWS_DEFAULT_PROFILE` is the most critical.
+The following ENV VARS are exported to the docker run environment, but `AWS_DEFAULT_PROFILE` and `LAB_SHORT_NAME` are the most critical.
 
 - `AWS_DEFAULT_REGION='us-west-2'`
 - `AWS_DEFAULT_PROFILE`
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 - `PROJECT_NAME`
-- `DEPLOY_PREFIX`
+- `LAB_SHORT_NAME`
 - `PROJECT_NAME`
 
 ```bash

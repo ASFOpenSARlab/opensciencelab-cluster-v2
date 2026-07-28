@@ -35,7 +35,6 @@ jobs:
       id-token: write
       contents: read
     env:
-      DEPLOY_PREFIX: ${{ needs.setup.outputs.deploy_prefix }}
       JUPYTER_HUB_IMAGE_PATH: ${{ vars.JUPYTER_HUB_IMAGE_PATH }}
       JUPYTER_HUB_IMAGE_TAG: ${{ vars.JUPYTER_HUB_IMAGE_TAG }}
       EXECWHACKER_CRON_IMAGE_PATH: ${{ vars.EXECWHACKER_CRON_IMAGE_PATH }}
