@@ -21,6 +21,7 @@ REQUIRED_SNAPSHOT_TAGS = ("volume-delete-time", "snapshot-delete-time")
 
 CLUSTER_NAME = os.getenv("CLUSTER_NAME")
 LAB_SHORT_NAME = os.getenv("LAB_SHORT_NAME", "CLUSTER_NAME")
+# Convert SNAPSHOT_WARNING_DAYS string to reverse sorted list of ints
 SNAPSHOT_WARNING_DAYS: list[int] = sorted(
     list({int(num) for num in os.getenv("SNAPSHOT_WARNING_DAYS", "5").split(",")}),
     reverse=True,
