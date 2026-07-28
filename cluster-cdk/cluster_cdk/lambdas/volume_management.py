@@ -415,6 +415,7 @@ def should_send_snapshot_warning_email(snapshot):
     ]
 
     # Last datetime a warning email was sent
+    # Defaults to January 1, 1970, at 00:00:00 UTC
     last_warning_date = datetime.datetime.strptime(
         tags.get(
             "last-snapshot-warning-date",
