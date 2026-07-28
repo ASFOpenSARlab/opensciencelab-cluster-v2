@@ -452,7 +452,9 @@ def validate_other_environment_variables() -> None:
     snapshot_warning_days = os.getenv("SNAPSHOT_WARNING_DAYS", None)
     if not snapshot_warning_days:
         raise Exception("SNAPSHOT_WARNING_DAYS is not defined")
-    assert [int(num) for num in snapshot_warning_days.split(",")], "SNAPSHOT_WARNING_DAYS must be a list of integer values"
+    assert [int(num) for num in snapshot_warning_days.split(",")], (
+        "SNAPSHOT_WARNING_DAYS must be a list of integer values"
+    )
 
     print("Checking UI_IAM_USER ....")
     ui_iam_user = os.getenv("UI_IAM_USER", None)

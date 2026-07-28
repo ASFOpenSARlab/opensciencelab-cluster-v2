@@ -428,6 +428,8 @@ def should_send_snapshot_warning_email(snapshot):
             next_warning_date = date
             break
 
+    logger.info(f" - Next warning datetime: {next_warning_date}")
+
     # Send email if
     # * there is another email to be sent
     # * it is currently after when the next warning should be sent
