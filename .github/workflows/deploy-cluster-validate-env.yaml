@@ -1,6 +1,6 @@
 ---
 # yamllint disable rule:line-length
-name: Deploy Cluster CDK
+name: Validate Cluster Environment
 on: # yamllint disable-line rule:truthy
   workflow_dispatch:
     inputs:
@@ -8,11 +8,6 @@ on: # yamllint disable-line rule:truthy
         description: "Environment override / Lab short name"
         type: environment
         default: test
-
-      runTestSuite:
-        description: "Run test suite on build. Note that Test always runs tests."
-        type: boolean
-        default: false
 
   push:
     branches:
@@ -35,7 +30,7 @@ jobs:
       id-token: write
       contents: read
     env:
-      LAB_SHORT_NAME: ${{ inputs.envOverride || needs.setup.outputs.environment }}
+      DEPLOY_PREFIX: ${{ needs.setup.outputs.deploy_prefix }}
       PROFILE_DEFINITIONS: ${{ vars.PROFILE_DEFINITIONS }}
       NODE_DEFINITIONS: ${{ vars.NODE_DEFINITIONS }}
       JUPYTER_HUB_IMAGE_PATH: ${{ vars.JUPYTER_HUB_IMAGE_PATH }}
@@ -47,6 +42,7 @@ jobs:
       UI_IAM_USER: ${{ vars.UI_IAM_USER }}
       ADMIN_USERS: ${{ vars.ADMIN_USERS }}
       PORTAL_DOMAINS: ${{ vars.PORTAL_DOMAINS }}
+      LAB_SHORT_NAME: ${{ inputs.envOverride || needs.setup.outputs.environment }}
       VOLUME_CRON_SCHEDULE: ${{ vars.VOLUME_CRON_SCHEDULE }}
       SNAPSHOT_WARNING_DAYS: ${{ vars.SNAPSHOT_WARNING_DAYS }}
       DAYS_TILL_SNAPSHOT_DELETION: ${{ vars.DAYS_TILL_SNAPSHOT_DELETION }}
@@ -66,11 +62,6 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_NUMBER }}:role/deploy_cluster_stack_role
           aws-region: ${{ vars.AWS_DEFAULT_REGION }}
 
-      - name: Run Cluster Testsuite
-        if: contains(fromJSON('["test"]'), inputs.envOverride || needs.setup.outputs.environment ) || inputs.runTestSuite == true
-        run: |
-          make test
-
-      - name: CDK Deploy Cluster
+      - name: Validate Environment
         run: |-
-          make deploy-cluster
+          make validate-env

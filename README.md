@@ -55,7 +55,7 @@ WARNING: If an EBS volume `kubernetes.io/created-for/pvc/name` tag is manually c
 
 If the restoring EBS snapshot has a size bigger than the configured value, the restored volume size will be the same as the snapshot.
 
-The size of the requested storage is `storage_capacity` as found in individual lab profiles within [opensciencelab.toml](./cluster-cdk/cluster_cdk/opensciencelab.toml). The default size of user `storage_capacity` is 10GBi if not provided in configuration. Once the volume is created, this storage value can not be changed via updating the lab profile. EBS volumes cannot be shrunk but they may be expanded. Therefore, bigger storage sizes should be assigned carefully to avoid costs.
+The size of the requested storage is `storage_capacity` as found in individual lab profiles within the `PROFILE_DEFINITIONS` environment variable. The default size of user `storage_capacity` is 10GBi if not provided in configuration. Once the volume is created, this storage value can not be changed via updating the lab profile. EBS volumes cannot be shrunk but they may be expanded. Therefore, bigger storage sizes should be assigned carefully to avoid costs.
 
 There are two ways to expand the size of an existing volume:
 
@@ -126,7 +126,6 @@ export EXECWHACKER_CRON_IMAGE_PATH="ghcr.io/asfopensarlab/opensciencelab-update-
 export EXECWHACKER_CRON_IMAGE_TAG="test"       # Needs to exist for opensciencelab-update-execwhacker image
 export IS_CRYPTNONO_ENABLED="true"             # Is cryptnono deployed within the cluster?
 export UI_IAM_USER="AWSReservedSSO_Project.."  # IAM Role used by admins in the AWS console
-export ALLOWED_LAB_PROFILES="sar"              # Comma seperated list of profiles to enable
 export ADMIN_USERS="nobody"                    # Comma seperated list of users to embed into JH
 export PORTAL_DOMAINS="<CLOUDFRONT-URL>"       # Comma seperated list of approved portal domains
 

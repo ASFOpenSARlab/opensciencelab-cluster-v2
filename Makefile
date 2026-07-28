@@ -93,7 +93,8 @@ cdk-shell:
 		-e AWS_DEFAULT_PROFILE -e AWS_PROFILE \
 		-e AWS_DEFAULT_REGION -e AWS_REGION \
 		-e AWS_DEFAULT_ACCOUNT \
-		-e DEPLOY_PREFIX \
+		-e NODE_DEFINITIONS \
+		-e PROFILE_DEFINITIONS \
 		-e JUPYTER_HUB_IMAGE_PATH \
 		-e JUPYTER_HUB_IMAGE_TAG \
 		-e EXECWHACKER_CRON_IMAGE_PATH \
@@ -102,12 +103,12 @@ cdk-shell:
 		-e UI_IAM_USER \
 		-e ADMIN_USERS \
 		-e PORTAL_DOMAINS \
-		-e ALLOWED_LAB_PROFILES \
 		-e LAB_SHORT_NAME \
 		-e VOLUME_CRON_SCHEDULE \
 		-e SNAPSHOT_WARNING_DAYS \
 		-e DAYS_TILL_VOLUME_DELETION \
 		-e DAYS_TILL_SNAPSHOT_DELETION \
+		-e AZ_LETTER \
 		-e AWS_CLI_PATH \
 		-e CLUSTER_NAME \
 		-e SSO_SECRET_ARN \
@@ -169,22 +170,27 @@ run-volume-lambda: bundle-deps
 	python3 cluster-cdk/cluster_cdk/lambdas/volume_management.py
 
 .PHONY := test
-test: remove-cdk-out install-reqs bundle-deps
-	@echo "Running tests for Cluster (${DEPLOY_PREFIX})"
+test: remove-cdk-out validate-env install-reqs bundle-deps
+	@echo "Running tests for Cluster (${LAB_SHORT_NAME})"
+
+.PHONY := validate-env
+validate-env:
+	@echo "Validating environment variables"
+	cd ./cluster-cdk/cluster_cdk && python validate_env.py
 
 .PHONY := synth-cluster
-synth-cluster: install-reqs bundle-deps
-	@echo "Synthesizing ${DEPLOY_PREFIX}/cluster-cdk"
+synth-cluster: validate-env install-reqs bundle-deps
+	@echo "Synthesizing ${LAB_SHORT_NAME}/cluster-cdk"
 	cd ./cluster-cdk && cdk synth
 
 .PHONY := deploy-cluster
-deploy-cluster: install-reqs bundle-deps
-	@echo "Deploying ${DEPLOY_PREFIX}/cluster-cdk"
+deploy-cluster: validate-env install-reqs bundle-deps
+	@echo "Deploying ${LAB_SHORT_NAME}/cluster-cdk"
 	cd ./cluster-cdk && cdk --require-approval never deploy
 
 .PHONY := destroy-cluster
 destroy-cluster:
-	@echo "Destroying ${DEPLOY_PREFIX}/cluster-cdk"
+	@echo "Destroying ${LAB_SHORT_NAME}/cluster-cdk"
 	cd ./cluster-cdk && cdk destroy --force --all
 
 .PHONY := remove-cdk-out
@@ -198,12 +204,12 @@ clean:
 
 .PHONY := synth-oidc
 synth-oidc:
-	@echo "Synthesizing ${DEPLOY_PREFIX}/oidc-cdk"
+	@echo "Synthesizing ${LAB_SHORT_NAME}/oidc-cdk"
 	cd ./oidc-cdk && cdk synth
 
 .PHONY := deploy-oidc
 deploy-oidc:
-	@echo "Deploying ${DEPLOY_PREFIX}/oidc-cdk"
+	@echo "Deploying ${LAB_SHORT_NAME}/oidc-cdk"
 	cd ./oidc-cdk && cdk --require-approval never deploy
 
 .PHONY := aws-info
