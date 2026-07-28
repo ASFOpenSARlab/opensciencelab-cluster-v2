@@ -7,6 +7,9 @@ import re
 
 import requests
 
+# Import the monitoring library constructs
+import cdk_monitoring_constructs as monitoring  # type: ignore
+
 from aws_cdk import (  # type: ignore
     CfnTag,
     CfnOutput,
@@ -17,15 +20,18 @@ from aws_cdk import (  # type: ignore
     Stack,
     SecretValue,
     aws_s3 as s3,
+    aws_cloudwatch as cloudwatch,
     aws_eks_v2 as eks,
     aws_ec2 as ec2,
     aws_dlm as dlm,
     aws_iam as iam,
     aws_lambda as lambda_,
+    aws_logs as logs,
     aws_secretsmanager as secretsmanager,
     aws_events as events,
     aws_events_targets as targets,
     aws_sns as sns,
+    aws_sns_subscriptions as sns_subs,
     lambda_layer_kubectl_v34,
     lambda_layer_awscli,
 )
@@ -1284,6 +1290,86 @@ class ClusterCdkStack(Stack):
             )
 
             self.cryptnono_helm_chart.node.add_dependency(execwhacker_manifest)
+
+        #####################################################################
+        #
+        #    Cryptnono CloudWatch Notifications
+        #
+        #####################################################################
+
+        CRYPTNONO_ALERT_EMAIL = "emlundell@alaska.edu"
+
+        # Create the messaging topic
+        cryptnono_email_topic = sns.Topic(
+            self,
+            "CryptnonoLogAlertTopic",
+            display_name="Cryptnono CloudWatch Log Matcher",
+        )
+
+        # Subscribe your inbox (AWS will send a confirmation email you must click)
+        cryptnono_email_topic.add_subscription(
+            sns_subs.EmailSubscription(CRYPTNONO_ALERT_EMAIL)
+        )
+
+        cryptnono_log_group = logs.LogGroup.from_log_group_name(
+            self,
+            "CryptnonoJupyterHubAppLogs",
+            f"/aws/containerinsights/{self.cluster.cluster_name}/application",
+        )
+
+        # Scan for a specific text fragment (e.g., "FATAL_EXCEPTION" or "ERROR")
+        cryptnono_metric_filter = logs.MetricFilter(
+            self,
+            "CryptnonoTextMatcherFilter",
+            log_group=cryptnono_log_group,
+            metric_namespace="ApplicationTextTracking",
+            metric_name="TextMatchCount",
+            filter_pattern=logs.FilterPattern.literal(
+                '{ ( $.log_processed.action = "killed" && $.kubernetes.container_name = "execwhacker" ) }'
+            ),  # Wrap exact text match in literal quotes
+            metric_value="1",  # Increment by 1 for every single match
+        )
+
+        # Bind your SNS topic as the global fallback action strategy
+        cryptnono_facade = monitoring.MonitoringFacade(
+            self,
+            "CryptnonoAppMonitoring",
+            alarm_factory_defaults=monitoring.AlarmFactoryDefaults(
+                actions_enabled=True,
+                alarm_name_prefix="Cryptnono-Logs-",
+                action=monitoring.SnsAlarmActionStrategy(
+                    on_alarm_topic=cryptnono_email_topic
+                ),
+            ),
+        )
+
+        log_metric_group = monitoring.CustomMetricGroup(
+            title="TextMatchCount",
+            metrics=[
+                monitoring.CustomMetricWithAlarm(
+                    metric=cryptnono_metric_filter.metric(
+                        statistic="Average", period=Duration.minutes(1)
+                    ),
+                    alarm_friendly_name="TextMatchCountAlarm",
+                    add_alarm={
+                        "Critical": monitoring.CustomThreshold(
+                            threshold=1,
+                            evaluation_periods=1,
+                            datapoints_to_alarm=1,
+                            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+                            alarm_description_override="Discovered cryptnono matching patterns inside application logs",
+                        )
+                    },
+                )
+            ],
+        )
+
+        # Pass the metric filter data directly to the dashboard framework
+        cryptnono_facade.monitor_custom(
+            metric_groups=[log_metric_group],
+            alarm_friendly_name="TextMatchCountGroup",
+            human_readable_name="Cryptnono Application Logs Monitor",
+        )
 
         #####################################################################
         #
