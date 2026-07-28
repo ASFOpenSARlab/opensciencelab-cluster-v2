@@ -21,7 +21,11 @@ REQUIRED_SNAPSHOT_TAGS = ("volume-delete-time", "snapshot-delete-time")
 
 CLUSTER_NAME = os.getenv("CLUSTER_NAME")
 LAB_SHORT_NAME = os.getenv("LAB_SHORT_NAME", "CLUSTER_NAME")
-SNAPSHOT_WARNING_DAYS = int(os.getenv("SNAPSHOT_WARNING_DAYS", "5"))
+# Convert SNAPSHOT_WARNING_DAYS string to reverse sorted list of ints
+SNAPSHOT_WARNING_DAYS: list[int] = sorted(
+    list({int(num) for num in os.getenv("SNAPSHOT_WARNING_DAYS", "5").split(",")}),
+    reverse=True,
+)
 SNAPSHOT_EXPIRY_GRACEPERIOD = int(os.getenv("SNAPSHOT_EXPIRY_GRACEPERIOD", "1"))
 SNS_ALERT_TOPIC_ARN = os.getenv("ALERT_SNS_TOPIC_ARN")
 PORTAL_DOMAIN = os.getenv("PORTAL_DOMAINS", "").split(",")[0].strip()
@@ -51,8 +55,22 @@ SSO_SECRET = None
 CONCERNING_ISSUES = []
 
 
-ec2 = boto3.client("ec2")
-ec2_resource = boto3.resource("ec2")
+ec2_client = None
+ec2_resource = None
+
+
+def get_ec2_client():
+    global ec2_client
+    if not ec2_client:
+        ec2_client = boto3.client("ec2")
+    return ec2_client
+
+
+def get_ec2_resource():
+    global ec2_resource
+    if not ec2_resource:
+        ec2_resource = boto3.resource("ec2")
+    return ec2_resource
 
 
 def set_sso_secret():
@@ -124,6 +142,7 @@ def tags_to_dict(tags):
 def get_unattached_volumes():
     """Return a list of available EBS Volumes"""
     unattached_volumes = []
+    ec2_resource = get_ec2_resource()
     for volume in ec2_resource.volumes.all():
         if volume.state == "available":
             unattached_volumes.append(volume)
@@ -135,6 +154,7 @@ def get_unattached_volumes():
 def get_all_snapshots():
     """get all volume snapshots owned by this AWS account"""
     this_account = boto3.client("sts").get_caller_identity().get("Account")
+    ec2_resource = get_ec2_resource()
     return ec2_resource.snapshots.filter(
         OwnerIds=[this_account],
         Filters=[{"Name": "status", "Values": ["completed"]}],
@@ -334,10 +354,13 @@ def send_snapshot_warning(snapshot, claim_user):
     # send email to portal
     send_email_to_portal(email_payload)
 
-    # Add reported tag
+    # Update last warning tag
     snapshot.create_tags(
         Tags=[
-            {"Key": "snapshot-warning-sent", "Value": "true"},
+            {
+                "Key": "last-snapshot-warning-date",
+                "Value": datetime.datetime.now().strftime(DATE_FORMAT),
+            },
         ]
     )
 
@@ -379,24 +402,44 @@ def send_snapshot_delete(snapshot, claim_user):
     return True
 
 
-def snapshot_is_expiring(snapshot):
+def should_send_snapshot_warning_email(snapshot):
     """Determine if a snapshot is inside the warning window"""
     tags = tags_to_dict(snapshot.tags)
-
-    # Make sure we haven't already warning
-    if tags.get("snapshot-warning-sent", "") == "true":
-        return False
 
     # date when snapshot is set to expire
     expiry = expiry_time(tags.get("snapshot-delete-time"))
 
-    # warning trigger date
-    warning_date = expiry - datetime.timedelta(days=SNAPSHOT_WARNING_DAYS)
+    # All datetimes a warning email should be sent
+    warning_dates = [
+        expiry - datetime.timedelta(days=day) for day in SNAPSHOT_WARNING_DAYS
+    ]
 
-    if datetime.datetime.now() > warning_date:
+    # Last datetime a warning email was sent
+    # Defaults to January 1, 1970, at 00:00:00 UTC
+    last_warning_date = datetime.datetime.strptime(
+        tags.get(
+            "last-snapshot-warning-date",
+            datetime.datetime.fromtimestamp(0).strftime(DATE_FORMAT),
+        ),
+        DATE_FORMAT,
+    )
+
+    # Get next datetime a warning email should be sent out, None if there are no more emails to send
+    next_warning_date = None
+    for date in warning_dates:
+        if last_warning_date < date:
+            next_warning_date = date
+            break
+
+    logger.info(f" - All warning datetimes: {warning_dates}")
+    logger.info(f" - Last warning datetime: {last_warning_date}")
+    logger.info(f" - Next warning datetime: {next_warning_date}")
+
+    # Send email if
+    # * there is another email to be sent
+    # * it is currently after when the next warning should be sent
+    if next_warning_date and datetime.datetime.now() > next_warning_date:
         return True
-
-    # snapshot is not about to expire
     return False
 
 
@@ -504,8 +547,8 @@ def run_volume_management():
         elif is_expired(snapshot):
             logger.info(" - Snapshot is in expired grace period!")
             send_snapshot_delete(snapshot, claim_user)
-        elif snapshot_is_expiring(snapshot):
-            logger.info(" - Snapshot is expiring!")
+        elif should_send_snapshot_warning_email(snapshot):
+            logger.info(" - Sending a snapshot warning email!")
             send_snapshot_warning(snapshot, claim_user)
 
 
