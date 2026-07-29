@@ -117,8 +117,8 @@ class ClusterCdkStack(Stack):
         # The hash is determined by the contruct ids and the replationship of the child construct path to the root construct.
         # If the paths and construct ids don't change, then the unique id should remain unique but stationary on builds (a requirement for s3 buckets).
         unique_id = Names.unique_resource_name(
-            Construct(self, f"{self.region}{self.AZ_LETTER}"),
-            max_length=30,
+            Construct(self, f"-{self.AZ_LETTER}"),
+            max_length=31,
             separator="-",
             allowed_special_characters="-",
         ).lower()
@@ -127,9 +127,9 @@ class ClusterCdkStack(Stack):
             # Make sure the bucket name satifies constraints. Specifically,
             # 1. The name can't be more than 63 characters long
             # 2. The name cannot end in "-" or "_"
-            self.execwhacker_bucket_name = f"cryptnono-execwhacker-configs-{unique_id}"[
-                :63
-            ]
+            self.execwhacker_bucket_name = (
+                f"cryptnono-execwhacker-configs-{self.region}-{unique_id}"
+            )
             if self.execwhacker_bucket_name.endswith(("_", "-")):
                 self.execwhacker_bucket_name = self.execwhacker_bucket_name[:-1]
 
@@ -1215,7 +1215,7 @@ class ClusterCdkStack(Stack):
                 self,
                 "ExecwhackerConfigsBucket",
                 bucket_name=self.execwhacker_bucket_name,
-                versioned=False,
+                versioned=True,
                 block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
                 object_ownership=s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
                 removal_policy=RemovalPolicy.DESTROY,
