@@ -16,7 +16,7 @@ from opensarlab.auth import encryptedjwt
 
 CLAIM_TAG = "kubernetes.io/created-for/pvc/name"
 CLUSTER_TAG = "KubernetesCluster"
-DATE_FORMAT = "%Y-%m-%d %H:%M:%S+00:00"
+DATE_FORMAT = "%Y-%m-%d %H:%M:%S%z"
 REQUIRED_SNAPSHOT_TAGS = ("volume-delete-time", "snapshot-delete-time")
 
 CLUSTER_NAME = os.getenv("CLUSTER_NAME")
@@ -279,7 +279,7 @@ def expiry_time(expiry):
     except Exception as E:
         logger.error("Could not convert %s to datatime: %s", expiry, E)
         # Return a time in future since the value is garbage
-        return datetime.datetime.now() + datetime.timedelta(days=100)
+        return datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=100)
 
 
 def is_delete_protected(item):
@@ -291,7 +291,7 @@ def is_delete_protected(item):
 
 def is_expired(item, grace_period_days=0):
     """Check if item is expired, with optional grace period"""
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(datetime.timezone.utc)
     tags = tags_to_dict(item.tags)
 
     expiry = None
@@ -359,7 +359,7 @@ def send_snapshot_warning(snapshot, claim_user):
         Tags=[
             {
                 "Key": "last-snapshot-warning-date",
-                "Value": datetime.datetime.now().strftime(DATE_FORMAT),
+                "Value": datetime.datetime.now(datetime.timezone.utc).strftime(DATE_FORMAT),
             },
         ]
     )
@@ -419,7 +419,7 @@ def should_send_snapshot_warning_email(snapshot):
     last_warning_date = datetime.datetime.strptime(
         tags.get(
             "last-snapshot-warning-date",
-            datetime.datetime.fromtimestamp(0).strftime(DATE_FORMAT),
+            datetime.datetime.fromtimestamp(0, datetime.timezone.utc).strftime(DATE_FORMAT),
         ),
         DATE_FORMAT,
     )
@@ -438,7 +438,7 @@ def should_send_snapshot_warning_email(snapshot):
     # Send email if
     # * there is another email to be sent
     # * it is currently after when the next warning should be sent
-    if next_warning_date and datetime.datetime.now() > next_warning_date:
+    if next_warning_date and datetime.datetime.now(datetime.timezone.utc) > next_warning_date:
         return True
     return False
 
