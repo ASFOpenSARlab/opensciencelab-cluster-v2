@@ -71,6 +71,7 @@ class ClusterCdkStack(Stack):
             os.getenv("IS_CRYPTNONO_ENABLED", "false").strip().lower() == "true"
             and self.EXECWHACKER_CRON_IMAGE_PATH
             and self.EXECWHACKER_CRON_IMAGE_TAG
+            and True
         )
 
         self.UI_IAM_USER = os.environ["UI_IAM_USER"]
@@ -111,12 +112,26 @@ class ClusterCdkStack(Stack):
 
         self.kubectl_layer = lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl")
 
-        # This will auto-append a unique 8-character hash (e.g. "mystackmyconstructa1b2c3d4")
-        unique_name = Names.unique_resource_name(
-            self,
-            max_length=50,  # Keep room for your suffix
-            allowed_special_characters="",  # S3 names can't have uppercase/weird characters
-        )
+        # This will create an unique 8-character hash (e.g. "mystackmyconstructa1b2c3d4") that will not change once setup
+        # The empty Construct child is needed to force a hash to be made. Root constructs don't get a hash.
+        # The hash is determined by the contruct ids and the replationship of the child construct path to the root construct.
+        # If the paths and construct ids don't change, then the unique id should remain unique but stationary on builds (a requirement for s3 buckets).
+        unique_id = Names.unique_resource_name(
+            Construct(self, f"{self.region}{self.AZ_LETTER}"),
+            max_length=30,
+            separator="-",
+            allowed_special_characters="-",
+        ).lower()
+
+        if self.IS_CRYPTNONO_ENABLED:
+            # Make sure the bucket name satifies constraints. Specifically,
+            # 1. The name can't be more than 63 characters long
+            # 2. The name cannot end in "-" or "_"
+            self.execwhacker_bucket_name = f"cryptnono-execwhacker-configs-{unique_id}"[
+                :63
+            ]
+            if self.execwhacker_bucket_name.endswith(("_", "-")):
+                self.execwhacker_bucket_name = self.execwhacker_bucket_name[:-1]
 
         print("vars within CDK...")
         for k, v in vars(self).items():
@@ -1199,7 +1214,7 @@ class ClusterCdkStack(Stack):
             execwhacker_bucket = s3.Bucket(
                 self,
                 "ExecwhackerConfigsBucket",
-                bucket_name=f"{unique_name}-cryptnono-execwhacker-configs",
+                bucket_name=self.execwhacker_bucket_name,
                 versioned=False,
                 block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
                 object_ownership=s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
