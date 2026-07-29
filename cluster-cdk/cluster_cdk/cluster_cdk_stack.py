@@ -1447,6 +1447,14 @@ class ClusterCdkStack(Stack):
             description="The version of the JupyterHub Helm Chart version",
         )
 
+        if self.IS_CRYPTNONO_ENABLED:
+            CfnOutput(
+                self,
+                "Cryptnono Config Bucket Name",
+                value=self.execwhacker_bucket_name,
+                description="Configs for the Cryptnono Execwhacker",
+            )
+
     def _add_policy_from_file(self, the_role: iam.Role, file_name: str) -> None:
         """
         Predefined roles sometimes need addtional custom policies applied (especially for node roles).
