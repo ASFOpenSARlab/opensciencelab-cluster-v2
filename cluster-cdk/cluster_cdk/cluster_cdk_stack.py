@@ -70,7 +70,7 @@ class ClusterCdkStack(Stack):
         # Default cron schedule to top of every hour
         self.VOLUME_CRON_SCHEDULE = os.environ["VOLUME_CRON_SCHEDULE"]
         self.SNAPSHOT_WARNING_DAYS = os.environ["SNAPSHOT_WARNING_DAYS"]
-        self.SNAPSHOT_EXPIRY_GRACEPERIOD = os.environ["SNAPSHOT_EXPIRY_GRACEPERIOD"]
+        self.SNAPSHOT_EXPIRY_GRACEPERIOD = os.environ.get("SNAPSHOT_EXPIRY_GRACEPERIOD", "1.0")
 
         self.LAB_SHORT_NAME = os.environ["LAB_SHORT_NAME"].lower()
 
