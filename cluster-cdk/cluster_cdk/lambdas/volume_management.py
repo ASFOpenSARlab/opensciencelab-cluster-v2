@@ -371,8 +371,8 @@ def send_snapshot_delete(snapshot, claim_user):
     """Send email to the owner of a to-be-deleted snapshot"""
     tags = tags_to_dict(snapshot.tags)
 
-    # Make sure we haven't already warning
-    if tags.get("snapshot-warning-sent", "") == "true":
+    # Make sure we haven't already sent delete email
+    if tags.get("snapshot-delete-sent", "") == "true":
         return None
 
     # Create email
