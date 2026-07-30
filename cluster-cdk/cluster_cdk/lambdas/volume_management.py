@@ -26,7 +26,7 @@ SNAPSHOT_WARNING_DAYS: list[int] = sorted(
     list({int(num) for num in os.getenv("SNAPSHOT_WARNING_DAYS", "5").split(",")}),
     reverse=True,
 )
-SNAPSHOT_EXPIRY_GRACEPERIOD = float(os.getenv("SNAPSHOT_EXPIRY_GRACEPERIOD", "1.0"))
+SNAPSHOT_GRACEPERIOD_DAYS = float(os.getenv("SNAPSHOT_GRACEPERIOD_DAYS", "1.0"))
 SNS_ALERT_TOPIC_ARN = os.getenv("ALERT_SNS_TOPIC_ARN")
 PORTAL_DOMAIN = os.getenv("PORTAL_DOMAINS", "").split(",")[0].strip()
 
@@ -554,7 +554,7 @@ def run_volume_management():
             logger.warning(" - Snapshot is missing tags!")
         elif is_delete_protected(snapshot):
             logger.info(" - Snapshot is Delete protected!")
-        elif is_expired(snapshot, grace_period_days=SNAPSHOT_EXPIRY_GRACEPERIOD):
+        elif is_expired(snapshot, grace_period_days=SNAPSHOT_GRACEPERIOD_DAYS):
             logger.info(" - Deleting Snapshot")
             snapshot.delete()
         elif is_expired(snapshot):
