@@ -108,7 +108,7 @@ def is_valid_fqdn_with_path(value: str) -> bool:
     return bool(fqdn_regex.match(domain))
 
 
-def validate_aws_ssm_cron_format(cron_str):
+def validate_aws_ssm_cron_format(cron_str: str) -> bool:
     cron_str = cron_str.strip()
 
     # If wrapped in cron(...), extract the inner expression string
@@ -168,6 +168,12 @@ def validate_aws_ssm_cron_format(cron_str):
         return False
 
     return True
+
+
+def is_valid_email_address(email_address: str) -> bool:
+    if re.fullmatch(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", email_address):
+        return True
+    return False
 
 
 def validate_profiles_and_nodes() -> None:
@@ -336,6 +342,7 @@ def validate_other_environment_variables() -> None:
         "AZ_LETTER",
         "DAYS_TILL_SNAPSHOT_DELETION",
         "DAYS_TILL_VOLUME_DELETION",
+        "CRYPTNONO_ALERT_EMAIL",
         "EXECWHACKER_CRON_IMAGE_PATH",
         "EXECWHACKER_CRON_IMAGE_TAG",
         "IS_CRYPTNONO_ENABLED",
@@ -388,6 +395,13 @@ def validate_other_environment_variables() -> None:
         "DAYS_TILL_VOLUME_DELETION must be an integer value"
     )
 
+    print("Checking CRYPTNONO_ALERT_EMAIL (optional) ....")
+    cryptnono_alert_email = os.getenv("CRYPTNONO_ALERT_EMAIL", None)
+    if cryptnono_alert_email:
+        assert is_valid_email_address(cryptnono_alert_email), (
+            "CRYPTNONO_ALERT_EMAIL needs to be a valid email address"
+        )
+
     print("Checking EXECWHACKER_CRON_IMAGE_PATH (optional) ....")
     execwhacker_cron_image_path = os.getenv("EXECWHACKER_CRON_IMAGE_PATH", None)
     if execwhacker_cron_image_path:
@@ -406,9 +420,10 @@ def validate_other_environment_variables() -> None:
             is_cryptnono_enabled
             and execwhacker_cron_image_path
             and execwhacker_cron_image_tag
+            and cryptnono_alert_email
         ):
             raise Exception(
-                "You cannot run crytnono without defining EXECWHACKER_CRON_IMAGE_TAG and EXECWHACKER_CRON_IMAGE_PATH"
+                "You cannot run crytnono without defining EXECWHACKER_CRON_IMAGE_TAG, EXECWHACKER_CRON_IMAGE_PATH, and CRYPTNONO_ALERT_EMAIL"
             )
 
     print("Checking JUPYTER_HUB_IMAGE_PATH ....")

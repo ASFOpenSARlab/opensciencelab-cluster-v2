@@ -61,19 +61,6 @@ class ClusterCdkStack(Stack):
         self.JUPYTER_HUB_IMAGE_PATH = os.environ["JUPYTER_HUB_IMAGE_PATH"]
         self.JUPYTER_HUB_IMAGE_TAG = os.environ["JUPYTER_HUB_IMAGE_TAG"]
 
-        self.EXECWHACKER_CRON_IMAGE_PATH = os.getenv(
-            "EXECWHACKER_CRON_IMAGE_PATH", None
-        )
-        self.EXECWHACKER_CRON_IMAGE_TAG = os.getenv("EXECWHACKER_CRON_IMAGE_TAG", None)
-
-        # Be somewhat aggressive in only enabling cryptnono if explicitly "true" and EXECWAHCKER path and tag are defined
-        self.IS_CRYPTNONO_ENABLED = (
-            os.getenv("IS_CRYPTNONO_ENABLED", "false").strip().lower() == "true"
-            and self.EXECWHACKER_CRON_IMAGE_PATH
-            and self.EXECWHACKER_CRON_IMAGE_TAG
-            and True
-        )
-
         self.UI_IAM_USER = os.environ["UI_IAM_USER"]
 
         # Default cron schedule to top of every hour
@@ -123,6 +110,25 @@ class ClusterCdkStack(Stack):
             allowed_special_characters="-",
         ).lower()
 
+        ########
+        #
+        #  Parameters related to cryptnono
+        #
+        ########
+        self.CRYPTNONO_ALERT_EMAIL = os.getenv("CRYPTNONO_ALERT_EMAIL", None)
+        self.EXECWHACKER_CRON_IMAGE_PATH = os.getenv(
+            "EXECWHACKER_CRON_IMAGE_PATH", None
+        )
+        self.EXECWHACKER_CRON_IMAGE_TAG = os.getenv("EXECWHACKER_CRON_IMAGE_TAG", None)
+
+        # Be somewhat aggressive in only enabling cryptnono if explicitly "true" and EXECWAHCKER path and tag are defined
+        self.IS_CRYPTNONO_ENABLED = (
+            os.getenv("IS_CRYPTNONO_ENABLED", "false").strip().lower() == "true"
+            and self.EXECWHACKER_CRON_IMAGE_PATH
+            and self.EXECWHACKER_CRON_IMAGE_TAG
+            and True
+        )
+
         if self.IS_CRYPTNONO_ENABLED:
             # Make sure the bucket name satifies constraints. Specifically,
             # 1. The name can't be more than 63 characters long
@@ -133,6 +139,7 @@ class ClusterCdkStack(Stack):
             if self.execwhacker_bucket_name.endswith(("_", "-")):
                 self.execwhacker_bucket_name = self.execwhacker_bucket_name[:-1]
 
+        # See what vars are defined within this context
         print("vars within CDK...")
         for k, v in vars(self).items():
             print(k, v)
@@ -1302,46 +1309,76 @@ class ClusterCdkStack(Stack):
         #
         #    Cryptnono CloudWatch Notifications
         #
+        #    When cloudwatch receive logs matching `log_processed.action = "killed"` and `kubernetes.container_name = "execwhacker"` an alarm will be triggered.
+        #    This alarm will show up on the cloudwatch dashboard and will also trigger a SNS topic. Attached to this topic is an email.
+        #
         #####################################################################
 
-        CRYPTNONO_ALERT_EMAIL = "emlundell@alaska.edu"
-
-        # Create the messaging topic
-        cryptnono_email_topic = sns.Topic(
-            self,
-            "CryptnonoLogAlertTopic",
-            display_name=f"{cluster_name} Cryptnono CloudWatch Log Matcher",
-            topic_name=f"{cluster_name}-cryptnono-sns",
-        )
-
-        # Subscribe your inbox (AWS will send a confirmation email you must click)
-        cryptnono_email_topic.add_subscription(
-            sns_subs.EmailSubscription(CRYPTNONO_ALERT_EMAIL)
-        )
-
+        # Check the existing jupyter log group
         cryptnono_log_group = logs.LogGroup.from_log_group_name(
             self,
             "CryptnonoJupyterHubAppLogs",
             f"/aws/containerinsights/{cluster_name}/application",
         )
 
-        # Scan for a specific text fragment (e.g., "FATAL_EXCEPTION" or "ERROR")
+        # Create the messaging topic
+        # Note that any changes in the display name must be accompied by a change in the topic anme. For some reason, changing only one is disliked.
+        cryptnono_email_topic = sns.Topic(
+            self,
+            "CryptnonoKillEventAlertTopic",
+            display_name=f"{cluster_name} - Cryptnono Kill Event Alert",
+            topic_name=f"{cluster_name}-cryptnono-alert-sns",
+        )
+
+        # Subscribe your inbox (AWS will send a confirmation email you must click)
+        cryptnono_email_topic.add_subscription(
+            sns_subs.EmailSubscription(self.CRYPTNONO_ALERT_EMAIL)
+        )
+
+        # Scan for a specific text fragment within the log group. If found, count as one event
         cryptnono_metric_filter = logs.MetricFilter(
             self,
             "CryptnonoTextMatcherFilter",
             log_group=cryptnono_log_group,
-            metric_namespace="ApplicationTextTracking",
-            metric_name=f"{cluster_name} TextMatchCount",
+            metric_namespace=f"{cluster_name}-Cryptnono",
+            metric_name="Cryptnono Kill Event Count",
             filter_pattern=logs.FilterPattern.literal(
                 '{ ( $.log_processed.action = "killed" && $.kubernetes.container_name = "execwhacker" ) }'
-            ),  # Wrap exact text match in literal quotes
+            ),
             metric_value="1",  # Increment by 1 for every single match
+            unit=cloudwatch.Unit.COUNT,
         )
 
-        # Bind your SNS topic as the global fallback action strategy
+        log_metric_group = monitoring.CustomMetricGroup(
+            title="CryptnonoKillEventCount",
+            metrics=[
+                monitoring.CustomMetricWithAlarm(
+                    metric=cryptnono_metric_filter.metric(
+                        statistic="Average",
+                        period=Duration.minutes(1),
+                        label=f"Average Cryptnono Kill Event for {cluster_name}",
+                    ),
+                    alarm_friendly_name="KillEventCountAlarm",
+                    add_alarm={
+                        "Critical": monitoring.CustomThreshold(
+                            threshold=1,
+                            evaluation_periods=1,
+                            datapoints_to_alarm=1,
+                            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+                            alarm_name_override=f"{cluster_name} - Cryptnono Kill Event Match",
+                            alarm_description_override="Discovered cryptnono matching patterns inside application logs",
+                        )
+                    },
+                )
+            ],
+        )
+
+        # The monitoring facade is a framework for CloudWatch dashboards, alerts, and other actions
+        # https://github.com/cdklabs/cdk-monitoring-constructs
+        # Bind your SNS topic as the global fallback action strategy to the monitoring facade
         cryptnono_facade = monitoring.MonitoringFacade(
             self,
-            "CryptnonoAppMonitoring",
+            "CryptnonoKillEventMonitoring",
             alarm_factory_defaults=monitoring.AlarmFactoryDefaults(
                 actions_enabled=True,
                 alarm_name_prefix=f"{cluster_name}-CryptnonoLogs",
@@ -1351,35 +1388,11 @@ class ClusterCdkStack(Stack):
             ),
         )
 
-        log_metric_group = monitoring.CustomMetricGroup(
-            title="CryptnonoTextMatchCount",
-            metrics=[
-                monitoring.CustomMetricWithAlarm(
-                    metric=cryptnono_metric_filter.metric(
-                        statistic="Average",
-                        period=Duration.minutes(1),
-                        label=f"Average Cryptnono Kill Event for {cluster_name}",
-                    ),
-                    alarm_friendly_name="TextMatchCountAlarm",
-                    add_alarm={
-                        "Critical": monitoring.CustomThreshold(
-                            threshold=1,
-                            evaluation_periods=1,
-                            datapoints_to_alarm=1,
-                            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-                            alarm_name_override=f"{cluster_name} Cryptnono Kill Event Match",
-                            alarm_description_override="Discovered cryptnono matching patterns inside application logs",
-                        )
-                    },
-                )
-            ],
-        )
-
         # Pass the metric filter data directly to the dashboard framework
         cryptnono_facade.monitor_custom(
             metric_groups=[log_metric_group],
-            alarm_friendly_name=f"{cluster_name} TextMatchCountGroup",
-            human_readable_name=f"{cluster_name} Cryptnono Application Logs Monitor",
+            alarm_friendly_name=f"{cluster_name} - KillEventCountGroup",
+            human_readable_name=f"{cluster_name} - Cryptnono Kill Event",
         )
 
         #####################################################################
