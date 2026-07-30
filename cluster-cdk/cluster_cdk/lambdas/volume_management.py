@@ -26,7 +26,7 @@ SNAPSHOT_WARNING_DAYS: list[int] = sorted(
     list({int(num) for num in os.getenv("SNAPSHOT_WARNING_DAYS", "5").split(",")}),
     reverse=True,
 )
-SNAPSHOT_EXPIRY_GRACEPERIOD = int(os.getenv("SNAPSHOT_EXPIRY_GRACEPERIOD", "1"))
+SNAPSHOT_EXPIRY_GRACEPERIOD = float(os.getenv("SNAPSHOT_EXPIRY_GRACEPERIOD", "1.0"))
 SNS_ALERT_TOPIC_ARN = os.getenv("ALERT_SNS_TOPIC_ARN")
 PORTAL_DOMAIN = os.getenv("PORTAL_DOMAINS", "").split(",")[0].strip()
 
@@ -310,6 +310,8 @@ def is_expired(item, grace_period_days=0):
     # Expire time is the marked expiry time, plus added grace period in days
     expire_time = expiry_time(expiry) + datetime.timedelta(days=grace_period_days)
 
+    logger.debug(f" - Now datetime: {now} Expiration datetime: {expire_time}")
+
     return now > expire_time
 
 
@@ -373,6 +375,7 @@ def send_snapshot_delete(snapshot, claim_user):
 
     # Make sure we haven't already sent delete email
     if tags.get("snapshot-delete-sent", "") == "true":
+        logger.info(" - Deletion email sent previously")
         return None
 
     # Create email
@@ -391,6 +394,7 @@ def send_snapshot_delete(snapshot, claim_user):
 
     # send email to portal
     send_email_to_portal(email_payload)
+    logger.info(" - Deletion email sent")
 
     # Add email tag
     snapshot.create_tags(
@@ -431,9 +435,9 @@ def should_send_snapshot_warning_email(snapshot):
             next_warning_date = date
             break
 
-    logger.info(f" - All warning datetimes: {warning_dates}")
-    logger.info(f" - Last warning datetime: {last_warning_date}")
-    logger.info(f" - Next warning datetime: {next_warning_date}")
+    logger.debug(f" - All warning datetimes: {warning_dates}")
+    logger.debug(f" - Last warning datetime: {last_warning_date}")
+    logger.debug(f" - Next warning datetime: {next_warning_date}")
 
     # Send email if
     # * there is another email to be sent
@@ -542,10 +546,10 @@ def run_volume_management():
         elif is_delete_protected(snapshot):
             logger.info(" - Snapshot is Delete protected!")
         elif is_expired(snapshot, grace_period_days=SNAPSHOT_EXPIRY_GRACEPERIOD):
-            logger.info(" - Snapshot is expired past grace period!")
+            logger.info(" - Deleting Snapshot")
             snapshot.delete()
         elif is_expired(snapshot):
-            logger.info(" - Snapshot is in expired grace period!")
+            logger.info(" - Snapshot is in grace period!")
             send_snapshot_delete(snapshot, claim_user)
         elif should_send_snapshot_warning_email(snapshot):
             logger.info(" - Sending a snapshot warning email!")
