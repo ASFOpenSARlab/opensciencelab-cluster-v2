@@ -344,6 +344,7 @@ def validate_other_environment_variables() -> None:
         "LAB_SHORT_NAME",
         "PORTAL_DOMAINS",
         "SNAPSHOT_WARNING_DAYS",
+        "SNAPSHOT_EXPIRY_GRACEPERIOD"
         "UI_IAM_USER",
         "VOLUME_CRON_SCHEDULE",
     ]
