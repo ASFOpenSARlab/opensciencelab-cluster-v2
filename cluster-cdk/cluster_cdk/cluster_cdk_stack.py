@@ -1378,7 +1378,7 @@ class ClusterCdkStack(Stack):
         # Bind your SNS topic as the global fallback action strategy to the monitoring facade
         cryptnono_facade = monitoring.MonitoringFacade(
             self,
-            "CryptnonoKillEventMonitoring",
+            f"{cluster_name}-CryptnonoKillEventMonitoring",
             alarm_factory_defaults=monitoring.AlarmFactoryDefaults(
                 actions_enabled=True,
                 alarm_name_prefix=f"{cluster_name}-CryptnonoLogs",
@@ -1394,6 +1394,58 @@ class ClusterCdkStack(Stack):
             alarm_friendly_name=f"{cluster_name} - KillEventCountGroup",
             human_readable_name=f"{cluster_name} - Cryptnono Kill Event",
         )
+
+        #####################################################################
+        #
+        #   A cloudwatch insights SQL query that will match a cryptnono event with an username.
+        #
+        #   There is an assumption that any user nodes have one jupyter user pod and one cryptnono sidecar pod.
+        #
+        #####################################################################
+
+        cw_log_group = "/aws/containerinsights/eml/application"
+
+        crytnono_query = f"""
+            SELECT DISTINCT
+                sidecar.`@timestamp`,
+                sidecar.`log_processed.cmdline` as command,
+                sidecar.`log_processed.matched` as matched,
+                sidecar.`kubernetes.pod_name` as pod_name_sidecar,
+                user_.`kubernetes.pod_name` as pod_name_user,
+                sidecar.`kubernetes.host` as host,
+                sidecar.`@message`
+            FROM `{cw_log_group}` as sidecar
+            INNER JOIN `{cw_log_group}` as user_
+                ON sidecar.`kubernetes.host` = user_.`kubernetes.host`
+            WHERE sidecar.`@message` like '%killed%'
+                AND user_.`kubernetes.pod_name` like 'jupyter-%'
+                AND CAST(sidecar.`@timestamp` as int) BETWEEN CAST(user_.`@timestamp` as int)-10 AND CAST(user_.`@timestamp` as int)+10
+            ORDER BY sidecar.`@timestamp` DESC
+            LIMIT 1000;
+        """
+
+        # Create a CloudWatch Dashboard
+        sql_dashboard = cloudwatch.Dashboard(
+            self,
+            "CryptnonoSQLDashboard",
+            dashboard_name=f"{cluster_name}-CryptnonoKillEventSQLQuery",
+        )
+
+        # Define your SQL-based Log Insights Widget
+        sql_widget = cloudwatch.LogQueryWidget(
+            title="Cryptnono Kill Event SQL Query",
+            log_group_names=[cw_log_group],
+            view=cloudwatch.LogQueryVisualizationType.TABLE,
+            # Set the query language mode to SQL
+            query_language=cloudwatch.LogQueryLanguage.SQL,
+            # Pass your raw SQL query string
+            query_string=crytnono_query,
+            width=24,
+            height=6,
+        )
+
+        # Attach the widget to the dashboard layout
+        sql_dashboard.add_widgets(sql_widget)
 
         #####################################################################
         #
