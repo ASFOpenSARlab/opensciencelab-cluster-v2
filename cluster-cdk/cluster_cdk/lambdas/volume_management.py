@@ -279,7 +279,9 @@ def expiry_time(expiry):
     except Exception as E:
         logger.error("Could not convert %s to datatime: %s", expiry, E)
         # Return a time in future since the value is garbage
-        return datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=100)
+        return datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+            days=100
+        )
 
 
 def is_delete_protected(item):
@@ -361,7 +363,9 @@ def send_snapshot_warning(snapshot, claim_user):
         Tags=[
             {
                 "Key": "last-snapshot-warning-date",
-                "Value": datetime.datetime.now(datetime.timezone.utc).strftime(DATE_FORMAT),
+                "Value": datetime.datetime.now(datetime.timezone.utc).strftime(
+                    DATE_FORMAT
+                ),
             },
         ]
     )
@@ -423,7 +427,9 @@ def should_send_snapshot_warning_email(snapshot):
     last_warning_date = datetime.datetime.strptime(
         tags.get(
             "last-snapshot-warning-date",
-            datetime.datetime.fromtimestamp(0, datetime.timezone.utc).strftime(DATE_FORMAT),
+            datetime.datetime.fromtimestamp(0, datetime.timezone.utc).strftime(
+                DATE_FORMAT
+            ),
         ),
         DATE_FORMAT,
     )
@@ -442,7 +448,10 @@ def should_send_snapshot_warning_email(snapshot):
     # Send email if
     # * there is another email to be sent
     # * it is currently after when the next warning should be sent
-    if next_warning_date and datetime.datetime.now(datetime.timezone.utc) > next_warning_date:
+    if (
+        next_warning_date
+        and datetime.datetime.now(datetime.timezone.utc) > next_warning_date
+    ):
         return True
     return False
 
