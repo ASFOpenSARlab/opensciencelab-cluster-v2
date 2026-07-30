@@ -78,6 +78,14 @@ Various EBS tags are created on server start and stop. Some relevant ones are
 
 ### Deploying the Cluster
 
+#### My Cluster is inaccessible for some reason
+
+Did you
+
+1. Change your SSO secret?
+1. Respawn the hub pod after changing SSO secret, or any other variables?
+1. Double check your portal lab card has the correct cluster deployment url?
+
 #### Ensure AWS credentials are present
 
 The Makefile + Docker process will need to communicate with AWS. In actions, this is done through an
@@ -129,9 +137,8 @@ export UI_IAM_USER="AWSReservedSSO_Project.."  # IAM Role used by admins in the 
 export ADMIN_USERS="nobody"                    # Comma seperated list of users to embed into JH
 export PORTAL_DOMAINS="<CLOUDFRONT-URL>"       # Comma seperated list of approved portal domains
 
-# volume Management Lambda - default values listed
 export VOLUME_CRON_SCHEDULE="0 * * * ? *"      # Schedule to run the volume management lambda
-export SNAPSHOT_WARNING_DAYS="5"               # Number of days before delete to warn for old snapshots
+export SNAPSHOT_WARNING_DAYS="5,3,1"           # Number of days before delete to warn for old snapshots
 
 # Volume and snapshot lifecycle times
 export DAYS_TILL_VOLUME_DELETION=2             # Number of days after server stop when the user's volume will be deleted
