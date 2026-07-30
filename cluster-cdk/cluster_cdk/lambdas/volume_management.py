@@ -545,8 +545,6 @@ def run_volume_management():
             if not delete_pvc(claim_user, all_pvcs, kube_client):
                 logger.error(" - There was a problem removing PVC for %s", volume.id)
 
-    logger.info(SNAPSHOT_EXPIRY_GRACEPERIOD)
-
     for claim_user, snapshot in user_snapshots.items():
         logger.info(
             f"SNAPSHOT: {claim_user} | ID: {snapshot.id} | Size: {snapshot.volume_size}GB | State: {snapshot.state}"
