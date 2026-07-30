@@ -71,7 +71,9 @@ class ClusterCdkStack(Stack):
         self.VOLUME_CRON_SCHEDULE = os.environ["VOLUME_CRON_SCHEDULE"]
         self.SNAPSHOT_WARNING_DAYS = os.environ["SNAPSHOT_WARNING_DAYS"]
         # Defaults SNAPSHOT_EXPIRY_GRACEPERIOD if provided value is empty string
-        self.SNAPSHOT_EXPIRY_GRACEPERIOD = os.environ["SNAPSHOT_EXPIRY_GRACEPERIOD"] or "1.0"
+        self.SNAPSHOT_EXPIRY_GRACEPERIOD = (
+            os.environ["SNAPSHOT_EXPIRY_GRACEPERIOD"] or "1.0"
+        )
 
         self.LAB_SHORT_NAME = os.environ["LAB_SHORT_NAME"].lower()
 
