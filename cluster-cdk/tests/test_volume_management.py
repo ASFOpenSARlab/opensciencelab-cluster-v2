@@ -24,7 +24,7 @@ class TestShouldSendSnapshotWarning:
             @classmethod
             def now(cls, tz=None):
                 return datetime.datetime.strptime(
-                    "2026-01-10 01:00:00+00:00", DATE_FORMAT
+                    "2026-01-10 01:00:00+0000", DATE_FORMAT
                 )
 
         monkeypatch.setattr(
@@ -39,7 +39,7 @@ class TestShouldSendSnapshotWarning:
 
         snap = mock_snapshot()
         snap.tags = [
-            {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"}
+            {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+0000"}
         ]
 
         should_send = should_send_snapshot_warning_email(snap)
@@ -50,7 +50,7 @@ class TestShouldSendSnapshotWarning:
             @classmethod
             def now(cls, tz=None):
                 return datetime.datetime.strptime(
-                    "2026-01-21 01:00:00+00:00", DATE_FORMAT
+                    "2026-01-21 01:00:00+0000", DATE_FORMAT
                 )
 
         monkeypatch.setattr(
@@ -65,7 +65,7 @@ class TestShouldSendSnapshotWarning:
 
         snap = mock_snapshot()
         snap.tags = [
-            {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"}
+            {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+0000"}
         ]
 
         should_send = should_send_snapshot_warning_email(snap)
@@ -76,7 +76,7 @@ class TestShouldSendSnapshotWarning:
             @classmethod
             def now(cls, tz=None):
                 return datetime.datetime.strptime(
-                    "2026-01-22 01:00:00+00:00", DATE_FORMAT
+                    "2026-01-22 01:00:00+0000", DATE_FORMAT
                 )
 
         monkeypatch.setattr(
@@ -91,8 +91,8 @@ class TestShouldSendSnapshotWarning:
 
         snap = mock_snapshot()
         snap.tags = [
-            {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"},
-            {"Key": "last-snapshot-warning-date", "Value": "2026-01-21 01:00:00+00:00"},
+            {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+0000"},
+            {"Key": "last-snapshot-warning-date", "Value": "2026-01-21 01:00:00+0000"},
         ]
 
         should_send = should_send_snapshot_warning_email(snap)
@@ -103,7 +103,7 @@ class TestShouldSendSnapshotWarning:
             @classmethod
             def now(cls, tz=None):
                 return datetime.datetime.strptime(
-                    "2026-01-26 01:00:00+00:00", DATE_FORMAT
+                    "2026-01-26 01:00:00+0000", DATE_FORMAT
                 )
 
         monkeypatch.setattr(
@@ -118,8 +118,8 @@ class TestShouldSendSnapshotWarning:
 
         snap = mock_snapshot()
         snap.tags = [
-            {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"},
-            {"Key": "last-snapshot-warning-date", "Value": "2026-01-21 01:00:00+00:00"},
+            {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+0000"},
+            {"Key": "last-snapshot-warning-date", "Value": "2026-01-21 01:00:00+0000"},
         ]
 
         should_send = should_send_snapshot_warning_email(snap)
@@ -130,7 +130,7 @@ class TestShouldSendSnapshotWarning:
             @classmethod
             def now(cls, tz=None):
                 return datetime.datetime.strptime(
-                    "2026-01-29 01:00:00+00:00", DATE_FORMAT
+                    "2026-01-29 01:00:00+0000", DATE_FORMAT
                 )
 
         monkeypatch.setattr(
@@ -145,8 +145,8 @@ class TestShouldSendSnapshotWarning:
 
         snap = mock_snapshot()
         snap.tags = [
-            {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"},
-            {"Key": "last-snapshot-warning-date", "Value": "2026-01-21 01:00:00+00:00"},
+            {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+0000"},
+            {"Key": "last-snapshot-warning-date", "Value": "2026-01-21 01:00:00+0000"},
         ]
 
         should_send = should_send_snapshot_warning_email(snap)
@@ -157,7 +157,7 @@ class TestShouldSendSnapshotWarning:
             @classmethod
             def now(cls, tz=None):
                 return datetime.datetime.strptime(
-                    "2026-02-10 01:00:00+00:00", DATE_FORMAT
+                    "2026-02-10 01:00:00+0000", DATE_FORMAT
                 )
 
         monkeypatch.setattr(
@@ -172,8 +172,8 @@ class TestShouldSendSnapshotWarning:
 
         snap = mock_snapshot()
         snap.tags = [
-            {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+00:00"},
-            {"Key": "last-snapshot-warning-date", "Value": "2026-01-30 02:00:00+00:00"},
+            {"Key": "snapshot-delete-time", "Value": "2026-01-30 01:00:00+0000"},
+            {"Key": "last-snapshot-warning-date", "Value": "2026-01-30 02:00:00+0000"},
         ]
 
         should_send = should_send_snapshot_warning_email(snap)
@@ -189,7 +189,7 @@ class TestSendSnapshotWarning:
             @classmethod
             def now(cls, tz=None):
                 return datetime.datetime.strptime(
-                    "2026-01-10 01:00:00+00:00", DATE_FORMAT
+                    "2026-01-10 01:00:00+0000", DATE_FORMAT
                 )
 
         monkeypatch.setattr(
@@ -208,7 +208,7 @@ class TestSendSnapshotWarning:
                 Tags=[
                     {
                         "Key": "last-snapshot-warning-date",
-                        "Value": "2026-01-10 01:00:00+00:00",
+                        "Value": "2026-01-10 01:00:00+0000",
                     }
                 ]
             )

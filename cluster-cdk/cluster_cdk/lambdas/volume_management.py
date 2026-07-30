@@ -16,7 +16,7 @@ from opensarlab.auth import encryptedjwt
 
 CLAIM_TAG = "kubernetes.io/created-for/pvc/name"
 CLUSTER_TAG = "KubernetesCluster"
-DATE_FORMAT = "%Y-%m-%d %H:%M:%S+00:00"
+DATE_FORMAT = "%Y-%m-%d %H:%M:%S%z"
 REQUIRED_SNAPSHOT_TAGS = ("volume-delete-time", "snapshot-delete-time")
 
 CLUSTER_NAME = os.getenv("CLUSTER_NAME")
@@ -26,7 +26,7 @@ SNAPSHOT_WARNING_DAYS: list[int] = sorted(
     list({int(num) for num in os.getenv("SNAPSHOT_WARNING_DAYS", "5").split(",")}),
     reverse=True,
 )
-SNAPSHOT_EXPIRY_GRACEPERIOD = int(os.getenv("SNAPSHOT_EXPIRY_GRACEPERIOD", "1"))
+SNAPSHOT_GRACEPERIOD_DAYS = float(os.getenv("SNAPSHOT_GRACEPERIOD_DAYS", "1.0"))
 SNS_ALERT_TOPIC_ARN = os.getenv("ALERT_SNS_TOPIC_ARN")
 PORTAL_DOMAIN = os.getenv("PORTAL_DOMAINS", "").split(",")[0].strip()
 
@@ -279,7 +279,9 @@ def expiry_time(expiry):
     except Exception as E:
         logger.error("Could not convert %s to datatime: %s", expiry, E)
         # Return a time in future since the value is garbage
-        return datetime.datetime.now() + datetime.timedelta(days=100)
+        return datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+            days=100
+        )
 
 
 def is_delete_protected(item):
@@ -291,7 +293,7 @@ def is_delete_protected(item):
 
 def is_expired(item, grace_period_days=0):
     """Check if item is expired, with optional grace period"""
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(datetime.timezone.utc)
     tags = tags_to_dict(item.tags)
 
     expiry = None
@@ -309,6 +311,8 @@ def is_expired(item, grace_period_days=0):
 
     # Expire time is the marked expiry time, plus added grace period in days
     expire_time = expiry_time(expiry) + datetime.timedelta(days=grace_period_days)
+
+    logger.debug(f" - Now datetime: {now} Expiration datetime: {expire_time}")
 
     return now > expire_time
 
@@ -359,7 +363,9 @@ def send_snapshot_warning(snapshot, claim_user):
         Tags=[
             {
                 "Key": "last-snapshot-warning-date",
-                "Value": datetime.datetime.now().strftime(DATE_FORMAT),
+                "Value": datetime.datetime.now(datetime.timezone.utc).strftime(
+                    DATE_FORMAT
+                ),
             },
         ]
     )
@@ -371,8 +377,9 @@ def send_snapshot_delete(snapshot, claim_user):
     """Send email to the owner of a to-be-deleted snapshot"""
     tags = tags_to_dict(snapshot.tags)
 
-    # Make sure we haven't already warning
-    if tags.get("snapshot-warning-sent", "") == "true":
+    # Make sure we haven't already sent delete email
+    if tags.get("snapshot-delete-sent", "") == "true":
+        logger.info(" - Deletion email sent previously")
         return None
 
     # Create email
@@ -391,6 +398,7 @@ def send_snapshot_delete(snapshot, claim_user):
 
     # send email to portal
     send_email_to_portal(email_payload)
+    logger.info(" - Deletion email sent")
 
     # Add email tag
     snapshot.create_tags(
@@ -419,7 +427,9 @@ def should_send_snapshot_warning_email(snapshot):
     last_warning_date = datetime.datetime.strptime(
         tags.get(
             "last-snapshot-warning-date",
-            datetime.datetime.fromtimestamp(0).strftime(DATE_FORMAT),
+            datetime.datetime.fromtimestamp(0, datetime.timezone.utc).strftime(
+                DATE_FORMAT
+            ),
         ),
         DATE_FORMAT,
     )
@@ -431,14 +441,17 @@ def should_send_snapshot_warning_email(snapshot):
             next_warning_date = date
             break
 
-    logger.info(f" - All warning datetimes: {warning_dates}")
-    logger.info(f" - Last warning datetime: {last_warning_date}")
-    logger.info(f" - Next warning datetime: {next_warning_date}")
+    logger.debug(f" - All warning datetimes: {warning_dates}")
+    logger.debug(f" - Last warning datetime: {last_warning_date}")
+    logger.debug(f" - Next warning datetime: {next_warning_date}")
 
     # Send email if
     # * there is another email to be sent
     # * it is currently after when the next warning should be sent
-    if next_warning_date and datetime.datetime.now() > next_warning_date:
+    if (
+        next_warning_date
+        and datetime.datetime.now(datetime.timezone.utc) > next_warning_date
+    ):
         return True
     return False
 
@@ -541,11 +554,11 @@ def run_volume_management():
             logger.warning(" - Snapshot is missing tags!")
         elif is_delete_protected(snapshot):
             logger.info(" - Snapshot is Delete protected!")
-        elif is_expired(snapshot, grace_period_days=SNAPSHOT_EXPIRY_GRACEPERIOD):
-            logger.info(" - Snapshot is expired past grace period!")
+        elif is_expired(snapshot, grace_period_days=SNAPSHOT_GRACEPERIOD_DAYS):
+            logger.info(" - Deleting Snapshot")
             snapshot.delete()
         elif is_expired(snapshot):
-            logger.info(" - Snapshot is in expired grace period!")
+            logger.info(" - Snapshot is in grace period!")
             send_snapshot_delete(snapshot, claim_user)
         elif should_send_snapshot_warning_email(snapshot):
             logger.info(" - Sending a snapshot warning email!")

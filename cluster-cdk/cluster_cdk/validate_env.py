@@ -344,6 +344,7 @@ def validate_other_environment_variables() -> None:
         "LAB_SHORT_NAME",
         "PORTAL_DOMAINS",
         "SNAPSHOT_WARNING_DAYS",
+        "SNAPSHOT_GRACEPERIOD_DAYS",
         "UI_IAM_USER",
         "VOLUME_CRON_SCHEDULE",
     ]
@@ -455,6 +456,12 @@ def validate_other_environment_variables() -> None:
     assert [int(num) for num in snapshot_warning_days.split(",")], (
         "SNAPSHOT_WARNING_DAYS must be a list of integer values"
     )
+
+    print("Checking SNAPSHOT_GRACEPERIOD_DAYS ....")
+    snapshot_graceperiod_days = os.getenv("SNAPSHOT_GRACEPERIOD_DAYS")
+    if not snapshot_graceperiod_days:
+        raise Exception("SNAPSHOT_GRACEPERIOD_DAYS is not defined")
+    assert snapshot_graceperiod_days == "" or float(snapshot_graceperiod_days)
 
     print("Checking UI_IAM_USER ....")
     ui_iam_user = os.getenv("UI_IAM_USER", None)

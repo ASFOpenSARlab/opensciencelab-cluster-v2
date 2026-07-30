@@ -70,6 +70,10 @@ class ClusterCdkStack(Stack):
         # Default cron schedule to top of every hour
         self.VOLUME_CRON_SCHEDULE = os.environ["VOLUME_CRON_SCHEDULE"]
         self.SNAPSHOT_WARNING_DAYS = os.environ["SNAPSHOT_WARNING_DAYS"]
+        # Defaults SNAPSHOT_GRACEPERIOD_DAYS if provided value is empty string
+        self.SNAPSHOT_GRACEPERIOD_DAYS = (
+            os.environ["SNAPSHOT_GRACEPERIOD_DAYS"] or "1.0"
+        )
 
         self.LAB_SHORT_NAME = os.environ["LAB_SHORT_NAME"].lower()
 
@@ -962,6 +966,7 @@ class ClusterCdkStack(Stack):
                 "CLUSTER_NAME": self.cluster.cluster_name,
                 "LAB_SHORT_NAME": self.LAB_SHORT_NAME,
                 "SNAPSHOT_WARNING_DAYS": self.SNAPSHOT_WARNING_DAYS,
+                "SNAPSHOT_GRACEPERIOD_DAYS": self.SNAPSHOT_GRACEPERIOD_DAYS,
                 "PORTAL_DOMAINS": self.PORTAL_DOMAINS,
                 "SSO_SECRET_ARN": self.sso_token.secret_arn,
                 "ALERT_SNS_TOPIC_ARN": self.alert_sns_topic.topic_arn,

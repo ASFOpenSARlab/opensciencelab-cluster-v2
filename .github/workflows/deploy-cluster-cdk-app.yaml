@@ -50,6 +50,7 @@ jobs:
       LAB_SHORT_NAME: ${{ inputs.envOverride || needs.setup.outputs.environment }}
       VOLUME_CRON_SCHEDULE: ${{ vars.VOLUME_CRON_SCHEDULE }}
       SNAPSHOT_WARNING_DAYS: ${{ vars.SNAPSHOT_WARNING_DAYS }}
+      SNAPSHOT_GRACEPERIOD_DAYS: ${{ vars.SNAPSHOT_GRACEPERIOD_DAYS }}
       DAYS_TILL_SNAPSHOT_DELETION: ${{ vars.DAYS_TILL_SNAPSHOT_DELETION }}
       DAYS_TILL_VOLUME_DELETION: ${{ vars.DAYS_TILL_VOLUME_DELETION }}
       AZ_LETTER: ${{ vars.AZ_LETTER }}

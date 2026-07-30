@@ -140,6 +140,7 @@ export PORTAL_DOMAINS="<CLOUDFRONT-URL>"       # Comma seperated list of approve
 
 export VOLUME_CRON_SCHEDULE="0 * * * ? *"      # Schedule to run the volume management lambda
 export SNAPSHOT_WARNING_DAYS="5,3,1"           # Number of days before delete to warn for old snapshots
+export SNAPSHOT_GRACEPERIOD_DAYS=1           # Number of days to retain snapshot past deletion time
 
 # Volume and snapshot lifecycle times
 export DAYS_TILL_VOLUME_DELETION=2             # Number of days after server stop when the user's volume will be deleted
