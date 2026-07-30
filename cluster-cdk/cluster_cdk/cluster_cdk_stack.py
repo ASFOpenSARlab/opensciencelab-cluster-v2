@@ -1354,9 +1354,9 @@ class ClusterCdkStack(Stack):
             metrics=[
                 monitoring.CustomMetricWithAlarm(
                     metric=cryptnono_metric_filter.metric(
-                        statistic="Average",
+                        statistic="Sum",
                         period=Duration.minutes(1),
-                        label=f"Average Cryptnono Kill Event for {cluster_name}",
+                        label=f"Count Cryptnono Kill Event for {cluster_name}",
                     ),
                     alarm_friendly_name="KillEventCountAlarm",
                     add_alarm={
