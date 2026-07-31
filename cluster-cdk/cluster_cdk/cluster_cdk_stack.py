@@ -1306,11 +1306,26 @@ class ClusterCdkStack(Stack):
         #
         #####################################################################
 
-        # Check the existing jupyter log group
+        jupyter_application_log_group_name = (
+            f"/aws/containerinsights/{cluster_name}/application"
+        )
+
+        # Cryptnono notifications are looking within the jupyter applications log group
+        # Since there is no guarantee that the log group will exist when cryptnono is deployed, we can create the log group if it doesn't exist.
+        # If it already exists, it will gracefully apply the removal and retention (never delete) policies without crashing.
+        logs.LogRetention(
+            self,
+            "CryptnonoJupyterHubAppSafeLogGroup",
+            log_group_name=jupyter_application_log_group_name,
+            retention=logs.RetentionDays.INFINITE,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+
+        # Check the existing jupyter log group (created as needed from the previous action)
         cryptnono_log_group = logs.LogGroup.from_log_group_name(
             self,
             "CryptnonoJupyterHubAppLogs",
-            f"/aws/containerinsights/{cluster_name}/application",
+            jupyter_application_log_group_name,
         )
 
         # Create the messaging topic
