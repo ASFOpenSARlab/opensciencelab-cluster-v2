@@ -4,6 +4,7 @@ import pathlib
 from string import Template
 import json
 import re
+import hashlib
 
 import requests
 
@@ -17,7 +18,6 @@ from aws_cdk import (  # type: ignore
     Tags,
     RemovalPolicy,
     Duration,
-    Names,
     Stack,
     SecretValue,
     aws_s3 as s3,
@@ -1201,26 +1201,18 @@ class ClusterCdkStack(Stack):
                 },
             )
 
-            # This will create an unique 8-character hash (e.g. "mystackmyconstructa1b2c3d4") that will not change once setup
-            # The empty Construct child is needed to force a hash to be made. Root constructs don't get a hash.
-            # The hash is determined by the contruct ids and the replationship of the child construct path to the root construct.
-            # If the paths and construct ids don't change, then the unique id should remain unique but stationary on builds (a requirement for s3 buckets).
-            unique_id = Names.unique_resource_name(
-                Construct(self, f"-{self.AZ_LETTER}"),
-                max_length=31,
-                separator="-",
-                allowed_special_characters="-",
-            ).lower()
+            # Create unique id from account id and region. This only works because those vars are set within the cdk app constructor.
+            full_hash = hashlib.sha256(
+                f"{self.account}-{self.region}-{self.LAB_SHORT_NAME}".encode("utf-8")
+            ).hexdigest()
+            unique_id = full_hash[0:8].lower()
 
             # Make sure the bucket name satifies constraints. Specifically,
             # 1. The name can't be more than 63 characters long
             # 2. The name cannot end in "-" or "_"
             self.execwhacker_bucket_name = (
-                f"cryptnono-execwhacker-configs-{self.region}-{unique_id}"
+                f"cryptnono-configs-{self.LAB_SHORT_NAME}-{unique_id}"
             )
-            # S3 buckets cannot end on "_" or "-". On the chance that it does before, remove the end character.
-            if self.execwhacker_bucket_name.endswith(("_", "-")):
-                self.execwhacker_bucket_name = self.execwhacker_bucket_name[:-1]
 
             # Bucket that contains configmap files used by cryptnono
             execwhacker_bucket = s3.Bucket(
