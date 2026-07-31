@@ -50,7 +50,7 @@ IS_PROD ?= false
 UI_IAM_USER := $(UI_IAM_USER)
 
 # Extra env var for running volume management lambda
-CLUSTER_NAME ?= eks-cluster-$(DEPLOY_PREFIX)
+CLUSTER_NAME ?= $(LAB_SHORT_NAME)
 
 
 .PHONY := all
@@ -95,9 +95,9 @@ cdk-shell:
 		-e AWS_DEFAULT_ACCOUNT \
 		-e NODE_DEFINITIONS \
 		-e PROFILE_DEFINITIONS \
-		-e DEPLOY_PREFIX \
 		-e JUPYTER_HUB_IMAGE_PATH \
 		-e JUPYTER_HUB_IMAGE_TAG \
+		-e CRYPTNONO_ALERT_EMAIL \
 		-e EXECWHACKER_CRON_IMAGE_PATH \
 		-e EXECWHACKER_CRON_IMAGE_TAG \
 		-e IS_CRYPTNONO_ENABLED \
@@ -173,7 +173,7 @@ run-volume-lambda: bundle-deps
 
 .PHONY := test
 test: remove-cdk-out validate-env install-reqs bundle-deps
-	@echo "Running tests for Cluster (${DEPLOY_PREFIX})"
+	@echo "Running tests for Cluster (${LAB_SHORT_NAME})"
 
 .PHONY := validate-env
 validate-env:
@@ -182,17 +182,17 @@ validate-env:
 
 .PHONY := synth-cluster
 synth-cluster: validate-env install-reqs bundle-deps
-	@echo "Synthesizing ${DEPLOY_PREFIX}/cluster-cdk"
+	@echo "Synthesizing ${LAB_SHORT_NAME}/cluster-cdk"
 	cd ./cluster-cdk && cdk synth
 
 .PHONY := deploy-cluster
 deploy-cluster: validate-env install-reqs bundle-deps
-	@echo "Deploying ${DEPLOY_PREFIX}/cluster-cdk"
+	@echo "Deploying ${LAB_SHORT_NAME}/cluster-cdk"
 	cd ./cluster-cdk && cdk --require-approval never deploy
 
 .PHONY := destroy-cluster
-destroy-cluster: install-reqs
-	@echo "Destroying ${DEPLOY_PREFIX}/cluster-cdk"
+destroy-cluster:
+	@echo "Destroying ${LAB_SHORT_NAME}/cluster-cdk"
 	cd ./cluster-cdk && cdk destroy --force --all
 
 .PHONY := remove-cdk-out
@@ -206,12 +206,12 @@ clean:
 
 .PHONY := synth-oidc
 synth-oidc:
-	@echo "Synthesizing ${DEPLOY_PREFIX}/oidc-cdk"
+	@echo "Synthesizing ${LAB_SHORT_NAME}/oidc-cdk"
 	cd ./oidc-cdk && cdk synth
 
 .PHONY := deploy-oidc
 deploy-oidc:
-	@echo "Deploying ${DEPLOY_PREFIX}/oidc-cdk"
+	@echo "Deploying ${LAB_SHORT_NAME}/oidc-cdk"
 	cd ./oidc-cdk && cdk --require-approval never deploy
 
 .PHONY := aws-info

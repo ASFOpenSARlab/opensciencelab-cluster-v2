@@ -125,7 +125,7 @@ nano .env
 ```bash
 # Required make variables
 export AWS_DEFAULT_PROFILE=me                  # The profile configured to access AWS Account
-export DEPLOY_PREFIX=dd                        # Short deployment prefix value, should be the same a LAB_SHORT_NAME
+export LAB_SHORT_NAME="dd"                     # Short deployment prefix value
 
 # Infrastructure Configuration
 export JUPYTER_HUB_IMAGE_PATH="ghcr.io/asfopensarlab/opensciencelab-jupyterhub"  # Needs to exist for opensciencelab-jupyterhub image
@@ -134,7 +134,6 @@ export EXECWHACKER_CRON_IMAGE_PATH="ghcr.io/asfopensarlab/opensciencelab-update-
 export EXECWHACKER_CRON_IMAGE_TAG="test"       # Needs to exist for opensciencelab-update-execwhacker image
 export IS_CRYPTNONO_ENABLED="true"             # Is cryptnono deployed within the cluster?
 export UI_IAM_USER="AWSReservedSSO_Project.."  # IAM Role used by admins in the AWS console
-export LAB_SHORT_NAME="dd"                     # Short deployment prefix value
 export ADMIN_USERS="nobody"                    # Comma seperated list of users to embed into JH
 export PORTAL_DOMAINS="<CLOUDFRONT-URL>"       # Comma seperated list of approved portal domains
 
