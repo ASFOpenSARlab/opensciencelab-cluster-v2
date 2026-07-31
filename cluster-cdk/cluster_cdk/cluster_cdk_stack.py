@@ -4,7 +4,6 @@ import pathlib
 from string import Template
 import json
 import re
-import hashlib
 
 import requests
 
