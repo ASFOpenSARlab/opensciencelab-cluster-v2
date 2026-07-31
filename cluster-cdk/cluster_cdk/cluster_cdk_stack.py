@@ -99,17 +99,6 @@ class ClusterCdkStack(Stack):
 
         self.kubectl_layer = lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl")
 
-        # This will create an unique 8-character hash (e.g. "mystackmyconstructa1b2c3d4") that will not change once setup
-        # The empty Construct child is needed to force a hash to be made. Root constructs don't get a hash.
-        # The hash is determined by the contruct ids and the replationship of the child construct path to the root construct.
-        # If the paths and construct ids don't change, then the unique id should remain unique but stationary on builds (a requirement for s3 buckets).
-        unique_id = Names.unique_resource_name(
-            Construct(self, f"-{self.AZ_LETTER}"),
-            max_length=31,
-            separator="-",
-            allowed_special_characters="-",
-        ).lower()
-
         ########
         #
         #  Parameters related to cryptnono
@@ -128,16 +117,6 @@ class ClusterCdkStack(Stack):
             and self.EXECWHACKER_CRON_IMAGE_TAG
             and True
         )
-
-        if self.IS_CRYPTNONO_ENABLED:
-            # Make sure the bucket name satifies constraints. Specifically,
-            # 1. The name can't be more than 63 characters long
-            # 2. The name cannot end in "-" or "_"
-            self.execwhacker_bucket_name = (
-                f"cryptnono-execwhacker-configs-{self.region}-{unique_id}"
-            )
-            if self.execwhacker_bucket_name.endswith(("_", "-")):
-                self.execwhacker_bucket_name = self.execwhacker_bucket_name[:-1]
 
         # See what vars are defined within this context
         print("vars within CDK...")
@@ -1217,6 +1196,27 @@ class ClusterCdkStack(Stack):
                 },
             )
 
+            # This will create an unique 8-character hash (e.g. "mystackmyconstructa1b2c3d4") that will not change once setup
+            # The empty Construct child is needed to force a hash to be made. Root constructs don't get a hash.
+            # The hash is determined by the contruct ids and the replationship of the child construct path to the root construct.
+            # If the paths and construct ids don't change, then the unique id should remain unique but stationary on builds (a requirement for s3 buckets).
+            unique_id = Names.unique_resource_name(
+                Construct(self, f"-{self.AZ_LETTER}"),
+                max_length=31,
+                separator="-",
+                allowed_special_characters="-",
+            ).lower()
+
+            # Make sure the bucket name satifies constraints. Specifically,
+            # 1. The name can't be more than 63 characters long
+            # 2. The name cannot end in "-" or "_"
+            self.execwhacker_bucket_name = (
+                f"cryptnono-execwhacker-configs-{self.region}-{unique_id}"
+            )
+            # S3 buckets cannot end on "_" or "-". On the chance that it does before, remove the end character.
+            if self.execwhacker_bucket_name.endswith(("_", "-")):
+                self.execwhacker_bucket_name = self.execwhacker_bucket_name[:-1]
+
             # Bucket that contains configmap files used by cryptnono
             execwhacker_bucket = s3.Bucket(
                 self,
@@ -1431,6 +1431,8 @@ class ClusterCdkStack(Stack):
             dashboard_name=f"{cluster_name}-CryptnonoKillEventSQLQuery",
         )
 
+        self.sql_dashboard_url = f"https://{self.region}.console.aws.amazon.com/cloudwatch/home?region={self.region}#dashboards:name={sql_dashboard.dashboard_name}"
+
         # Define your SQL-based Log Insights Widget
         sql_widget = cloudwatch.LogQueryWidget(
             title="Cryptnono Kill Event SQL Query",
@@ -1518,6 +1520,13 @@ class ClusterCdkStack(Stack):
                 "Cryptnono Config Bucket Name",
                 value=self.execwhacker_bucket_name,
                 description="Configs for the Cryptnono Execwhacker",
+            )
+
+            CfnOutput(
+                self,
+                "Cryptnono SQL Dashboard",
+                value=self.sql_dashboard_url,
+                description="Insights SQL query on Cryptnono events",
             )
 
     def _add_policy_from_file(self, the_role: iam.Role, file_name: str) -> None:
