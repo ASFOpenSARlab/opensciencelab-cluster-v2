@@ -1201,30 +1201,26 @@ class ClusterCdkStack(Stack):
                 },
             )
 
-            # Create unique id from account id and region. This only works because those vars are set within the cdk app constructor.
-            full_hash = hashlib.sha256(
-                f"{self.account}-{self.region}-{self.LAB_SHORT_NAME}".encode("utf-8")
-            ).hexdigest()
-            unique_id = full_hash[0:8].lower()
-
-            # Make sure the bucket name satifies constraints. Specifically,
-            # 1. The name can't be more than 63 characters long
-            # 2. The name cannot end in "-" or "_"
-            self.execwhacker_bucket_name = (
-                f"cryptnono-configs-{self.LAB_SHORT_NAME}-{unique_id}"
-            )
-
+            # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_s3/Bucket.html
             # Bucket that contains configmap files used by cryptnono
+            # Bucket prefix name cannot be more than 38 characters long
+            bucket_name_prefix = f"cryptnono-configs-{self.LAB_SHORT_NAME}"[
+                0:38
+            ].lower()
+
             execwhacker_bucket = s3.Bucket(
                 self,
                 "ExecwhackerConfigsBucket",
-                bucket_name=self.execwhacker_bucket_name,
+                bucket_name_prefix=bucket_name_prefix,
+                bucket_namespace=s3.BucketNamespace.ACCOUNT_REGIONAL,
                 versioned=True,
                 block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
                 object_ownership=s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
                 removal_policy=RemovalPolicy.DESTROY,
                 auto_delete_objects=True,
             )
+
+            self.execwhacker_bucket_name = execwhacker_bucket.bucket_name
 
             execwhacker_cron_schedule = "*/10 * * * *"  # Runs every 10 minutes
             execwhacker_args = f'python3 /app/update_execwhacker_config.py --aws-region={self.region} --config-bucket-name="{execwhacker_bucket.bucket_name}"'
