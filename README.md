@@ -18,6 +18,8 @@ a CDK + Actions pipeline.
 
 ![Architecture Diagram](docs/OSL%20Cluster%20v2%20Arch%20Diagram.svg)
 
+You can read more about the architecture of OpenScienceLab-Cluster-V2 [here](ARCHITECTURE.md).
+
 ## Deployments
 
 ### AWS Accounts
