@@ -7,6 +7,9 @@ import re
 
 import requests
 
+# Import the monitoring library constructs
+import cdk_monitoring_constructs as monitoring  # type: ignore
+
 from aws_cdk import (  # type: ignore
     CfnTag,
     CfnOutput,
@@ -17,15 +20,18 @@ from aws_cdk import (  # type: ignore
     Stack,
     SecretValue,
     aws_s3 as s3,
+    aws_cloudwatch as cloudwatch,
     aws_eks_v2 as eks,
     aws_ec2 as ec2,
     aws_dlm as dlm,
     aws_iam as iam,
     aws_lambda as lambda_,
+    aws_logs as logs,
     aws_secretsmanager as secretsmanager,
     aws_events as events,
     aws_events_targets as targets,
     aws_sns as sns,
+    aws_sns_subscriptions as sns_subs,
     lambda_layer_kubectl_v34,
     lambda_layer_awscli,
 )
@@ -43,27 +49,16 @@ class ClusterCdkStack(Stack):
         #
         #####################################################################
 
+        self.LAB_SHORT_NAME = os.environ["LAB_SHORT_NAME"]
+        cluster_name = os.environ["LAB_SHORT_NAME"]
+
         self.HOME_DIR = pathlib.Path(__file__).absolute().parent
 
         # CDK provides the AWS Account number via self.account # "233535791844"
         # CDK provides the AWS Region va self.region
 
-        self.DEPLOY_PREFIX = os.environ["DEPLOY_PREFIX"].lower()
-
         self.JUPYTER_HUB_IMAGE_PATH = os.environ["JUPYTER_HUB_IMAGE_PATH"]
         self.JUPYTER_HUB_IMAGE_TAG = os.environ["JUPYTER_HUB_IMAGE_TAG"]
-
-        self.EXECWHACKER_CRON_IMAGE_PATH = os.getenv(
-            "EXECWHACKER_CRON_IMAGE_PATH", None
-        )
-        self.EXECWHACKER_CRON_IMAGE_TAG = os.getenv("EXECWHACKER_CRON_IMAGE_TAG", None)
-
-        # Be somewhat aggressive in only enabling cryptnono if explicitly "true" and EXECWAHCKER path and tag are defined
-        self.IS_CRYPTNONO_ENABLED = (
-            os.getenv("IS_CRYPTNONO_ENABLED", "false").strip().lower() == "true"
-            and self.EXECWHACKER_CRON_IMAGE_PATH
-            and self.EXECWHACKER_CRON_IMAGE_TAG
-        )
 
         self.UI_IAM_USER = os.environ["UI_IAM_USER"]
 
@@ -74,8 +69,6 @@ class ClusterCdkStack(Stack):
         self.SNAPSHOT_GRACEPERIOD_DAYS = (
             os.environ["SNAPSHOT_GRACEPERIOD_DAYS"] or "1.0"
         )
-
-        self.LAB_SHORT_NAME = os.environ["LAB_SHORT_NAME"].lower()
 
         self.ADMIN_USERS = [
             username.strip() for username in os.environ["ADMIN_USERS"].split(",")
@@ -109,6 +102,26 @@ class ClusterCdkStack(Stack):
 
         self.kubectl_layer = lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl")
 
+        ########
+        #
+        #  Parameters related to cryptnono
+        #
+        ########
+        self.CRYPTNONO_ALERT_EMAIL = os.getenv("CRYPTNONO_ALERT_EMAIL", None)
+        self.EXECWHACKER_CRON_IMAGE_PATH = os.getenv(
+            "EXECWHACKER_CRON_IMAGE_PATH", None
+        )
+        self.EXECWHACKER_CRON_IMAGE_TAG = os.getenv("EXECWHACKER_CRON_IMAGE_TAG", None)
+
+        # Be somewhat aggressive in only enabling cryptnono if explicitly "true" and EXECWAHCKER path and tag are defined
+        self.IS_CRYPTNONO_ENABLED = (
+            os.getenv("IS_CRYPTNONO_ENABLED", "false").strip().lower() == "true"
+            and self.EXECWHACKER_CRON_IMAGE_PATH
+            and self.EXECWHACKER_CRON_IMAGE_TAG
+            and True
+        )
+
+        # See what vars are defined within this context
         print("vars within CDK...")
         for k, v in vars(self).items():
             print(k, v)
@@ -153,7 +166,7 @@ class ClusterCdkStack(Stack):
             self,
             "EksCluster",
             vpc=self.vpc,
-            cluster_name=f"eks-cluster-{self.LAB_SHORT_NAME}",
+            cluster_name=cluster_name,
             version=eks.KubernetesVersion.V1_34,
             kubectl_provider_options=eks.KubectlProviderOptions(
                 kubectl_layer=self.kubectl_layer,
@@ -550,7 +563,7 @@ class ClusterCdkStack(Stack):
             values={
                 "controller": {
                     "extraCreateMetadata": True,
-                    "k8sTagClusterId": self.cluster.cluster_name,
+                    "k8sTagClusterId": cluster_name,
                     "extraVolumeTags": {
                         "osl-billing": self.LAB_SHORT_NAME,
                     },
@@ -762,7 +775,7 @@ class ClusterCdkStack(Stack):
                     "LAB_PROFILES": json.dumps(self.lab_profiles),
                     "DAYS_TILL_VOLUME_DELETION": self.DAYS_TILL_VOLUME_DELETION,
                     "DAYS_TILL_SNAPSHOT_DELETION": self.DAYS_TILL_SNAPSHOT_DELETION,
-                    "CLUSTER_NAME": self.cluster.cluster_name,
+                    "CLUSTER_NAME": cluster_name,
                     "AZ_NAME": f"{self.region}{self.AZ_LETTER}",
                     "COST_TAG_KEY": "osl-billing",
                     "COST_TAG_VALUE": self.LAB_SHORT_NAME,
@@ -862,7 +875,7 @@ class ClusterCdkStack(Stack):
             timeout=Duration.minutes(10),
             version=self.load_balancer_controller_version,
             values={
-                "clusterName": self.cluster.cluster_name,
+                "clusterName": cluster_name,
                 "serviceAccount": {
                     "create": False,
                     "name": alb_sa.service_account_name,
@@ -940,9 +953,9 @@ class ClusterCdkStack(Stack):
 
         self.alert_sns_topic = sns.Topic(
             self,
-            f"{self.DEPLOY_PREFIX} Cluster Alerts",
-            display_name=f"{self.DEPLOY_PREFIX} Cluster Alerts",
-            topic_name=f"{self.DEPLOY_PREFIX}-cluster-alerts-sns",
+            f"{self.LAB_SHORT_NAME} Cluster Alerts",
+            display_name=f"{self.LAB_SHORT_NAME} Cluster Alerts",
+            topic_name=f"{self.LAB_SHORT_NAME}-cluster-alerts-sns",
         )
 
         #####################################################################
@@ -953,8 +966,8 @@ class ClusterCdkStack(Stack):
 
         self.volume_management_lambda = lambda_.Function(
             self,
-            description=f"{self.DEPLOY_PREFIX} Volume Management Lambda",
-            id=f"{self.DEPLOY_PREFIX}_volume_management",
+            description=f"{self.LAB_SHORT_NAME} Volume Management Lambda",
+            id=f"{self.LAB_SHORT_NAME}_volume_management",
             runtime=lambda_.Runtime.PYTHON_3_13,
             memory_size=1769,
             timeout=Duration.minutes(15),
@@ -963,7 +976,7 @@ class ClusterCdkStack(Stack):
                 path="cluster_cdk/lambdas/",
             ),
             environment={
-                "CLUSTER_NAME": self.cluster.cluster_name,
+                "CLUSTER_NAME": cluster_name,
                 "LAB_SHORT_NAME": self.LAB_SHORT_NAME,
                 "SNAPSHOT_WARNING_DAYS": self.SNAPSHOT_WARNING_DAYS,
                 "SNAPSHOT_GRACEPERIOD_DAYS": self.SNAPSHOT_GRACEPERIOD_DAYS,
@@ -1030,7 +1043,7 @@ class ClusterCdkStack(Stack):
 
         self.cron_schedule_rule = events.Rule(
             self,
-            id=f"{self.DEPLOY_PREFIX}_volume_management_rule",
+            id=f"{self.LAB_SHORT_NAME}_volume_management_rule",
             schedule=events.Schedule.expression(f"cron({self.VOLUME_CRON_SCHEDULE})"),
             description="Triggers Volume Management Lambda",
         )
@@ -1042,7 +1055,7 @@ class ClusterCdkStack(Stack):
         # DLM configuration to create daily volume snapshots
         self.dlm_role = iam.Role(
             self,
-            id=f"{self.DEPLOY_PREFIX}_dlm_service_role",
+            id=f"{self.LAB_SHORT_NAME}_dlm_service_role",
             assumed_by=iam.ServicePrincipal("dlm.amazonaws.com"),
         )
 
@@ -1056,7 +1069,7 @@ class ClusterCdkStack(Stack):
         # Create DLM Policy - https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_dlm.html
         self.ebs_lifecycle_policy = dlm.CfnLifecyclePolicy(
             self,
-            id=f"{self.DEPLOY_PREFIX}_daily_snapshot",
+            id=f"{self.LAB_SHORT_NAME}_daily_snapshot",
             description="Daily backup policy for EBS volumes",
             execution_role_arn=self.dlm_role.role_arn,
             state="ENABLED",
@@ -1064,7 +1077,7 @@ class ClusterCdkStack(Stack):
                 resource_types=["VOLUME"],
                 # Target volumes from this cluster only
                 target_tags=[
-                    CfnTag(key="KubernetesCluster", value=self.cluster.cluster_name),
+                    CfnTag(key="KubernetesCluster", value=cluster_name),
                 ],
                 schedules=[
                     dlm.CfnLifecyclePolicy.ScheduleProperty(
@@ -1072,7 +1085,7 @@ class ClusterCdkStack(Stack):
                         tags_to_add=[
                             CfnTag(
                                 key="CreatedBy",
-                                value=f"{self.DEPLOY_PREFIX}_daily_snapshot",
+                                value=f"{self.LAB_SHORT_NAME}_daily_snapshot",
                             ),
                         ],
                         create_rule=dlm.CfnLifecyclePolicy.CreateRuleProperty(
@@ -1187,17 +1200,26 @@ class ClusterCdkStack(Stack):
                 },
             )
 
+            # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_s3/Bucket.html
             # Bucket that contains configmap files used by cryptnono
+            # Bucket prefix name cannot be more than 38 characters long
+            bucket_name_prefix = f"cryptnono-configs-{self.LAB_SHORT_NAME}"[
+                0:38
+            ].lower()
+
             execwhacker_bucket = s3.Bucket(
                 self,
                 "ExecwhackerConfigsBucket",
-                bucket_name=f"cryptnono-execwhacker-configs-{self.region}-{self.cluster.cluster_name}-{self.LAB_SHORT_NAME}",
-                versioned=False,
+                bucket_name_prefix=bucket_name_prefix,
+                bucket_namespace=s3.BucketNamespace.ACCOUNT_REGIONAL,
+                versioned=True,
                 block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
                 object_ownership=s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
                 removal_policy=RemovalPolicy.DESTROY,
                 auto_delete_objects=True,
             )
+
+            self.execwhacker_bucket_name = execwhacker_bucket.bucket_name
 
             execwhacker_cron_schedule = "*/10 * * * *"  # Runs every 10 minutes
             execwhacker_args = f'python3 /app/update_execwhacker_config.py --aws-region={self.region} --config-bucket-name="{execwhacker_bucket.bucket_name}"'
@@ -1277,6 +1299,165 @@ class ClusterCdkStack(Stack):
 
         #####################################################################
         #
+        #    Cryptnono CloudWatch Notifications
+        #
+        #    When cloudwatch receive logs matching `log_processed.action = "killed"` and `kubernetes.container_name = "execwhacker"` an alarm will be triggered.
+        #    This alarm will show up on the cloudwatch dashboard and will also trigger a SNS topic. Attached to this topic is an email.
+        #
+        #####################################################################
+
+        jupyter_application_log_group_name = (
+            f"/aws/containerinsights/{cluster_name}/application"
+        )
+
+        # Cryptnono notifications are looking within the jupyter applications log group
+        # Since there is no guarantee that the log group will exist when cryptnono is deployed, we can create the log group if it doesn't exist.
+        # If it already exists, it will gracefully apply the removal and retention (never delete) policies without crashing.
+        logs.LogRetention(
+            self,
+            "CryptnonoJupyterHubAppSafeLogGroup",
+            log_group_name=jupyter_application_log_group_name,
+            retention=logs.RetentionDays.INFINITE,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+
+        # Check the existing jupyter log group (created as needed from the previous action)
+        cryptnono_log_group = logs.LogGroup.from_log_group_name(
+            self,
+            "CryptnonoJupyterHubAppLogs",
+            jupyter_application_log_group_name,
+        )
+
+        # Create the messaging topic
+        # Note that any changes in the display name must be accompied by a change in the topic anme. For some reason, changing only one is disliked.
+        cryptnono_email_topic = sns.Topic(
+            self,
+            "CryptnonoKillEventAlertTopic",
+            display_name=f"{cluster_name} - Cryptnono Kill Event Alert",
+            topic_name=f"{cluster_name}-cryptnono-alert-sns",
+        )
+
+        # Subscribe your inbox (AWS will send a confirmation email you must click)
+        cryptnono_email_topic.add_subscription(
+            sns_subs.EmailSubscription(self.CRYPTNONO_ALERT_EMAIL)
+        )
+
+        # Scan for a specific text fragment within the log group. If found, count as one event
+        cryptnono_metric_filter = logs.MetricFilter(
+            self,
+            "CryptnonoTextMatcherFilter",
+            log_group=cryptnono_log_group,
+            metric_namespace=f"{cluster_name}-Cryptnono",
+            metric_name="Cryptnono Kill Event Count",
+            filter_pattern=logs.FilterPattern.literal(
+                '{ ( $.log_processed.action = "killed" && $.kubernetes.container_name = "execwhacker" ) }'
+            ),
+            metric_value="1",  # Increment by 1 for every single match
+            unit=cloudwatch.Unit.COUNT,
+        )
+
+        log_metric_group = monitoring.CustomMetricGroup(
+            title="CryptnonoKillEventCount",
+            metrics=[
+                monitoring.CustomMetricWithAlarm(
+                    metric=cryptnono_metric_filter.metric(
+                        statistic="Sum",
+                        period=Duration.minutes(1),
+                        label=f"Count Cryptnono Kill Event for {cluster_name}",
+                    ),
+                    alarm_friendly_name="KillEventCountAlarm",
+                    add_alarm={
+                        "Critical": monitoring.CustomThreshold(
+                            threshold=1,
+                            evaluation_periods=1,
+                            datapoints_to_alarm=1,
+                            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+                            alarm_name_override=f"{cluster_name} - Cryptnono Kill Event Match",
+                            alarm_description_override="Discovered cryptnono matching patterns inside application logs",
+                        )
+                    },
+                )
+            ],
+        )
+
+        # The monitoring facade is a framework for CloudWatch dashboards, alerts, and other actions
+        # https://github.com/cdklabs/cdk-monitoring-constructs
+        # Bind your SNS topic as the global fallback action strategy to the monitoring facade
+        cryptnono_facade = monitoring.MonitoringFacade(
+            self,
+            f"{cluster_name}-CryptnonoKillEventMonitoring",
+            alarm_factory_defaults=monitoring.AlarmFactoryDefaults(
+                actions_enabled=True,
+                alarm_name_prefix=f"{cluster_name}-CryptnonoLogs",
+                action=monitoring.SnsAlarmActionStrategy(
+                    on_alarm_topic=cryptnono_email_topic
+                ),
+            ),
+        )
+
+        # Pass the metric filter data directly to the dashboard framework
+        cryptnono_facade.monitor_custom(
+            metric_groups=[log_metric_group],
+            alarm_friendly_name=f"{cluster_name} - KillEventCountGroup",
+            human_readable_name=f"{cluster_name} - Cryptnono Kill Event",
+        )
+
+        #####################################################################
+        #
+        #   A cloudwatch insights SQL query that will match a cryptnono event with an username.
+        #
+        #   There is an assumption that any user nodes have one jupyter user pod and one cryptnono sidecar pod.
+        #
+        #####################################################################
+
+        cw_log_group = "/aws/containerinsights/eml/application"
+
+        crytnono_query = f"""
+            SELECT DISTINCT
+                sidecar.`@timestamp`,
+                sidecar.`log_processed.cmdline` as command,
+                sidecar.`log_processed.matched` as matched,
+                sidecar.`kubernetes.pod_name` as pod_name_sidecar,
+                user_.`kubernetes.pod_name` as pod_name_user,
+                sidecar.`kubernetes.host` as host,
+                sidecar.`@message`
+            FROM `{cw_log_group}` as sidecar
+            INNER JOIN `{cw_log_group}` as user_
+                ON sidecar.`kubernetes.host` = user_.`kubernetes.host`
+            WHERE sidecar.`@message` like '%killed%'
+                AND user_.`kubernetes.pod_name` like 'jupyter-%'
+                AND CAST(sidecar.`@timestamp` as int) BETWEEN CAST(user_.`@timestamp` as int)-10 AND CAST(user_.`@timestamp` as int)+10
+            ORDER BY sidecar.`@timestamp` DESC
+            LIMIT 1000;
+        """
+
+        # Create a CloudWatch Dashboard
+        sql_dashboard = cloudwatch.Dashboard(
+            self,
+            "CryptnonoSQLDashboard",
+            dashboard_name=f"{cluster_name}-CryptnonoKillEventSQLQuery",
+        )
+
+        self.sql_dashboard_url = f"https://{self.region}.console.aws.amazon.com/cloudwatch/home?region={self.region}#dashboards:name={sql_dashboard.dashboard_name}"
+
+        # Define your SQL-based Log Insights Widget
+        sql_widget = cloudwatch.LogQueryWidget(
+            title="Cryptnono Kill Event SQL Query",
+            log_group_names=[cw_log_group],
+            view=cloudwatch.LogQueryVisualizationType.TABLE,
+            # Set the query language mode to SQL
+            query_language=cloudwatch.LogQueryLanguage.SQL,
+            # Pass your raw SQL query string
+            query_string=crytnono_query,
+            width=24,
+            height=6,
+        )
+
+        # Attach the widget to the dashboard layout
+        sql_dashboard.add_widgets(sql_widget)
+
+        #####################################################################
+        #
         #    Setup EC2 Autoscaler
         #
         #    Autoscale down unused EC2s
@@ -1287,7 +1468,7 @@ class ClusterCdkStack(Stack):
 
         # Note that other args are added via ASG tags
         autoscaler_helm_chart_values = {
-            "autoDiscovery": {"clusterName": self.cluster.cluster_name},
+            "autoDiscovery": {"clusterName": cluster_name},
             "awsRegion": self.region,
             "nodeSelector": {"hub.jupyter.org/node-purpose": "core"},
             "cloudProvider": "aws",
@@ -1339,6 +1520,21 @@ class ClusterCdkStack(Stack):
             value=self.jupyterhub_helm_version,
             description="The version of the JupyterHub Helm Chart version",
         )
+
+        if self.IS_CRYPTNONO_ENABLED:
+            CfnOutput(
+                self,
+                "Cryptnono Config Bucket Name",
+                value=self.execwhacker_bucket_name,
+                description="Configs for the Cryptnono Execwhacker",
+            )
+
+            CfnOutput(
+                self,
+                "Cryptnono SQL Dashboard",
+                value=self.sql_dashboard_url,
+                description="Insights SQL query on Cryptnono events",
+            )
 
     def _add_policy_from_file(self, the_role: iam.Role, file_name: str) -> None:
         """
