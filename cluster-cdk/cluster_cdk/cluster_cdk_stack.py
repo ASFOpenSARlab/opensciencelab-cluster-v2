@@ -664,7 +664,7 @@ class ClusterCdkStack(Stack):
             },
         )
 
-        # For deeper configuration reasoning, refer to ARCHITECTURE.md
+        # For deeper configuration explanation, refer to ARCHITECTURE.md
         jupyterhub_helm_values = {
             "cull": {
                 "enabled": True,
