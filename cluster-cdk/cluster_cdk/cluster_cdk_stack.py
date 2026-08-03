@@ -1313,7 +1313,7 @@ class ClusterCdkStack(Stack):
         # Cryptnono notifications are looking within the jupyter applications log group
         # Since there is no guarantee that the log group will exist when cryptnono is deployed, we can create the log group if it doesn't exist.
         # If it already exists, it will gracefully apply the removal and retention (never delete) policies without crashing.
-        logs.LogRetention(
+        jupyter_application_log_group_retention = logs.LogRetention(
             self,
             "CryptnonoJupyterHubAppSafeLogGroup",
             log_group_name=jupyter_application_log_group_name,
@@ -1354,6 +1354,11 @@ class ClusterCdkStack(Stack):
             ),
             metric_value="1",  # Increment by 1 for every single match
             unit=cloudwatch.Unit.COUNT,
+        )
+
+        # Make sure the log group is created before the metrics filter
+        cryptnono_metric_filter.node.add_dependency(
+            jupyter_application_log_group_retention
         )
 
         log_metric_group = monitoring.CustomMetricGroup(
