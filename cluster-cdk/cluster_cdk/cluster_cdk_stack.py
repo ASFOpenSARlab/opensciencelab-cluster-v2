@@ -407,13 +407,98 @@ class ClusterCdkStack(Stack):
                 )
 
             if node_type == "core":
-                self._add_policy_from_file(node_group.role, "hub_node_policies.json")
+                policies = [
+                    {
+                        "Sid": "HubVolumeFromSnapshot",
+                        "Effect": "Allow",
+                        "Action": ["ec2:DescribeSnapshots", "ec2:CreateVolume", "ec2:CreateTags"],
+                        "Resource": "*",
+                        "Condition": {
+                            "StringEquals": {
+                                "aws:ResourceTag/osl-billing": cluster_name,
+                            }
+                        }
+                    },
+                    {
+                        "Sid": "HubVolumeStoppingTags",
+                        "Effect": "Allow",
+                        "Action": ["ec2:DescribeVolumes", "ec2:CreateTags"],
+                        "Resource": "*",
+                        "Condition": {
+                            "StringEquals": {
+                                "aws:ResourceTag/osl-billing": cluster_name,
+                            }
+                        }
+                    },
+                    {
+                        "Sid": "HubSecretsManagerRead",
+                        "Effect": "Allow",
+                        "Action": ["secretsmanager:GetSecretValue"],
+                        "Resource": "*",
+                        "Condition": {
+                            "StringEquals": {
+                                "aws:ResourceTag/osl-billing": cluster_name,
+                            }
+                        }
+                    },
+                    {
+                        "Sid": "HubS3ReadOnly",
+                        "Effect": "Allow",
+                        "Action": [
+                        "s3:ListAllMyBuckets",
+                        "s3:ListBucket",
+                        "s3:GetObject",
+                        "s3:GetObjectAcl",
+                        "s3:GetObjectVersion"
+                        ],
+                        "Resource": "*",
+                        "Condition": {
+                            "StringEquals": {
+                                "aws:ResourceTag/osl-billing": cluster_name,
+                            }
+                        }
+                    },
+                    {
+                        "Sid": "AutoscalerAutoscaling",
+                        "Effect": "Allow",
+                        "Action": [
+                        "autoscaling:DescribeAutoScalingGroups",
+                        "autoscaling:DescribeAutoScalingInstances",
+                        "autoscaling:DescribeLaunchConfigurations",
+                        "autoscaling:DescribeScalingActivities",
+                        "autoscaling:DescribeTags",
+                        "autoscaling:SetDesiredCapacity",
+                        "autoscaling:TerminateInstanceInAutoScalingGroup"
+                        ],
+                        "Resource": "*",
+                        "Condition": {
+                            "StringEquals": {
+                                "aws:ResourceTag/eks:cluster-name": cluster_name,
+                            }
+                        }
+                    },
+                    {
+                        "Sid": "AutoscalerOther",
+                        "Effect": "Allow",
+                        "Action": [
+                        "ec2:DescribeImages",
+                        "ec2:DescribeInstanceTypes",
+                        "ec2:DescribeLaunchTemplateVersions",
+                        "eks:DescribeNodegroup"
+                        ],
+                        "Resource": "*",
+                        "Condition": {
+                            "StringEquals": {
+                                "aws:ResourceTag/osl-billing": cluster_name,
+                            }
+                        }
+                    }
+                ]
+                for policy in policies:
+                    node_group.role.add_to_policy(iam.PolicyStatement.from_json(policy))
 
                 # Needed so we can make a dependency later
                 self.core_nodegroup = node_group
-
-            elif node_type == "user":
-                self._add_policy_from_file(node_group.role, "user_node_policies.json")
 
         #####################################################################
         #
@@ -1488,66 +1573,6 @@ class ClusterCdkStack(Stack):
                 value=self.sql_dashboard_url,
                 description="Insights SQL query on Cryptnono events",
             )
-
-    def _add_policy_from_file(self, the_role: iam.Role, file_name: str) -> None:
-        """
-        Predefined roles sometimes need addtional custom policies applied (especially for node roles).
-        This method attaches a policy defined in a specially formatted file.
-
-        The policy in the files must be in one of two formats: a json list
-
-        ```
-            [
-                {
-                    "Sid": "MySid",
-                    "Effect": "Allow",
-                    "Action": [
-                        "ec2:DescribeSnapshots",
-                        "ec2:CreateVolume",
-                        "ec2:CreateTags"
-                    ],
-                    "Resource": "*"
-                },
-                {
-                    "Sid": "AnotherSid",
-                    "Effect": "Allow",
-                    "Action": [
-                        "ec2:DescribeVolumes",
-                        "ec2:CreateTags"
-                    ],
-                    "Resource": "*"
-                }
-            ]
-        ```
-
-        or just json
-
-        ```
-            {
-                "Sid": "MySid",
-                "Effect": "Allow",
-                "Action": [
-                    "ec2:DescribeSnapshots",
-                    "ec2:CreateVolume",
-                    "ec2:CreateTags"
-                ],
-                "Resource": "*"
-            }
-        ```
-        """
-
-        with open(self.HOME_DIR / "manifests/policies" / pathlib.Path(file_name)) as f:
-            policy_data: dict | list = json.load(f)
-
-        if isinstance(policy_data, list):
-            for policy in policy_data:
-                the_role.add_to_policy(iam.PolicyStatement.from_json(policy))
-
-        elif isinstance(policy_data, dict):
-            the_role.add_to_policy(iam.PolicyStatement.from_json(policy_data))
-
-        else:
-            print(f"Policy for {file_name} in wrong format?")
 
     def _set_extra_file(
         self,
