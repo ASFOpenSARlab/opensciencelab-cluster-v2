@@ -175,56 +175,6 @@ class ClusterCdkStack(Stack):
             default_capacity=0,
         )
 
-        cluster_user_role = iam.Role(
-            self,
-            "ClusterFullAccess",
-            assumed_by=iam.ArnPrincipal(
-                f"arn:aws:iam::{self.account}:root"  # Security issue?
-            ),
-            role_name=f"eks-cluster-user-full-access-{self.LAB_SHORT_NAME}",
-            description="IAM Role for user accessing the eks cluster",
-            inline_policies={
-                "Document1": iam.PolicyDocument(
-                    assign_sids=True,
-                    statements=[
-                        iam.PolicyStatement(
-                            actions=[
-                                "eks:*",
-                                "iam:ListRoles",
-                            ],
-                            resources=["*"],
-                            effect=iam.Effect.ALLOW,
-                        ),
-                        iam.PolicyStatement(
-                            actions=["ssm:GetParameter"],
-                            resources=[
-                                f"arn:aws:ssm:{self.region}:{self.account}:parameter/*"
-                            ],
-                            effect=iam.Effect.ALLOW,
-                        ),
-                    ],
-                ),
-            },
-        )
-
-        ##  https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/AccessEntry.html
-        self.user_cloudshell_entry = eks.AccessEntry(
-            self,
-            "UserAccessCloudshell",
-            access_policies=[
-                eks.AccessPolicy.from_access_policy_name(
-                    "AmazonEKSClusterAdminPolicy",
-                    access_scope_type=eks.AccessScopeType.CLUSTER,
-                ),
-            ],
-            cluster=self.cluster,
-            principal=cluster_user_role.role_arn,
-            access_entry_type=eks.AccessEntryType.STANDARD,
-            removal_policy=RemovalPolicy.DESTROY,
-        )
-
-        # self.user_cloudshell_entry.node.add_dependency(self.cluster)
-
         if self.UI_IAM_USER:
             # Access Entry for EKS UI
             self.user_access_ui_entry = eks.AccessEntry(
@@ -241,8 +191,6 @@ class ClusterCdkStack(Stack):
                 access_entry_type=eks.AccessEntryType.STANDARD,
                 removal_policy=RemovalPolicy.DESTROY,
             )
-
-            # self.user_access_ui_entry.node.add_dependency(self.cluster)
 
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#add-ons
         eks.Addon(
@@ -576,7 +524,6 @@ class ClusterCdkStack(Stack):
         )
 
         # By being dependecies of the csi driver, they will be created before jupyterhub without any circular dependencies.
-        self.ebs_csi_driver_helm_chart.node.add_dependency(self.user_cloudshell_entry)
         if self.UI_IAM_USER:
             self.ebs_csi_driver_helm_chart.node.add_dependency(
                 self.user_access_ui_entry
