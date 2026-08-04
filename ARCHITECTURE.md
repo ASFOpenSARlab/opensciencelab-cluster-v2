@@ -10,4 +10,4 @@ Defined by the `cull` field, the idle culler will remove user servers if they ar
 
 JupyterHub marks a server as idle if the users browser tab with their server is closed. This can happen either if the user closes their tab, or if their browser sleeps it. You can read the other factors that contribute to JupyterHub marking a server as idle [in the Jupyter code](https://github.com/jupyter-server/jupyter_server/blob/9a4d6eea2b16815a493b11fffe0b51b1fe55a81b/jupyter_server/serverapp.py#L547-L548).
 
-For testing purposes to consistently trigger the idle-culler, close all JupyterLab tabs for a particular user server and wait for the duration of `timeout` + `every` to ensure the culler has run and the server was eligible to be culled. 
+For testing purposes to consistently trigger the idle-culler, close all JupyterLab tabs for a particular user server and wait for the duration of `timeout` + `every` to ensure the culler has run and the server was eligible to be culled.
