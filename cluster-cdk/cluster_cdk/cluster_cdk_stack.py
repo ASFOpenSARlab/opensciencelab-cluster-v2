@@ -429,11 +429,22 @@ class ClusterCdkStack(Stack):
                     {
                         "Sid": "HubVolumeManagement",
                         "Effect": "Allow",
-                        "Action": ["ec2:CreateVolume", "ec2:CreateTags"],
+                        "Action": ["ec2:CreateTags"],
                         "Resource": "*",
                         "Condition": {
                             "StringEquals": {
                                 "aws:ResourceTag/osl-billing": cluster_name,
+                            }
+                        },
+                    },
+                    {
+                        "Sid": "HubVolumeCreateVolume",
+                        "Effect": "Allow",
+                        "Action": ["ec2:CreateVolume"],
+                        "Resource": "*",
+                        "Condition": {
+                            "StringEquals": {
+                                "aws:RequestTag/osl-billing": cluster_name,
                             }
                         },
                     },
