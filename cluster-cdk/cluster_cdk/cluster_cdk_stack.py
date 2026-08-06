@@ -409,20 +409,27 @@ class ClusterCdkStack(Stack):
             if node_type == "core":
                 policies = [
                     {
-                        "Sid": "HubVolumeFromSnapshot",
+                        "Sid": "Describes",
                         "Effect": "Allow",
-                        "Action": ["ec2:DescribeSnapshots", "ec2:CreateVolume", "ec2:CreateTags"],
+                        "Action": [
+                            "ec2:DescribeSnapshots",
+                            "ec2:DescribeVolumes",
+                            "ec2:DescribeImages",
+                            "ec2:DescribeInstanceTypes",
+                            "ec2:DescribeLaunchTemplateVersions",
+                            "eks:DescribeNodegroup"
+                            "autoscaling:DescribeAutoScalingGroups",
+                            "autoscaling:DescribeAutoScalingInstances",
+                            "autoscaling:DescribeLaunchConfigurations",
+                            "autoscaling:DescribeScalingActivities",
+                            "autoscaling:DescribeTags",
+                        ],
                         "Resource": "*",
-                        "Condition": {
-                            "StringEquals": {
-                                "aws:ResourceTag/osl-billing": cluster_name,
-                            }
-                        }
                     },
                     {
-                        "Sid": "HubVolumeStoppingTags",
+                        "Sid": "HubVolumeManagement",
                         "Effect": "Allow",
-                        "Action": ["ec2:DescribeVolumes", "ec2:CreateTags"],
+                        "Action": ["ec2:CreateVolume", "ec2:CreateTags"],
                         "Resource": "*",
                         "Condition": {
                             "StringEquals": {
@@ -434,41 +441,14 @@ class ClusterCdkStack(Stack):
                         "Sid": "HubSecretsManagerRead",
                         "Effect": "Allow",
                         "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": "*",
-                        "Condition": {
-                            "StringEquals": {
-                                "aws:ResourceTag/osl-billing": cluster_name,
-                            }
-                        }
-                    },
-                    {
-                        "Sid": "HubS3ReadOnly",
-                        "Effect": "Allow",
-                        "Action": [
-                        "s3:ListAllMyBuckets",
-                        "s3:ListBucket",
-                        "s3:GetObject",
-                        "s3:GetObjectAcl",
-                        "s3:GetObjectVersion"
-                        ],
-                        "Resource": "*",
-                        "Condition": {
-                            "StringEquals": {
-                                "aws:ResourceTag/osl-billing": cluster_name,
-                            }
-                        }
+                        "Resource": self.sso_token.secret_arn
                     },
                     {
                         "Sid": "AutoscalerAutoscaling",
                         "Effect": "Allow",
                         "Action": [
-                        "autoscaling:DescribeAutoScalingGroups",
-                        "autoscaling:DescribeAutoScalingInstances",
-                        "autoscaling:DescribeLaunchConfigurations",
-                        "autoscaling:DescribeScalingActivities",
-                        "autoscaling:DescribeTags",
-                        "autoscaling:SetDesiredCapacity",
-                        "autoscaling:TerminateInstanceInAutoScalingGroup"
+                            "autoscaling:SetDesiredCapacity",
+                            "autoscaling:TerminateInstanceInAutoScalingGroup"
                         ],
                         "Resource": "*",
                         "Condition": {
@@ -477,22 +457,6 @@ class ClusterCdkStack(Stack):
                             }
                         }
                     },
-                    {
-                        "Sid": "AutoscalerOther",
-                        "Effect": "Allow",
-                        "Action": [
-                        "ec2:DescribeImages",
-                        "ec2:DescribeInstanceTypes",
-                        "ec2:DescribeLaunchTemplateVersions",
-                        "eks:DescribeNodegroup"
-                        ],
-                        "Resource": "*",
-                        "Condition": {
-                            "StringEquals": {
-                                "aws:ResourceTag/osl-billing": cluster_name,
-                            }
-                        }
-                    }
                 ]
                 for policy in policies:
                     node_group.role.add_to_policy(iam.PolicyStatement.from_json(policy))
@@ -1254,6 +1218,39 @@ class ClusterCdkStack(Stack):
 
             self.execwhacker_bucket_name = execwhacker_bucket.bucket_name
 
+            # Add required policies to Core nodegroup
+            execwhacker_s3_policies = [
+                {
+                    "Sid": "ExecwhackerS3ListAllBuckets",
+                    "Effect": "Allow",
+                    "Action": [
+                        "s3:ListAllMyBuckets",
+                    ],
+                    "Resource": "*",
+                },
+                {
+                    "Sid": "ExecwhackerS3ListBucket",
+                    "Effect": "Allow",
+                    "Action": [
+                        "s3:ListBucket",
+                    ],
+                    "Resource": execwhacker_bucket.bucket_arn,
+                },
+                {
+                    "Sid": "ExecwhackerS3ReadOnly",
+                    "Effect": "Allow",
+                    "Action": [
+                        "s3:GetObject",
+                        "s3:GetObjectAcl",
+                        "s3:GetObjectVersion"
+                    ],
+                    "Resource": f"{execwhacker_bucket.bucket_arn}/*",
+                },
+            ]
+            for policy in execwhacker_s3_policies:
+                self.core_nodegroup.role.add_to_policy(iam.PolicyStatement.from_json(policy))
+
+            # Execwhacker Cron Variables
             execwhacker_cron_schedule = "*/10 * * * *"  # Runs every 10 minutes
             execwhacker_args = f'python3 /app/update_execwhacker_config.py --aws-region={self.region} --config-bucket-name="{execwhacker_bucket.bucket_name}"'
 
