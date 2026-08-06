@@ -435,27 +435,27 @@ class ClusterCdkStack(Stack):
                             "StringEquals": {
                                 "aws:ResourceTag/osl-billing": cluster_name,
                             }
-                        }
+                        },
                     },
                     {
                         "Sid": "HubSecretsManagerRead",
                         "Effect": "Allow",
                         "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": self.sso_token.secret_arn
+                        "Resource": self.sso_token.secret_arn,
                     },
                     {
                         "Sid": "AutoscalerAutoscaling",
                         "Effect": "Allow",
                         "Action": [
                             "autoscaling:SetDesiredCapacity",
-                            "autoscaling:TerminateInstanceInAutoScalingGroup"
+                            "autoscaling:TerminateInstanceInAutoScalingGroup",
                         ],
                         "Resource": "*",
                         "Condition": {
                             "StringEquals": {
                                 "aws:ResourceTag/eks:cluster-name": cluster_name,
                             }
-                        }
+                        },
                     },
                 ]
                 for policy in policies:
@@ -1242,13 +1242,15 @@ class ClusterCdkStack(Stack):
                     "Action": [
                         "s3:GetObject",
                         "s3:GetObjectAcl",
-                        "s3:GetObjectVersion"
+                        "s3:GetObjectVersion",
                     ],
                     "Resource": f"{execwhacker_bucket.bucket_arn}/*",
                 },
             ]
             for policy in execwhacker_s3_policies:
-                self.core_nodegroup.role.add_to_policy(iam.PolicyStatement.from_json(policy))
+                self.core_nodegroup.role.add_to_policy(
+                    iam.PolicyStatement.from_json(policy)
+                )
 
             # Execwhacker Cron Variables
             execwhacker_cron_schedule = "*/10 * * * *"  # Runs every 10 minutes
