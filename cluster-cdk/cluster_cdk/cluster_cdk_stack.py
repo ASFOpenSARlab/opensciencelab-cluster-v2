@@ -417,7 +417,7 @@ class ClusterCdkStack(Stack):
                             "ec2:DescribeImages",
                             "ec2:DescribeInstanceTypes",
                             "ec2:DescribeLaunchTemplateVersions",
-                            "eks:DescribeNodegroup"
+                            "eks:DescribeNodegroup",
                             "autoscaling:DescribeAutoScalingGroups",
                             "autoscaling:DescribeAutoScalingInstances",
                             "autoscaling:DescribeLaunchConfigurations",
