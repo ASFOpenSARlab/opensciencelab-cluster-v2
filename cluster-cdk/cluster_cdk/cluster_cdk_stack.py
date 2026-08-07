@@ -427,24 +427,19 @@ class ClusterCdkStack(Stack):
                         "Resource": "*",
                     },
                     {
-                        "Sid": "HubVolumeManagement",
+                        "Sid": "HubVolumeTag",
                         "Effect": "Allow",
                         "Action": ["ec2:CreateTags"],
-                        "Resource": "*",
-                        "Condition": {
-                            "StringEquals": {
-                                "aws:ResourceTag/osl-billing": cluster_name,
-                            }
-                        },
+                        "Resource": f"arn:aws:ec2:{self.region}:{self.account}:volume/*",
                     },
                     {
-                        "Sid": "HubVolumeCreateVolume",
+                        "Sid": "HubVolumeCreate",
                         "Effect": "Allow",
                         "Action": ["ec2:CreateVolume"],
-                        "Resource": "*",
+                        "Resource": f"arn:aws:ec2:{self.region}:{self.account}:volume/*",
                         "Condition": {
                             "StringEquals": {
-                                "aws:RequestTag/osl-billing": cluster_name,
+                                f"aws:RequestTag/kubernetes.io/cluster/{cluster_name}": "owned"
                             }
                         },
                     },
