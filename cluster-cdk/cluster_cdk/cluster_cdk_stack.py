@@ -406,6 +406,9 @@ class ClusterCdkStack(Stack):
                     iam.ManagedPolicy.from_aws_managed_policy_name(managed_policy)
                 )
 
+            # The ec2 role must have the tag "eks-cluster-name=CLUSTER_NAME" for the CSI IAM condtions
+            Tags.of(node_group.role).add("eks-cluster-name", cluster_name)
+
             if node_type == "core":
                 policies = [
                     {
@@ -430,18 +433,26 @@ class ClusterCdkStack(Stack):
                         "Sid": "HubVolumeTag",
                         "Effect": "Allow",
                         "Action": ["ec2:CreateTags"],
-                        "Resource": f"arn:aws:ec2:{self.region}:{self.account}:volume/*",
+                        "Resource": [
+                            f"arn:aws:ec2:{self.region}:{self.account}:volume/*",
+                            f"arn:aws:ec2:{self.region}:{self.account}:snapshot/*",
+                        ],
                     },
                     {
                         "Sid": "HubVolumeCreate",
                         "Effect": "Allow",
                         "Action": ["ec2:CreateVolume"],
-                        "Resource": f"arn:aws:ec2:{self.region}:{self.account}:volume/*",
-                        "Condition": {
-                            "StringEquals": {
-                                f"aws:RequestTag/kubernetes.io/cluster/{cluster_name}": "owned"
-                            }
-                        },
+                        "Resource": [
+                            f"arn:aws:ec2:{self.region}:{self.account}:volume/*",
+                            f"arn:aws:ec2:{self.region}:{self.account}:snapshot/*",
+                        ],
+                        # "Condition": {
+                        #     "StringEquals": {
+                        #         # This condtion will require the core ec2 role to have the tag "eks-cluster-name=CLUSTER_NAME"
+                        #         # so that the CSI driver will then pick it up
+                        #         "ec2:ResourceTag/ebs.csi.aws.com/cluster-name": cluster_name
+                        #     }
+                        # },
                     },
                     {
                         "Sid": "HubSecretsManagerRead",
@@ -473,6 +484,12 @@ class ClusterCdkStack(Stack):
         #####################################################################
         #
         #    Setup EBS CSI Storage for volume creation
+        #
+        #    Once storage classes are on the cluster, they cannot be updated in place.
+        #    Existing storage classes will need to be deleted manually before rebuilding.
+        #    To delete a storage class
+        #       View all storage classes: `kubectl get sc`
+        #       Deleted desired storage class: `kubectl delete sc STORAGE_CLASS_NAME`
         #
         #####################################################################
 
@@ -515,6 +532,9 @@ class ClusterCdkStack(Stack):
                     "tagSpecification_1": f"osl-billing={self.LAB_SHORT_NAME}",
                     "tagSpecification_2": f"Name=hub-db-dir--{self.LAB_SHORT_NAME}",
                     "tagSpecification_3": "is-jupyterhub-db=true",
+                    # The CSI driver is expecting volumes to be tagged a certain way
+                    "tagSpecification_4": "ebs.csi.aws.com/cluster=true",
+                    "tagSpecification_5": f"ebs.csi.aws.com/cluster-name={cluster_name}",
                 },
                 "allowVolumeExpansion": False,
                 "volumeBindingMode": "Immediate",
@@ -529,24 +549,16 @@ class ClusterCdkStack(Stack):
             namespace="kube-system",
             overwrite_service_account=True,
         )
-        csi_service_account.role.add_to_principal_policy(
-            iam.PolicyStatement(
-                effect=iam.Effect.ALLOW,
-                actions=[
-                    "ec2:AttachVolume",
-                    "ec2:CreateTags",
-                    "ec2:DeleteVolume",
-                    "ec2:ModifyVolume",
-                    "ec2:CreateVolume",
-                    "ec2:DescribeAvailabilityZones",
-                    "ec2:DescribeInstances",
-                    "ec2:DescribeTags",
-                    "ec2:DescribeVolumeStatus",
-                    "ec2:DescribeVolumesModifications",
-                    "ec2:DescribeVolumes",
-                    "ec2:DetachVolume",
-                ],
-                resources=["*"],
+
+        # EC2s need to be tagged "eks-cluster-name=CLUSTER_NAME". EKS manged nodegroup automatically does this.
+        # Volumes need to tagged "ebs.csi.aws.com/cluster=true" and "ebs.csi.aws.com/cluster-name=CLUSTER_NAME". These tags are from then CSI driver or the custom storage classes.
+        # The AmazonEBSCSIDriverEKSClusterScopedPolicy strictly enforces that the value of the resource tag ebs.csi.aws.com/cluster-name on your EBS volumes must match an eks-cluster-name tag on the IAM principal (the role).
+        Tags.of(csi_service_account.role).add("eks-cluster-name", cluster_name)
+
+        # Attach the official pre-built managed policy to the principal role
+        csi_service_account.role.add_managed_policy(
+            iam.ManagedPolicy.from_aws_managed_policy_name(
+                "AmazonEBSCSIDriverEKSClusterScopedPolicy"
             )
         )
 
