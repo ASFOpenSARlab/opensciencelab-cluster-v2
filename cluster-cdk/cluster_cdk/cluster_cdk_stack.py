@@ -406,13 +406,13 @@ class ClusterCdkStack(Stack):
                     iam.ManagedPolicy.from_aws_managed_policy_name(managed_policy)
                 )
 
-            # The ec2 role must have the tag "eks-cluster-name=CLUSTER_NAME" for the CSI IAM condtions
+            # The ec2 ROLE must have the tag "eks-cluster-name=CLUSTER_NAME" for the CSI IAM condtions
             Tags.of(node_group.role).add("eks-cluster-name", cluster_name)
 
             if node_type == "core":
                 policies = [
                     {
-                        "Sid": "Describes",
+                        "Sid": "HubDescribe",
                         "Effect": "Allow",
                         "Action": [
                             "ec2:DescribeSnapshots",
@@ -421,22 +421,37 @@ class ClusterCdkStack(Stack):
                             "ec2:DescribeInstanceTypes",
                             "ec2:DescribeLaunchTemplateVersions",
                             "eks:DescribeNodegroup",
-                            "autoscaling:DescribeAutoScalingGroups",
-                            "autoscaling:DescribeAutoScalingInstances",
-                            "autoscaling:DescribeLaunchConfigurations",
-                            "autoscaling:DescribeScalingActivities",
-                            "autoscaling:DescribeTags",
                         ],
                         "Resource": "*",
                     },
                     {
-                        "Sid": "HubVolumeTag",
+                        "Sid": "HubTagsOnVolumeCreation",
                         "Effect": "Allow",
                         "Action": ["ec2:CreateTags"],
                         "Resource": [
                             f"arn:aws:ec2:{self.region}:{self.account}:volume/*",
-                            f"arn:aws:ec2:{self.region}:{self.account}:snapshot/*",
                         ],
+                        "Condition": {
+                            "StringEquals": {
+                                # If the cluster tag is passed in the request payload, it MUST match this cluster
+                                "aws:RequestTag/ebs.csi.aws.com/cluster-name": cluster_name,
+                                "ec2:CreateAction": "CreateVolume",
+                            },
+                        },
+                    },
+                    {
+                        "Sid": "HubUpdateTags",
+                        "Effect": "Allow",
+                        "Action": ["ec2:CreateTags"],
+                        "Resource": [
+                            f"arn:aws:ec2:{self.region}:{self.account}:volume/*",
+                        ],
+                        "Condition": {
+                            "StringEquals": {
+                                # If updating an existing volume, it MUST already belong to this cluster
+                                "ec2:ResourceTag/ebs.csi.aws.com/cluster-name": cluster_name
+                            },
+                        },
                     },
                     {
                         "Sid": "HubVolumeCreate",
@@ -444,21 +459,43 @@ class ClusterCdkStack(Stack):
                         "Action": ["ec2:CreateVolume"],
                         "Resource": [
                             f"arn:aws:ec2:{self.region}:{self.account}:volume/*",
-                            f"arn:aws:ec2:{self.region}:{self.account}:snapshot/*",
                         ],
-                        # "Condition": {
-                        #     "StringEquals": {
-                        #         # This condtion will require the core ec2 role to have the tag "eks-cluster-name=CLUSTER_NAME"
-                        #         # so that the CSI driver will then pick it up
-                        #         "ec2:ResourceTag/ebs.csi.aws.com/cluster-name": cluster_name
-                        #     }
-                        # },
+                        "Condition": {
+                            "StringEquals": {
+                                "aws:RequestTag/ebs.csi.aws.com/cluster-name": cluster_name
+                            }
+                        },
+                    },
+                    {
+                        "Sid": "HubVolumeCreateFromSnapshot",
+                        "Effect": "Allow",
+                        "Action": ["ec2:CreateVolume"],
+                        "Resource": [
+                            f"arn:aws:ec2:{self.region}::snapshot/*",
+                        ],
+                        "Condition": {
+                            "StringEquals": {
+                                "ec2:ResourceTag/ebs.csi.aws.com/cluster-name": cluster_name
+                            }
+                        },
                     },
                     {
                         "Sid": "HubSecretsManagerRead",
                         "Effect": "Allow",
                         "Action": ["secretsmanager:GetSecretValue"],
                         "Resource": self.sso_token.secret_arn,
+                    },
+                    {
+                        "Sid": "AutoscalerDescribe",
+                        "Effect": "Allow",
+                        "Action": [
+                            "autoscaling:DescribeAutoScalingGroups",
+                            "autoscaling:DescribeAutoScalingInstances",
+                            "autoscaling:DescribeLaunchConfigurations",
+                            "autoscaling:DescribeScalingActivities",
+                            "autoscaling:DescribeTags",
+                        ],
+                        "Resource": "*",
                     },
                     {
                         "Sid": "AutoscalerAutoscaling",
@@ -470,6 +507,7 @@ class ClusterCdkStack(Stack):
                         "Resource": "*",
                         "Condition": {
                             "StringEquals": {
+                                # EC2s need to be tagged "eks:cluster-name=CLUSTER_NAME". EKS manged nodegroup automatically does this.
                                 "aws:ResourceTag/eks:cluster-name": cluster_name,
                             }
                         },
@@ -550,8 +588,8 @@ class ClusterCdkStack(Stack):
             overwrite_service_account=True,
         )
 
-        # EC2s need to be tagged "eks-cluster-name=CLUSTER_NAME". EKS manged nodegroup automatically does this.
-        # Volumes need to tagged "ebs.csi.aws.com/cluster=true" and "ebs.csi.aws.com/cluster-name=CLUSTER_NAME". These tags are from then CSI driver or the custom storage classes.
+        # EC2s need to be tagged "eks:cluster-name=CLUSTER_NAME". EKS manged nodegroup automatically does this.
+        # Volumes need to tagged "ebs.csi.aws.com/cluster=true" and "ebs.csi.aws.com/cluster-name=CLUSTER_NAME". These tags are injected from the CSI driver or the custom storage classes.
         # The AmazonEBSCSIDriverEKSClusterScopedPolicy strictly enforces that the value of the resource tag ebs.csi.aws.com/cluster-name on your EBS volumes must match an eks-cluster-name tag on the IAM principal (the role).
         Tags.of(csi_service_account.role).add("eks-cluster-name", cluster_name)
 
@@ -586,6 +624,7 @@ class ClusterCdkStack(Stack):
                         "create": False,
                         "name": csi_service_account.service_account_name,
                     },
+                    "nodeSelector": {"opensciencelab.local/node-type": "core"},
                 },
             },
         )
