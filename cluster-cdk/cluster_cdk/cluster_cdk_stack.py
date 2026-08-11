@@ -507,7 +507,7 @@ class ClusterCdkStack(Stack):
                         "Resource": "*",
                         "Condition": {
                             "StringEquals": {
-                                # EC2s need to be tagged "eks:cluster-name=CLUSTER_NAME". EKS manged nodegroup automatically does this.
+                                # EC2s need to be tagged "eks:cluster-name=CLUSTER_NAME". EKS managed nodegroup automatically does this.
                                 "aws:ResourceTag/eks:cluster-name": cluster_name,
                             }
                         },
@@ -523,15 +523,18 @@ class ClusterCdkStack(Stack):
         #
         #    Setup EBS CSI Storage for volume creation
         #
-        #    Once storage classes are on the cluster, they cannot be updated in place.
-        #    Existing storage classes will need to be deleted manually before rebuilding.
-        #    To delete a storage class
+        #    Once storage classes are implemented on the cluster, they cannot be updated in place.
+        #    For example, if a tag specification within parameters is changed and the cluster is redeployed, a deployment error will occur.
+        #    Existing storage classes will need to be deleted manually before redeploying the cluster.
+        #    Deleting the storage class will not break existing volumes but will make it difficult to create new volumes. So promptness is essential.
+        #
+        #    To delete a storage class manually within cloudshell ...
         #       View all storage classes: `kubectl get sc`
         #       Deleted desired storage class: `kubectl delete sc STORAGE_CLASS_NAME`
         #
         #####################################################################
 
-        # Storage classes
+        # Storage class for user volumes
         self.cluster.add_manifest(
             "CsiStorageClass",
             {
