@@ -175,56 +175,6 @@ class ClusterCdkStack(Stack):
             default_capacity=0,
         )
 
-        cluster_user_role = iam.Role(
-            self,
-            "ClusterFullAccess",
-            assumed_by=iam.ArnPrincipal(
-                f"arn:aws:iam::{self.account}:root"  # Security issue?
-            ),
-            role_name=f"eks-cluster-user-full-access-{self.LAB_SHORT_NAME}",
-            description="IAM Role for user accessing the eks cluster",
-            inline_policies={
-                "Document1": iam.PolicyDocument(
-                    assign_sids=True,
-                    statements=[
-                        iam.PolicyStatement(
-                            actions=[
-                                "eks:*",
-                                "iam:ListRoles",
-                            ],
-                            resources=["*"],
-                            effect=iam.Effect.ALLOW,
-                        ),
-                        iam.PolicyStatement(
-                            actions=["ssm:GetParameter"],
-                            resources=[
-                                f"arn:aws:ssm:{self.region}:{self.account}:parameter/*"
-                            ],
-                            effect=iam.Effect.ALLOW,
-                        ),
-                    ],
-                ),
-            },
-        )
-
-        ##  https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/AccessEntry.html
-        self.user_cloudshell_entry = eks.AccessEntry(
-            self,
-            "UserAccessCloudshell",
-            access_policies=[
-                eks.AccessPolicy.from_access_policy_name(
-                    "AmazonEKSClusterAdminPolicy",
-                    access_scope_type=eks.AccessScopeType.CLUSTER,
-                ),
-            ],
-            cluster=self.cluster,
-            principal=cluster_user_role.role_arn,
-            access_entry_type=eks.AccessEntryType.STANDARD,
-            removal_policy=RemovalPolicy.DESTROY,
-        )
-
-        # self.user_cloudshell_entry.node.add_dependency(self.cluster)
-
         if self.UI_IAM_USER:
             # Access Entry for EKS UI
             self.user_access_ui_entry = eks.AccessEntry(
@@ -241,8 +191,6 @@ class ClusterCdkStack(Stack):
                 access_entry_type=eks.AccessEntryType.STANDARD,
                 removal_policy=RemovalPolicy.DESTROY,
             )
-
-            # self.user_access_ui_entry.node.add_dependency(self.cluster)
 
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#add-ons
         eks.Addon(
@@ -458,22 +406,135 @@ class ClusterCdkStack(Stack):
                     iam.ManagedPolicy.from_aws_managed_policy_name(managed_policy)
                 )
 
+            # The ec2 ROLE must have the tag "eks-cluster-name=CLUSTER_NAME" for the CSI IAM condtions
+            Tags.of(node_group.role).add("eks-cluster-name", cluster_name)
+
             if node_type == "core":
-                self._add_policy_from_file(node_group.role, "hub_node_policies.json")
+                policies = [
+                    {
+                        "Sid": "HubDescribe",
+                        "Effect": "Allow",
+                        "Action": [
+                            "ec2:DescribeSnapshots",
+                            "ec2:DescribeVolumes",
+                            "ec2:DescribeImages",
+                            "ec2:DescribeInstanceTypes",
+                            "ec2:DescribeLaunchTemplateVersions",
+                            "eks:DescribeNodegroup",
+                        ],
+                        "Resource": "*",
+                    },
+                    {
+                        "Sid": "HubTagsOnVolumeCreation",
+                        "Effect": "Allow",
+                        "Action": ["ec2:CreateTags"],
+                        "Resource": [
+                            f"arn:aws:ec2:{self.region}:{self.account}:volume/*",
+                        ],
+                        "Condition": {
+                            "StringEquals": {
+                                # If the cluster tag is passed in the request payload, it MUST match this cluster
+                                "aws:RequestTag/ebs.csi.aws.com/cluster-name": cluster_name,
+                                "ec2:CreateAction": "CreateVolume",
+                            },
+                        },
+                    },
+                    {
+                        "Sid": "HubUpdateTags",
+                        "Effect": "Allow",
+                        "Action": ["ec2:CreateTags"],
+                        "Resource": [
+                            f"arn:aws:ec2:{self.region}:{self.account}:volume/*",
+                        ],
+                        "Condition": {
+                            "StringEquals": {
+                                # If updating an existing volume, it MUST already belong to this cluster
+                                "ec2:ResourceTag/ebs.csi.aws.com/cluster-name": cluster_name
+                            },
+                        },
+                    },
+                    {
+                        "Sid": "HubVolumeCreate",
+                        "Effect": "Allow",
+                        "Action": ["ec2:CreateVolume"],
+                        "Resource": [
+                            f"arn:aws:ec2:{self.region}:{self.account}:volume/*",
+                        ],
+                        "Condition": {
+                            "StringEquals": {
+                                "aws:RequestTag/ebs.csi.aws.com/cluster-name": cluster_name
+                            }
+                        },
+                    },
+                    {
+                        "Sid": "HubVolumeCreateFromSnapshot",
+                        "Effect": "Allow",
+                        "Action": ["ec2:CreateVolume"],
+                        "Resource": [
+                            f"arn:aws:ec2:{self.region}::snapshot/*",
+                        ],
+                        "Condition": {
+                            "StringEquals": {
+                                "ec2:ResourceTag/ebs.csi.aws.com/cluster-name": cluster_name
+                            }
+                        },
+                    },
+                    {
+                        "Sid": "HubSecretsManagerRead",
+                        "Effect": "Allow",
+                        "Action": ["secretsmanager:GetSecretValue"],
+                        "Resource": self.sso_token.secret_arn,
+                    },
+                    {
+                        "Sid": "AutoscalerDescribe",
+                        "Effect": "Allow",
+                        "Action": [
+                            "autoscaling:DescribeAutoScalingGroups",
+                            "autoscaling:DescribeAutoScalingInstances",
+                            "autoscaling:DescribeLaunchConfigurations",
+                            "autoscaling:DescribeScalingActivities",
+                            "autoscaling:DescribeTags",
+                        ],
+                        "Resource": "*",
+                    },
+                    {
+                        "Sid": "AutoscalerAutoscaling",
+                        "Effect": "Allow",
+                        "Action": [
+                            "autoscaling:SetDesiredCapacity",
+                            "autoscaling:TerminateInstanceInAutoScalingGroup",
+                        ],
+                        "Resource": "*",
+                        "Condition": {
+                            "StringEquals": {
+                                # EC2s need to be tagged "eks:cluster-name=CLUSTER_NAME". EKS managed nodegroup automatically does this.
+                                "aws:ResourceTag/eks:cluster-name": cluster_name,
+                            }
+                        },
+                    },
+                ]
+                for policy in policies:
+                    node_group.role.add_to_policy(iam.PolicyStatement.from_json(policy))
 
                 # Needed so we can make a dependency later
                 self.core_nodegroup = node_group
-
-            elif node_type == "user":
-                self._add_policy_from_file(node_group.role, "user_node_policies.json")
 
         #####################################################################
         #
         #    Setup EBS CSI Storage for volume creation
         #
+        #    Once storage classes are implemented on the cluster, they cannot be updated in place.
+        #    For example, if a tag specification within parameters is changed and the cluster is redeployed, a deployment error will occur.
+        #    Existing storage classes will need to be deleted manually before redeploying the cluster.
+        #    Deleting the storage class will not break existing volumes but will make it difficult to create new volumes. So promptness is essential.
+        #
+        #    To delete a storage class manually within cloudshell ...
+        #       View all storage classes: `kubectl get sc`
+        #       Deleted desired storage class: `kubectl delete sc STORAGE_CLASS_NAME`
+        #
         #####################################################################
 
-        # Storage classes
+        # Storage class for user volumes
         self.cluster.add_manifest(
             "CsiStorageClass",
             {
@@ -512,6 +573,9 @@ class ClusterCdkStack(Stack):
                     "tagSpecification_1": f"osl-billing={self.LAB_SHORT_NAME}",
                     "tagSpecification_2": f"Name=hub-db-dir--{self.LAB_SHORT_NAME}",
                     "tagSpecification_3": "is-jupyterhub-db=true",
+                    # The CSI driver is expecting volumes to be tagged a certain way
+                    "tagSpecification_4": "ebs.csi.aws.com/cluster=true",
+                    "tagSpecification_5": f"ebs.csi.aws.com/cluster-name={cluster_name}",
                 },
                 "allowVolumeExpansion": False,
                 "volumeBindingMode": "Immediate",
@@ -526,24 +590,16 @@ class ClusterCdkStack(Stack):
             namespace="kube-system",
             overwrite_service_account=True,
         )
-        csi_service_account.role.add_to_principal_policy(
-            iam.PolicyStatement(
-                effect=iam.Effect.ALLOW,
-                actions=[
-                    "ec2:AttachVolume",
-                    "ec2:CreateTags",
-                    "ec2:DeleteVolume",
-                    "ec2:ModifyVolume",
-                    "ec2:CreateVolume",
-                    "ec2:DescribeAvailabilityZones",
-                    "ec2:DescribeInstances",
-                    "ec2:DescribeTags",
-                    "ec2:DescribeVolumeStatus",
-                    "ec2:DescribeVolumesModifications",
-                    "ec2:DescribeVolumes",
-                    "ec2:DetachVolume",
-                ],
-                resources=["*"],
+
+        # EC2s need to be tagged "eks:cluster-name=CLUSTER_NAME". EKS manged nodegroup automatically does this.
+        # Volumes need to tagged "ebs.csi.aws.com/cluster=true" and "ebs.csi.aws.com/cluster-name=CLUSTER_NAME". These tags are injected from the CSI driver or the custom storage classes.
+        # The AmazonEBSCSIDriverEKSClusterScopedPolicy strictly enforces that the value of the resource tag ebs.csi.aws.com/cluster-name on your EBS volumes must match an eks-cluster-name tag on the IAM principal (the role).
+        Tags.of(csi_service_account.role).add("eks-cluster-name", cluster_name)
+
+        # Attach the official pre-built managed policy to the principal role
+        csi_service_account.role.add_managed_policy(
+            iam.ManagedPolicy.from_aws_managed_policy_name(
+                "AmazonEBSCSIDriverEKSClusterScopedPolicy"
             )
         )
 
@@ -571,12 +627,12 @@ class ClusterCdkStack(Stack):
                         "create": False,
                         "name": csi_service_account.service_account_name,
                     },
+                    "nodeSelector": {"opensciencelab.local/node-type": "core"},
                 },
             },
         )
 
         # By being dependecies of the csi driver, they will be created before jupyterhub without any circular dependencies.
-        self.ebs_csi_driver_helm_chart.node.add_dependency(self.user_cloudshell_entry)
         if self.UI_IAM_USER:
             self.ebs_csi_driver_helm_chart.node.add_dependency(
                 self.user_access_ui_entry
@@ -1222,6 +1278,41 @@ class ClusterCdkStack(Stack):
 
             self.execwhacker_bucket_name = execwhacker_bucket.bucket_name
 
+            # Add required policies to Core nodegroup
+            execwhacker_s3_policies = [
+                {
+                    "Sid": "ExecwhackerS3ListAllBuckets",
+                    "Effect": "Allow",
+                    "Action": [
+                        "s3:ListAllMyBuckets",
+                    ],
+                    "Resource": "*",
+                },
+                {
+                    "Sid": "ExecwhackerS3ListBucket",
+                    "Effect": "Allow",
+                    "Action": [
+                        "s3:ListBucket",
+                    ],
+                    "Resource": execwhacker_bucket.bucket_arn,
+                },
+                {
+                    "Sid": "ExecwhackerS3ReadOnly",
+                    "Effect": "Allow",
+                    "Action": [
+                        "s3:GetObject",
+                        "s3:GetObjectAcl",
+                        "s3:GetObjectVersion",
+                    ],
+                    "Resource": f"{execwhacker_bucket.bucket_arn}/*",
+                },
+            ]
+            for policy in execwhacker_s3_policies:
+                self.core_nodegroup.role.add_to_policy(
+                    iam.PolicyStatement.from_json(policy)
+                )
+
+            # Execwhacker Cron Variables
             execwhacker_cron_schedule = "*/10 * * * *"  # Runs every 10 minutes
             execwhacker_args = f'python3 /app/update_execwhacker_config.py --aws-region={self.region} --config-bucket-name="{execwhacker_bucket.bucket_name}"'
 
@@ -1541,66 +1632,6 @@ class ClusterCdkStack(Stack):
                 value=self.sql_dashboard_url,
                 description="Insights SQL query on Cryptnono events",
             )
-
-    def _add_policy_from_file(self, the_role: iam.Role, file_name: str) -> None:
-        """
-        Predefined roles sometimes need addtional custom policies applied (especially for node roles).
-        This method attaches a policy defined in a specially formatted file.
-
-        The policy in the files must be in one of two formats: a json list
-
-        ```
-            [
-                {
-                    "Sid": "MySid",
-                    "Effect": "Allow",
-                    "Action": [
-                        "ec2:DescribeSnapshots",
-                        "ec2:CreateVolume",
-                        "ec2:CreateTags"
-                    ],
-                    "Resource": "*"
-                },
-                {
-                    "Sid": "AnotherSid",
-                    "Effect": "Allow",
-                    "Action": [
-                        "ec2:DescribeVolumes",
-                        "ec2:CreateTags"
-                    ],
-                    "Resource": "*"
-                }
-            ]
-        ```
-
-        or just json
-
-        ```
-            {
-                "Sid": "MySid",
-                "Effect": "Allow",
-                "Action": [
-                    "ec2:DescribeSnapshots",
-                    "ec2:CreateVolume",
-                    "ec2:CreateTags"
-                ],
-                "Resource": "*"
-            }
-        ```
-        """
-
-        with open(self.HOME_DIR / "manifests/policies" / pathlib.Path(file_name)) as f:
-            policy_data: dict | list = json.load(f)
-
-        if isinstance(policy_data, list):
-            for policy in policy_data:
-                the_role.add_to_policy(iam.PolicyStatement.from_json(policy))
-
-        elif isinstance(policy_data, dict):
-            the_role.add_to_policy(iam.PolicyStatement.from_json(policy_data))
-
-        else:
-            print(f"Policy for {file_name} in wrong format?")
 
     def _set_extra_file(
         self,

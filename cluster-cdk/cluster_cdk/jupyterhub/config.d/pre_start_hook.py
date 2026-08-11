@@ -275,6 +275,9 @@ def get_user_volume(
                         },
                         {"Key": "RestoredFromSnapshot", "Value": "true"},
                         {"Key": "is-jupyterhub-user", "Value": "true"},
+                        # Volumes need to tagged for the CSI driver to properly manage them
+                        {"Key": "ebs.csi.aws.com/cluster", "Value": "true"},
+                        {"Key": "ebs.csi.aws.com/cluster-name", "Value": CLUSTER_NAME},
                     ],
                 },
             ],
@@ -331,6 +334,9 @@ def get_user_volume(
                         {"Key": COST_TAG_KEY, "Value": COST_TAG_VALUE},
                         {"Key": "RestoredFromSnapshot", "Value": "false"},
                         {"Key": "is-jupyterhub-user", "Value": "true"},
+                        # Volumes need to tagged for the CSI driver to properly manage them
+                        {"Key": "ebs.csi.aws.com/cluster", "Value": "true"},
+                        {"Key": "ebs.csi.aws.com/cluster-name", "Value": CLUSTER_NAME},
                     ],
                 },
             ],
