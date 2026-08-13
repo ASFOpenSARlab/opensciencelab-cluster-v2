@@ -60,7 +60,7 @@ class ClusterCdkStack(Stack):
         self.JUPYTER_HUB_IMAGE_PATH = os.environ["JUPYTER_HUB_IMAGE_PATH"]
         self.JUPYTER_HUB_IMAGE_TAG = os.environ["JUPYTER_HUB_IMAGE_TAG"]
 
-        self.UI_IAM_USER = os.environ["UI_IAM_USER"]
+        self.UI_IAM_ROLE = os.environ["UI_IAM_ROLE"]
 
         # Default cron schedule to top of every hour
         self.VOLUME_CRON_SCHEDULE = os.environ["VOLUME_CRON_SCHEDULE"]
@@ -174,23 +174,6 @@ class ClusterCdkStack(Stack):
             default_capacity_type=eks.DefaultCapacityType.NODEGROUP,
             default_capacity=0,
         )
-
-        if self.UI_IAM_USER:
-            # Access Entry for EKS UI
-            self.user_access_ui_entry = eks.AccessEntry(
-                self,
-                "UserAccessUI",
-                access_policies=[
-                    eks.AccessPolicy.from_access_policy_name(
-                        "AmazonEKSClusterAdminPolicy",
-                        access_scope_type=eks.AccessScopeType.CLUSTER,
-                    ),
-                ],
-                cluster=self.cluster,
-                principal=f"arn:aws:iam::{self.account}:role/aws-reserved/sso.amazonaws.com/{self.UI_IAM_USER}",
-                access_entry_type=eks.AccessEntryType.STANDARD,
-                removal_policy=RemovalPolicy.DESTROY,
-            )
 
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/README.html#add-ons
         eks.Addon(
@@ -632,11 +615,24 @@ class ClusterCdkStack(Stack):
             },
         )
 
-        # By being dependecies of the csi driver, they will be created before jupyterhub without any circular dependencies.
-        if self.UI_IAM_USER:
-            self.ebs_csi_driver_helm_chart.node.add_dependency(
-                self.user_access_ui_entry
+        if self.UI_IAM_ROLE:
+            # Access Entry for EKS UI
+            user_access_ui_entry = eks.AccessEntry(
+                self,
+                "UserAccessUI",
+                access_policies=[
+                    eks.AccessPolicy.from_access_policy_name(
+                        "AmazonEKSClusterAdminPolicy",
+                        access_scope_type=eks.AccessScopeType.CLUSTER,
+                    ),
+                ],
+                cluster=self.cluster,
+                principal=f"arn:aws:iam::{self.account}:role/{self.UI_IAM_ROLE}",
+                access_entry_type=eks.AccessEntryType.STANDARD,
+                removal_policy=RemovalPolicy.DESTROY,
             )
+
+            self.ebs_csi_driver_helm_chart.node.add_dependency(user_access_ui_entry)
 
         #####################################################################
         #

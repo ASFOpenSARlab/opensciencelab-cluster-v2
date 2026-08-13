@@ -352,7 +352,7 @@ def validate_other_environment_variables() -> None:
         "PORTAL_DOMAINS",
         "SNAPSHOT_WARNING_DAYS",
         "SNAPSHOT_GRACEPERIOD_DAYS",
-        "UI_IAM_USER",
+        "UI_IAM_ROLE",
         "VOLUME_CRON_SCHEDULE",
     ]
     for key in ENVS_TO_SHOW:
@@ -478,10 +478,10 @@ def validate_other_environment_variables() -> None:
         raise Exception("SNAPSHOT_GRACEPERIOD_DAYS is not defined")
     assert snapshot_graceperiod_days == "" or float(snapshot_graceperiod_days)
 
-    print("Checking UI_IAM_USER ....")
-    ui_iam_user = os.getenv("UI_IAM_USER", None)
-    if not ui_iam_user:
-        raise Exception("UI_IAM_USER is not defined")
+    print("Checking UI_IAM_ROLE ....")
+    UI_IAM_ROLE = os.getenv("UI_IAM_ROLE", None)
+    if not UI_IAM_ROLE:
+        raise Exception("UI_IAM_ROLE is not defined")
 
     print("Checking VOLUME_CRON_SCHEDULE ....")
     volume_cron_schedule = os.getenv("VOLUME_CRON_SCHEDULE", None)
