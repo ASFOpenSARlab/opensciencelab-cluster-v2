@@ -176,53 +176,6 @@ class ClusterCdkStack(Stack):
         )
 
         if self.UI_IAM_USER:
-            ui_iam_role = iam.Role(
-                self,
-                f"UiIamRole{self.LAB_SHORT_NAME}",
-                inline_policies={
-                    "eks-and-ssm-permissions": iam.PolicyDocument(
-                        statements=[
-                            # Statement 1: EKS administrative rights and IAM role listing
-                            iam.PolicyStatement(
-                                actions=["eks:*", "iam:ListRoles"],
-                                resources=["*"],
-                                effect=iam.Effect.ALLOW,
-                                # conditions={
-                                #     "StringEquals": {
-                                #         "aws:PrincipalTag/osl-billing": self.LAB_SHORT_NAME
-                                #     }
-                                # },
-                            ),
-                            # Statement 2: Scoped SSM Parameter Store read access
-                            iam.PolicyStatement(
-                                actions=["ssm:GetParameter"],
-                                resources=[
-                                    f"arn:aws:ssm:{self.region}:{self.account}:parameter/*"
-                                ],
-                                effect=iam.Effect.ALLOW,
-                            ),
-                        ]
-                    )
-                },
-                assumed_by=iam.AccountRootPrincipal(),
-            )
-
-            # By default, no one can assume this role - only explicitly added users
-            ui_iam_cfn_role = ui_iam_role.node.default_child
-            ui_iam_cfn_role.add_property_override(
-                "AssumeRolePolicyDocument",
-                {
-                    "Version": "2012-10-17",
-                    "Statement": [
-                        {
-                            "Effect": "Deny",
-                            "Principal": {"AWS": f"arn:aws:iam::{self.account}:root"},
-                            "Action": "sts:AssumeRole",
-                        }
-                    ],
-                },
-            )
-
             # Access Entry for EKS UI
             self.user_access_ui_entry = eks.AccessEntry(
                 self,
@@ -234,7 +187,7 @@ class ClusterCdkStack(Stack):
                     ),
                 ],
                 cluster=self.cluster,
-                principal=ui_iam_role.role_arn,
+                principal=f"arn:aws:iam::{self.account}:role/aws-reserved/sso.amazonaws.com/{self.UI_IAM_USER}",
                 access_entry_type=eks.AccessEntryType.STANDARD,
                 removal_policy=RemovalPolicy.DESTROY,
             )
