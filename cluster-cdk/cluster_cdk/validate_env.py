@@ -479,8 +479,8 @@ def validate_other_environment_variables() -> None:
     assert snapshot_graceperiod_days == "" or float(snapshot_graceperiod_days)
 
     print("Checking UI_IAM_ROLE ....")
-    UI_IAM_ROLE = os.getenv("UI_IAM_ROLE", None)
-    if not UI_IAM_ROLE:
+    ui_iam_role = os.getenv("UI_IAM_ROLE", None)
+    if not ui_iam_role:
         raise Exception("UI_IAM_ROLE is not defined")
 
     print("Checking VOLUME_CRON_SCHEDULE ....")
