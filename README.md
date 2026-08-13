@@ -135,7 +135,7 @@ export JUPYTER_HUB_IMAGE_TAG="test"            # Needs to exist for opensciencel
 export EXECWHACKER_CRON_IMAGE_PATH="ghcr.io/asfopensarlab/opensciencelab-update-execwhacker"  # Needs to exist for opensciencelab-update-execwhacker image
 export EXECWHACKER_CRON_IMAGE_TAG="test"       # Needs to exist for opensciencelab-update-execwhacker image
 export IS_CRYPTNONO_ENABLED="true"             # Is cryptnono deployed within the cluster?
-export UI_IAM_USER="AWSReservedSSO_Project.."  # IAM Role used by admins in the AWS console
+export UI_IAM_ROLE="AWSReservedSSO_Project.."  # IAM Role used by admins in the AWS console
 export ADMIN_USERS="nobody"                    # Comma seperated list of users to embed into JH
 export PORTAL_DOMAINS="<CLOUDFRONT-URL>"       # Comma seperated list of approved portal domains
 

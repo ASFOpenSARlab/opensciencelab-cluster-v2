@@ -47,7 +47,7 @@ AWS_DEFAULT_PROFILE := $(AWS_DEFAULT_PROFILE)
 AWS_REGION ?= us-west-2
 IS_PROD ?= false
 
-UI_IAM_USER := $(UI_IAM_USER)
+UI_IAM_ROLE := $(UI_IAM_ROLE)
 
 # Extra env var for running volume management lambda
 CLUSTER_NAME ?= $(LAB_SHORT_NAME)
@@ -101,7 +101,7 @@ cdk-shell:
 		-e EXECWHACKER_CRON_IMAGE_PATH \
 		-e EXECWHACKER_CRON_IMAGE_TAG \
 		-e IS_CRYPTNONO_ENABLED \
-		-e UI_IAM_USER \
+		-e UI_IAM_ROLE \
 		-e ADMIN_USERS \
 		-e PORTAL_DOMAINS \
 		-e LAB_SHORT_NAME \
