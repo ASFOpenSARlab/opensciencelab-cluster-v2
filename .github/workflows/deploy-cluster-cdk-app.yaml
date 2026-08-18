@@ -19,23 +19,16 @@ on: # yamllint disable-line rule:truthy
       - main
 
 jobs:
-  setup:
-    uses: ASFOpenSARlab/osl-utils/.github/workflows/reusable-setup-env.yaml@v1.2.1
-    with:
-      tagname: ${{ inputs.tagname || github.ref_name }}
-
   build-and-deploy-cluster:
     runs-on: ubuntu-latest
-    needs:
-      - setup
-    environment: ${{ inputs.envOverride || needs.setup.outputs.environment }}
+    environment: ${{ inputs.envOverride }}
     container: ghcr.io/asfopensarlab/osl-utils:v1.2.1
     # These permissions are needed to interact with GitHub's OIDC Token endpoint.
     permissions:
       id-token: write
       contents: read
     env:
-      LAB_SHORT_NAME: ${{ inputs.envOverride || needs.setup.outputs.environment }}
+      LAB_SHORT_NAME: ${{ inputs.envOverride }}
       PROFILE_DEFINITIONS: ${{ vars.PROFILE_DEFINITIONS }}
       NODE_DEFINITIONS: ${{ vars.NODE_DEFINITIONS }}
       JUPYTER_HUB_IMAGE_PATH: ${{ vars.JUPYTER_HUB_IMAGE_PATH }}
@@ -57,7 +50,7 @@ jobs:
     steps:
       - name: Log Environment
         run: |
-          echo Selected Environment: ${{ inputs.envOverride || needs.setup.outputs.environment }}
+          echo Selected Environment: ${{ inputs.envOverride }}
 
       - name: Checkout Repo
         uses: actions/checkout@v6
@@ -69,7 +62,7 @@ jobs:
           aws-region: ${{ vars.AWS_DEFAULT_REGION }}
 
       - name: Run Cluster Testsuite
-        if: contains(fromJSON('["test"]'), inputs.envOverride || needs.setup.outputs.environment ) || inputs.runTestSuite == true
+        if: contains(fromJSON('["test"]'), inputs.envOverride ) || inputs.runTestSuite == true
         run: |
           make test
 
