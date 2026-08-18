@@ -21,14 +21,14 @@ on: # yamllint disable-line rule:truthy
 jobs:
   build-and-deploy-cluster:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.envOverride }}
+    environment: ${{ inputs.envOverride || 'test' }}
     container: ghcr.io/asfopensarlab/osl-utils:v1.2.1
     # These permissions are needed to interact with GitHub's OIDC Token endpoint.
     permissions:
       id-token: write
       contents: read
     env:
-      LAB_SHORT_NAME: ${{ inputs.envOverride }}
+      LAB_SHORT_NAME: ${{ inputs.envOverride || 'test' }}
       PROFILE_DEFINITIONS: ${{ vars.PROFILE_DEFINITIONS }}
       NODE_DEFINITIONS: ${{ vars.NODE_DEFINITIONS }}
       JUPYTER_HUB_IMAGE_PATH: ${{ vars.JUPYTER_HUB_IMAGE_PATH }}
@@ -50,7 +50,7 @@ jobs:
     steps:
       - name: Log Environment
         run: |
-          echo Selected Environment: ${{ inputs.envOverride }}
+          echo Selected Environment: ${{ inputs.envOverride || 'test' }}
 
       - name: Checkout Repo
         uses: actions/checkout@v6
@@ -62,7 +62,7 @@ jobs:
           aws-region: ${{ vars.AWS_DEFAULT_REGION }}
 
       - name: Run Cluster Testsuite
-        if: contains(fromJSON('["test"]'), inputs.envOverride ) || inputs.runTestSuite == true
+        if: contains(fromJSON('["test"]'), inputs.envOverride || 'test' ) || inputs.runTestSuite == true
         run: |
           make test
 
