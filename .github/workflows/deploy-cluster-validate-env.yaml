@@ -14,7 +14,7 @@ on: # yamllint disable-line rule:truthy
       - main
 
 jobs:
-  build-and-deploy-cluster:
+  validate_environment:
     runs-on: ubuntu-latest
     environment: ${{ inputs.envOverride }}
     container: ghcr.io/asfopensarlab/osl-utils:v1.2.1
