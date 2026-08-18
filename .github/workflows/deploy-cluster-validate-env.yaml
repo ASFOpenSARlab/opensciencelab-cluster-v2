@@ -14,23 +14,15 @@ on: # yamllint disable-line rule:truthy
       - main
 
 jobs:
-  setup:
-    uses: ASFOpenSARlab/osl-utils/.github/workflows/reusable-setup-env.yaml@v1.2.1
-    with:
-      tagname: ${{ inputs.tagname || github.ref_name }}
-
-  build-and-deploy-cluster:
+  validate_environment:
     runs-on: ubuntu-latest
-    needs:
-      - setup
-    environment: ${{ inputs.envOverride || needs.setup.outputs.environment }}
+    environment: ${{ inputs.envOverride }}
     container: ghcr.io/asfopensarlab/osl-utils:v1.2.1
     # These permissions are needed to interact with GitHub's OIDC Token endpoint.
     permissions:
       id-token: write
       contents: read
     env:
-      DEPLOY_PREFIX: ${{ needs.setup.outputs.deploy_prefix }}
       PROFILE_DEFINITIONS: ${{ vars.PROFILE_DEFINITIONS }}
       NODE_DEFINITIONS: ${{ vars.NODE_DEFINITIONS }}
       JUPYTER_HUB_IMAGE_PATH: ${{ vars.JUPYTER_HUB_IMAGE_PATH }}
@@ -43,7 +35,7 @@ jobs:
       UI_IAM_ROLE: ${{ vars.UI_IAM_ROLE }}
       ADMIN_USERS: ${{ vars.ADMIN_USERS }}
       PORTAL_DOMAINS: ${{ vars.PORTAL_DOMAINS }}
-      LAB_SHORT_NAME: ${{ inputs.envOverride || needs.setup.outputs.environment }}
+      LAB_SHORT_NAME: ${{ inputs.envOverride }}
       VOLUME_CRON_SCHEDULE: ${{ vars.VOLUME_CRON_SCHEDULE }}
       SNAPSHOT_WARNING_DAYS: ${{ vars.SNAPSHOT_WARNING_DAYS }}
       SNAPSHOT_GRACEPERIOD_DAYS: ${{ vars.SNAPSHOT_GRACEPERIOD_DAYS }}
@@ -53,16 +45,10 @@ jobs:
     steps:
       - name: Log Environment
         run: |
-          echo Selected Environment: ${{ inputs.envOverride || needs.setup.outputs.environment }}
+          echo Selected Environment: ${{ inputs.envOverride }}
 
       - name: Checkout Repo
         uses: actions/checkout@v6
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_NUMBER }}:role/deploy_cluster_stack_role
-          aws-region: ${{ vars.AWS_DEFAULT_REGION }}
 
       - name: Validate Environment
         run: |-
