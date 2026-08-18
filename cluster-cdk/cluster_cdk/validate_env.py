@@ -455,7 +455,7 @@ def validate_other_environment_variables() -> None:
 
     assert portal_domains.split(","), "PORTAL_DOMAINS must be a comma-seperated string"
 
-    domains_list = portal_domains.split(",")
+    domains_list = portal_domains.replace(" ", "").split(",")
 
     for domain in domains_list:
         assert domain.startswith(("http://", "https://")), (
