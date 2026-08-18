@@ -417,11 +417,12 @@ def validate_other_environment_variables() -> None:
     is_cryptnono_enabled = os.getenv("IS_CRYPTNONO_ENABLED")
     if is_cryptnono_enabled:
         is_cryptnono_enabled = is_cryptnono_enabled.strip().lower() == "true"
-        if not (
-            is_cryptnono_enabled
-            and execwhacker_cron_image_path
-            and execwhacker_cron_image_tag
-            and cryptnono_alert_email
+        if is_cryptnono_enabled and not all(
+            [
+                execwhacker_cron_image_path,
+                execwhacker_cron_image_tag,
+                cryptnono_alert_email,
+            ]
         ):
             raise Exception(
                 "You cannot run crytnono without defining EXECWHACKER_CRON_IMAGE_TAG, EXECWHACKER_CRON_IMAGE_PATH, and CRYPTNONO_ALERT_EMAIL"
