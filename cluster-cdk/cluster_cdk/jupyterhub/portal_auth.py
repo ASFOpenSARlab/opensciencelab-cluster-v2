@@ -26,14 +26,12 @@ async def _get_portal_domain(request):
 
     # Check if the return path header is present and in whitelist
     if return_path_header:
-        return_path_whitelist = os.environ.get(
-            "OPENSCIENCELAB_PORTAL_DOMAINS", ""
-        ).split(",")
+        return_path_whitelist = os.environ.get("PORTAL_DOMAINS", "").split(",")
         if return_path_header in return_path_whitelist:
             return f"https://{return_path_header}"
 
-    # If no return path header, use OPENSCIENCELAB_PORTAL_DOMAIN env var
-    osl_portal_domain = os.environ.get("OPENSCIENCELAB_PORTAL_DOMAIN", None)
+    # If no return path header, use PORTAL_DOMAINS env var
+    osl_portal_domain = os.environ.get("PORTAL_DOMAINS", None)
     if osl_portal_domain:
         return osl_portal_domain
 
