@@ -29,7 +29,7 @@ async def _get_portal_host(auth_state: dict) -> str:
     if auth_state:
         return_portal = auth_state.get("return_portal")
         if return_portal:
-            if return_portal not in PORTAL_DOMAINS.split(","):
+            if return_portal not in PORTAL_DOMAINS.replace(" ", "").split(","):
                 logging.fatal(
                     "Portal %s not in approved domains %s",
                     return_portal,
@@ -42,7 +42,7 @@ async def _get_portal_host(auth_state: dict) -> str:
     else:
         logging.debug("auth_state not provided")
 
-    primary_portal_domain = PORTAL_DOMAINS.split(",")[0].strip()
+    primary_portal_domain = PORTAL_DOMAINS.replace(" ", "").split(",")[0].strip()
 
     return primary_portal_domain
 
