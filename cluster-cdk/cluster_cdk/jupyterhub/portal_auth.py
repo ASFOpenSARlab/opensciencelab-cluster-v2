@@ -31,7 +31,7 @@ async def _get_portal_domain(request):
             return f"https://{return_path_header}"
 
     # If no return path header, use PORTAL_DOMAINS env var
-    osl_portal_domain = os.environ.get("PORTAL_DOMAINS", None)
+    osl_portal_domain = os.environ.get("PORTAL_DOMAINS", "").split(",")[0]
     if osl_portal_domain:
         return osl_portal_domain
 
