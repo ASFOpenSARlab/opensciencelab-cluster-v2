@@ -45,7 +45,7 @@ class PortalAuthLoginHandler(BaseHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.lab_name = os.environ.get("JUPYTERHUB_LAB_NAME", "")
+        self.lab_name = os.environ.get("LAB_SHORT_NAME", "")
         if not self.lab_name:
             self.log.error("PortalAuth Login lab name not found")
             raise My401Exception("No lab name")
@@ -102,7 +102,7 @@ class PortalAuthLogoutHandler(BaseHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.lab_name = os.environ.get("JUPYTERHUB_LAB_NAME", "")
+        self.lab_name = os.environ.get("LAB_SHORT_NAME", "")
         if not self.lab_name:
             self.log.error("PortalAuth Login lab name not found")
             raise My401Exception("No lab name")
@@ -116,7 +116,7 @@ class PortalAuthenticator(Authenticator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.lab_name = os.environ.get("JUPYTERHUB_LAB_NAME", "")
+        self.lab_name = os.environ.get("LAB_SHORT_NAME", "")
         if not self.lab_name:
             raise My401Exception("No lab name")
 
