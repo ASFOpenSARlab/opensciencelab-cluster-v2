@@ -36,7 +36,7 @@ async def _get_portal_host(auth_state: dict) -> str:
                     PORTAL_DOMAINS,
                 )
             else:
-                return f"https://{return_portal}"
+                return return_portal
         else:
             logging.warning("return_portal not in %s", auth_state)
     else:
@@ -99,7 +99,8 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
     try:
         username: str = spawner.user.name
         auth_state: dict = await spawner.user.get_auth_state()
-        portal_domain: str = await _get_portal_host(auth_state)
+        portal_domain_schemeless: str = await _get_portal_host(auth_state)
+        portal_domain = f"https://{portal_domain_schemeless}"
 
         user_data: dict = await _get_data_from_auth_api(username, portal_domain)
         # user_data Schema

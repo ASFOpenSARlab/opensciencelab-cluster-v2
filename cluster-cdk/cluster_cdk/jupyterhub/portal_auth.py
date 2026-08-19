@@ -28,7 +28,7 @@ async def _get_portal_domain(request):
     if return_path_header:
         return_path_whitelist = os.environ.get("PORTAL_DOMAINS", "").split(",")
         if return_path_header in return_path_whitelist:
-            return f"https://{return_path_header}"
+            return return_path_header
 
     # If no return path header, use PORTAL_DOMAINS env var
     osl_portal_domain = os.environ.get("PORTAL_DOMAINS", "").split(",")[0]
@@ -79,7 +79,7 @@ class PortalAuthLoginHandler(BaseHandler):
             next = web.escape.url_escape(next)
 
             portal_domain = await _get_portal_domain(self.request)
-            self.redirect(f"{portal_domain}/portal/hub/auth?next_url={next}")
+            self.redirect(f"https://{portal_domain}/portal/hub/auth?next_url={next}")
 
         except My403Exception as e:
             self.log.error(f"PortalAuth Login 403 error: {e}")
@@ -107,7 +107,7 @@ class PortalAuthLogoutHandler(BaseHandler):
 
     async def render_logout_page(self):
         portal_domain = await _get_portal_domain(self.request)
-        self.redirect(f"{portal_domain}/portal/hub/logout", permanent=True)
+        self.redirect(f"https://{portal_domain}/portal/hub/logout", permanent=True)
 
 
 class PortalAuthenticator(Authenticator):
@@ -123,7 +123,7 @@ class PortalAuthenticator(Authenticator):
             body = json.dumps({"username": f"{username}"})
             portal_domain = await _get_portal_domain(handler.request)
             response = await AsyncHTTPClient().fetch(
-                f"{portal_domain}/portal/hub/auth", body=body, method="POST"
+                f"https://{portal_domain}/portal/hub/auth", body=body, method="POST"
             )
 
             if not response.code == 200:
