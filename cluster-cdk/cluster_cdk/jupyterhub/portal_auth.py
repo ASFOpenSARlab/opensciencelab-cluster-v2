@@ -209,8 +209,7 @@ class PortalAuthenticator(Authenticator):
                     f"Can user access lab '{self.LAB_SHORT_NAME}'? {can_user_access_lab}"
                 )
 
-                user_data_roles: list = user_data.get("roles", [])
-                is_admin: bool = "admin" in user_data_roles
+                is_admin: bool = user_data.get("admin", False)
 
                 self.log.info(f"Does user '{username}' have admin access? {is_admin}")
 
