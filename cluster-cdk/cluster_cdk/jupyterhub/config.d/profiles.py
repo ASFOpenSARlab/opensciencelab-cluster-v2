@@ -201,7 +201,6 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
                     "memory_guarantee": lab_profile.get("memory_guarantee", None),
                     "cpu_limit": lab_profile.get("cpu_limit", None),
                     "cpu_guarantee": lab_profile.get("cpu_guarantee", None),
-                    "delete_pvc": lab_profile.get("delete_pvc", False),
                     "storage_capacity": lab_profile.get("storage_capacity", "10Gi"),
                     "environment": {
                         "JUPYTERHUB_SINGLEUSER_APP": "jupyter_server.serverapp.ServerApp",

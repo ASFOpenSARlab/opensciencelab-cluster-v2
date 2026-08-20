@@ -812,9 +812,12 @@ class ClusterCdkStack(Stack):
                         # https://jupyterhub-kubespawner.readthedocs.io/en/latest/spawner.html#kubespawner.KubeSpawner.start_timeout
                         "start_timeout": 600,
                         # https://jupyterhub-kubespawner.readthedocs.io/en/latest/spawner.html#kubespawner.KubeSpawner.pod_name_template
-                        # This is not an f-string but a templated string.
+                        # This is not an f-string but a templated string used by jupyterhub.
                         "pod_name_template": "jupyter-{username}",
+                        # https://jupyterhub-kubespawner.readthedocs.io/en/latest/spawner.html#kubespawner.KubeSpawner.delete_pvc
+                        "delete_pvc": False,
                     },
+                    # Other kubespawner values are set per lab profile at ./jupyterhub/config.d/profiles.py
                 },
                 # All extraEnv need to be strings
                 "extraEnv": {
