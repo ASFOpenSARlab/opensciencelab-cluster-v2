@@ -458,8 +458,8 @@ def validate_other_environment_variables() -> None:
     domains_list = portal_domains.replace(" ", "").split(",")
 
     for domain in domains_list:
-        assert domain.startswith(("http://", "https://")), (
-            "Domains within PORTAL_DOMAINS must start with 'http://' or 'https://'"
+        assert not domain.startswith(("http://", "https://")), (
+            "Domains within PORTAL_DOMAINS must not start with 'http://' or 'https://'"
         )
         assert is_valid_fqdn_with_path(domain), (
             "Domains within PORTAL_DOMAINS must be in a valid format"

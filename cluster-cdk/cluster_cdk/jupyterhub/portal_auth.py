@@ -18,20 +18,39 @@ class My401Exception(Exception):
     pass
 
 
+# Does this need to be Async?!?
+async def _get_portal_domain(request):
+    # Not 100% certain on this syntax here, but looks right based on
+    # https://github.com/jupyterhub/jupyterhub/blob/main/jupyterhub/handlers/login.py#L103
+    return_path_header = request.headers.get("return-path", None)
+
+    # Check if the return path header is present and in whitelist
+    if return_path_header:
+        return_path_whitelist = (
+            os.environ.get("PORTAL_DOMAINS", "").replace(" ", "").split(",")
+        )
+        if return_path_header in return_path_whitelist:
+            return return_path_header
+
+    # If no return path header, use PORTAL_DOMAINS env var
+    osl_portal_domain = (
+        os.environ.get("PORTAL_DOMAINS", "").replace(" ", "").split(",")[0]
+    )
+    if osl_portal_domain:
+        return osl_portal_domain
+
+    # OSL Portal Domain could net be determined
+    raise My401Exception("No portal domain")
+
+
 class PortalAuthLoginHandler(BaseHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.lab_prefix = os.environ.get("JUPYTERHUB_LAB_PREFIX", "")
-        if not self.lab_prefix:
-            raise My401Exception("No lab prefix")
-
-        portal_domains = os.environ.get("PORTAL_DOMAINS", "")
-        if not portal_domains:
-            raise My401Exception("No portal domains")
-
-        # Assume logging out of the primary portal since we don't know which portal was used to login
-        self.primary_portal_domain = portal_domains.split(",")[0].strip()
+        self.LAB_SHORT_NAME = os.environ.get("LAB_SHORT_NAME", "")
+        if not self.LAB_SHORT_NAME:
+            self.log.error("PortalAuth Login lab name not found")
+            raise My401Exception("No lab name")
 
     async def post(self):
         raise My401Exception("Not allowed")
@@ -60,12 +79,13 @@ class PortalAuthLoginHandler(BaseHandler):
 
         except My401Exception as e:
             self.log.error(f"PortalAuth Login 401 error: {e}")
-            next = self.get_argument("next", default=f"{self.lab_prefix}/hub/login")
+            next = self.get_argument(
+                "next", default=f"/lab/{self.LAB_SHORT_NAME}/hub/login"
+            )
             next = web.escape.url_escape(next)
 
-            self.redirect(
-                f"{self.primary_portal_domain}/portal/hub/auth?next_url={next}"
-            )
+            portal_domain = await _get_portal_domain(self.request)
+            self.redirect(f"https://{portal_domain}/portal/hub/auth?next_url={next}")
 
         except My403Exception as e:
             self.log.error(f"PortalAuth Login 403 error: {e}")
@@ -73,7 +93,6 @@ class PortalAuthLoginHandler(BaseHandler):
 
         except Exception as e:
             self.log.error(f"PortalAuth Login 500 error: {e}")
-            self.log.error(f"PortalAuth: Traceback: {traceback.format_exc()}")
             raise web.HTTPError(500)
 
 
@@ -87,15 +106,14 @@ class PortalAuthLogoutHandler(BaseHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        portal_domains = os.environ.get("PORTAL_DOMAINS", "")
-        if not portal_domains:
-            raise My401Exception("No portal domains")
-
-        # Assume logging out of the primary portal since we don't know which portal was used to login
-        self.primary_portal_domain = portal_domains.split(",")[0].strip()
+        self.LAB_SHORT_NAME = os.environ.get("LAB_SHORT_NAME", "")
+        if not self.LAB_SHORT_NAME:
+            self.log.error("PortalAuth Login lab name not found")
+            raise My401Exception("No lab name")
 
     async def render_logout_page(self):
-        self.redirect(f"{self.primary_portal_domain}/logout", permanent=True)
+        portal_domain = await _get_portal_domain(self.request)
+        self.redirect(f"https://{portal_domain}/portal/hub/logout", permanent=True)
 
 
 class PortalAuthenticator(Authenticator):
@@ -104,23 +122,14 @@ class PortalAuthenticator(Authenticator):
 
         self.LAB_SHORT_NAME = os.environ.get("LAB_SHORT_NAME", "")
         if not self.LAB_SHORT_NAME:
-            raise My401Exception("No lab name provided")
+            raise My401Exception("No lab name")
 
-        portal_domains = os.environ.get("PORTAL_DOMAINS", "")
-        if not portal_domains:
-            raise My401Exception("No portal domains")
-
-        self.primary_portal_domain = portal_domains.split(",")[0].strip()
-
-    async def _get_user_data_from_auth_api(self, username: str) -> dict:
+    async def _get_user_data_from_auth_api(self, handler, username: str) -> dict:
         try:
-            body = json.dumps(
-                {"username": f"{username}", "lab_short_name": self.LAB_SHORT_NAME}
-            )
+            body = json.dumps({"username": f"{username}"})
+            portal_domain = await _get_portal_domain(handler.request)
             response = await AsyncHTTPClient().fetch(
-                f"{self.primary_portal_domain}/portal/hub/auth",
-                body=body,
-                method="POST",
+                f"https://{portal_domain}/portal/hub/auth", body=body, method="POST"
             )
 
             if not response.code == 200:
@@ -139,30 +148,25 @@ class PortalAuthenticator(Authenticator):
             raise My401Exception()
 
         try:
-            return encryptedjwt.decrypt(response["data"])
+            user_data = encryptedjwt.decrypt(response["data"])
         except Exception as e:
             self.log.error(f"PortalAuth Login JWT decryption went wrong: {e}")
             raise My401Exception(
                 "Something went wrong with jwt authentication. Contact the administrator."
             )
 
+        return user_data
+
     async def _get_username_from_username_cookie(self, handler) -> dict:
         encrypted_username: str = handler.get_cookie("portal-username")
-
-        # If the user has no username cookie, their session has expired
-        if encrypted_username is None:
-            raise My401Exception("User has no `portal-username` cookie")
-
         username = encryptedjwt.decrypt(encrypted_username)
 
-        self.log.info(f"Username '{username}' got from 'portal-username' cookie.")
-
         if not username:
-            return {}
+            return None
 
         return {"name": username}
 
-    async def _get_auth_data(self, handler, data: dict = {}) -> dict | None:
+    async def _get_auth_data(self, handler, data: dict = None) -> dict | None:
         if not data:
             data = await self._get_username_from_username_cookie(handler)
 
@@ -170,7 +174,9 @@ class PortalAuthenticator(Authenticator):
             username = str(data["name"])
 
             # Get updated user data from portal
-            user_data: dict = await self._get_user_data_from_auth_api(username=username)
+            user_data = await self._get_user_data_from_auth_api(
+                handler, username=username
+            )
 
             if user_data is None:
                 self.log.error("No JWT data found")
@@ -204,6 +210,7 @@ class PortalAuthenticator(Authenticator):
                 self.log.info(f"Does user '{username}' have admin access? {is_admin}")
 
                 if can_user_access_lab:
+                    # Append
                     return_path = handler.request.headers.get("return-path", None)
                     return {
                         "name": username,
@@ -218,7 +225,7 @@ class PortalAuthenticator(Authenticator):
 
         return None
 
-    async def authenticate(self, handler, data: dict = {}) -> dict | None:
+    async def authenticate(self, handler, data: dict = None) -> dict | None:
         self.log.error("Inside authenticate")
         return await self._get_auth_data(handler, data)
 
