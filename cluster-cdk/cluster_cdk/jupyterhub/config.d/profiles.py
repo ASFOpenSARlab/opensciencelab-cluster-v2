@@ -49,7 +49,12 @@ async def _get_portal_host(auth_state: dict) -> str:
 
 async def _get_data_from_auth_api(username: str, portal_domain: str) -> dict:
     try:
-        body = json.dumps({"username": f"{username}"})
+        body = json.dumps(
+            {
+                "username": f"{username}",
+                "lab_short_name": LAB_SHORT_NAME,
+            }
+        )
 
         response: HTTPResponse = await AsyncHTTPClient().fetch(
             f"{portal_domain}/portal/hub/auth", body=body, method="POST"
