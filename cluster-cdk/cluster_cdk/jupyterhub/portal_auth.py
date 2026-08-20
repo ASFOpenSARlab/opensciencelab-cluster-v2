@@ -47,8 +47,8 @@ class PortalAuthLoginHandler(BaseHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.lab_name = os.environ.get("LAB_SHORT_NAME", "")
-        if not self.lab_name:
+        self.LAB_SHORT_NAME = os.environ.get("LAB_SHORT_NAME", "")
+        if not self.LAB_SHORT_NAME:
             self.log.error("PortalAuth Login lab name not found")
             raise My401Exception("No lab name")
 
@@ -79,7 +79,9 @@ class PortalAuthLoginHandler(BaseHandler):
 
         except My401Exception as e:
             self.log.error(f"PortalAuth Login 401 error: {e}")
-            next = self.get_argument("next", default=f"/lab/{self.lab_name}/hub/login")
+            next = self.get_argument(
+                "next", default=f"/lab/{self.LAB_SHORT_NAME}/hub/login"
+            )
             next = web.escape.url_escape(next)
 
             portal_domain = await _get_portal_domain(self.request)
@@ -104,8 +106,8 @@ class PortalAuthLogoutHandler(BaseHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.lab_name = os.environ.get("LAB_SHORT_NAME", "")
-        if not self.lab_name:
+        self.LAB_SHORT_NAME = os.environ.get("LAB_SHORT_NAME", "")
+        if not self.LAB_SHORT_NAME:
             self.log.error("PortalAuth Login lab name not found")
             raise My401Exception("No lab name")
 
@@ -118,8 +120,8 @@ class PortalAuthenticator(Authenticator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.lab_name = os.environ.get("LAB_SHORT_NAME", "")
-        if not self.lab_name:
+        self.LAB_SHORT_NAME = os.environ.get("LAB_SHORT_NAME", "")
+        if not self.LAB_SHORT_NAME:
             raise My401Exception("No lab name")
 
     async def _get_user_data_from_auth_api(self, handler, username: str) -> dict:
@@ -185,21 +187,27 @@ class PortalAuthenticator(Authenticator):
             )
             try:
                 user_data_access_for_lab: dict = user_data.get("lab_access", {}).get(
-                    self.lab_name, {}
+                    self.LAB_SHORT_NAME, {}
                 )
                 if not user_data_access_for_lab:
                     return None
+
+                self.log.info(
+                    f"User data access for lab '{self.LAB_SHORT_NAME}': {user_data_access_for_lab}"
+                )
 
                 can_user_access_lab: bool = bool(
                     user_data_access_for_lab.get("can_user_access_lab", False)
                 )
 
-                user_data_groups: list = user_data.get("groups", [])
-                user_data_roles: list = user_data.get("roles", [])
-                is_admin: bool = (
-                    "admin" in user_data_roles
-                    or f"admin-{self.lab_name}" in user_data_groups
+                self.log.info(
+                    f"Can user access lab '{self.LAB_SHORT_NAME}'? {can_user_access_lab}"
                 )
+
+                user_data_roles: list = user_data.get("roles", [])
+                is_admin: bool = "admin" in user_data_roles
+
+                self.log.info(f"Does user '{username}' have admin access? {is_admin}")
 
                 if can_user_access_lab:
                     # Append
