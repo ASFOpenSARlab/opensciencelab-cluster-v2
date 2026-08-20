@@ -126,7 +126,12 @@ class PortalAuthenticator(Authenticator):
 
     async def _get_user_data_from_auth_api(self, handler, username: str) -> dict:
         try:
-            body = json.dumps({"username": f"{username}"})
+            body = json.dumps(
+                {
+                    "username": f"{username}",
+                    "lab_short_name": self.LAB_SHORT_NAME,
+                }
+            )
             portal_domain = await _get_portal_domain(handler.request)
             response = await AsyncHTTPClient().fetch(
                 f"https://{portal_domain}/portal/hub/auth", body=body, method="POST"
