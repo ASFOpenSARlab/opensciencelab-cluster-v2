@@ -491,7 +491,7 @@ def get_user_snapshots():
 def send_email_to_portal(email_payload):
     """Proxy an email through portal endpoint"""
     encrypted_data = encryptedjwt.encrypt(email_payload, sso_token=SSO_SECRET)
-    portal_email_url = f"{PORTAL_DOMAIN}/portal/hub/user/email"
+    portal_email_url = f"https://{PORTAL_DOMAIN}/portal/hub/user/email"
 
     # Send Request
     response = requests.post(url=portal_email_url, data=encrypted_data, timeout=15)
