@@ -1,6 +1,8 @@
 # opensciencelab-cluster-v2
 
-## On Stack Deletion
+## Required On Stack Deletion
+
+!IMPORTANT
 
 The network load balancer is created via annotaions on a custom k8s service resource. When the CDK stack is destroyed,
 the underlying load balancer and networking is not automatically deleted.
@@ -11,16 +13,7 @@ the underlying load balancer and networking is not automatically deleted.
 If this is not done, resource deletion will hang and the load balancer and networking will fail deletion.
 Then manual cleanup will need to occur and the whole process will take about two hours.
 
-## Architecture
-
-At a high level, the new cluster is a highly customized JupyterHub on EKS, deployed via
-a CDK + Actions pipeline.
-
-![Architecture Diagram](docs/OSL%20Cluster%20v2%20Arch%20Diagram.svg)
-
-[Read more about the choices and behavior of the OpenScienceLab-Cluster-V2 architecture](ARCHITECTURE.md).
-
-## Deployments
+## Deployment Information
 
 ### AWS Accounts
 
@@ -38,7 +31,7 @@ a CDK + Actions pipeline.
 - Prod-level deployments (OpenSARLab, Custom Deployments) are manually deployed to via
   the deploy Action `workflow_dispatch`.
 
-### Creation of User Volumes and Snapshots
+### On User Volumes and Snapshots
 
 The following assumes that all EBS volumes and snapshots are tagged with `kubernetes.io/cluster/{cluster_name}=owned`.
 
@@ -76,25 +69,123 @@ Various EBS tags are created on server start and stop. Some relevant ones are
 - `volume-delete-tag`: The datetime the EBS volume should be deleted. Calculated on server stop.
 - `snapshot-delete-time`: The datetime the EBS snapshot should be deleted. Calculated on server stop.
 
-### Troubleshooting
+### Building and Deploying the Cluster From GitHub Actions
 
-### Deploying the Cluster
+In actions, this is done through an OIDC Provider in AWS and requires no local authentication.
 
-#### My Cluster is inaccessible for some reason
+#### Setup OIDC Provider within AWS (as needed)
 
-Did you
+One is required per account and per region. If previously set up, this step can be disregarded.
 
-1. Change your SSO secret?
-1. Respawn the hub pod after changing SSO secret, or any other variables?
-1. Double check your portal lab card has the correct cluster deployment url?
+Search CloudFormation for "OIDC". If not present, then create OIDC connection as follows:
+   
+1. Check /oidc-cdk/github_repos.conf to see if the GitHub repo containing cluster v2 code is present
+   
+2. Set AWS_DEFAULT_PROFILE. This is critical!
+   
+    `export AWS_DEFAULT_PROFILE=geos`
+   	
+3. Within the root of the code, 
+   
+    `make cdk-shell`
+        
+4. Check credentials and account
+   
+    `make aws-info`
+        
+5. Bootstrap CDK into account/region to we can use native CDK deploy features
+   
+    `make manual-cdk-bootstrap`
+   	
+6. Add OIDC connection to account/region for GitHub use
+   
+    `make deploy-oidc`
+   	
+CDKToolkit cloudformation template should be installed in account
 
-#### Ensure AWS credentials are present
+#### Setup GitHub Environment
 
-The Makefile + Docker process will need to communicate with AWS. In actions, this is done through an
-OIDC Provider in AWS and requires no authentication. Locally however, a profile must be present in
-`~/.aws/credentials` and the `AWS_DEFAULT_PROFILE` env var needs to be set accordingly, **_OR_**
-`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` must be set. Either solution works, and will get
-automagically populated into the dockerized build/deploy environment.
+Go to Settings > Secrets and variables > Actions.
+
+There are three levels of precedence: Organization, Repository, and Environment. 
+Defaults for production OpenSARLab are held in Repository. Overrides are usually in Environment.
+
+To add an environment, go to Settings > Environments, click _New Environment_, name the enviroment with the LAB_SHORT_NAME value,
+and click Configure Environment.
+The LAB_SHORT_NAME should be short and contain only number, letters, and hypens (i.e. url friendly).
+
+Within the environment itself, in the _Environment secrets_ section, add AWS_ACCOUNT_NUMBER.
+
+In the _Environment variables_ section, add any of the following overrides as needed.
+
+```bash
+# Infrastructure Configuration
+JUPYTER_HUB_IMAGE_PATH="ghcr.io/asfopensarlab/opensciencelab-jupyterhub"  # Needs to exist for opensciencelab-jupyterhub image
+JUPYTER_HUB_IMAGE_TAG="test"            # Needs to exist for opensciencelab-jupyterhub image
+EXECWHACKER_CRON_IMAGE_PATH="ghcr.io/asfopensarlab/opensciencelab-update-execwhacker"  # Needs to exist for opensciencelab-update-execwhacker image
+EXECWHACKER_CRON_IMAGE_TAG="test"       # Needs to exist for opensciencelab-update-execwhacker image
+IS_CRYPTNONO_ENABLED="true"             # Is cryptnono deployed within the cluster?
+UI_IAM_ROLE="AWSReservedSSO_Project.."  # IAM Role used by admins in the AWS console
+ADMIN_USERS="nobody"                    # Comma seperated list of users to embed into JH
+
+# PORTAL_DOMAINS is comma seperated portal urls with the first being the primary
+# No commas allowed in names.
+PORTAL_DOMAINS="<CLOUDFRONT-URL>, <CLOUDFRONT-URL>"
+
+PROFILE_DEFINITIONS="""
+  [ "GEOS 631" ]
+  description = "JupyterLab 5 - RAM Guarantee: 5G. RAM limit: 8G. CPU limit: 2. Storage: 10G."
+  image_url = "ghcr.io/asfopensarlab/geos631:test"
+  node = "m6a-large"
+  hook_script = "geos631.sh"
+  memory_guarantee = "5G"
+  storage_capacity = "10Gi"
+"""
+
+NODE_DEFINITIONS="""
+  [ core ]
+  required = true
+  node_type = "core"
+  instance = ["t3a.large"]
+  group_min_size = 1
+  group_max_size = 1
+
+  [ m6a-large ]
+  node_type = "user"
+  instance = ["m6a.large"]
+  group_min_size = 0
+  group_max_size = 50
+"""
+
+VOLUME_CRON_SCHEDULE="0 * * * ? *"      # Schedule to run the volume management lambda
+SNAPSHOT_WARNING_DAYS="5,3,1"           # Number of days before delete to warn for old snapshots
+SNAPSHOT_GRACEPERIOD_DAYS=1           # Number of days to retain snapshot past deletion time
+
+# Volume and snapshot lifecycle times
+DAYS_TILL_VOLUME_DELETION=2             # Number of days after server stop when the user's volume will be deleted
+DAYS_TILL_SNAPSHOT_DELETION=7           # Number of days after server stop when the user's snapshot will be deleted
+```
+
+#### Validate Environment
+
+To validate the environment with deploying, run run GitHub Action https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/actions/workflows/deploy-cluster-validate-env.yaml.
+
+#### Build with GitHub Actions
+
+Run GitHub Action https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/actions/workflows/deploy-cluster-cdk-app.yaml
+
+From build output, record Load Balancer URL
+   
+Confirm SNS Topic Subscription from email
+
+### Building and Deploying the Cluster From Your Local Computer
+
+#### Ensure AWS credentials are present on your computer
+
+The Makefile + Docker process will need to communicate with AWS. There are two options to set AWS permssions:
+
+Profile must be present in `~/.aws/credentials` and the `AWS_DEFAULT_PROFILE` env var needs to be set accordingly, 
+**_OR_** `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` must be set.
 
 ##### `~/.aws` configuration
 
@@ -195,3 +286,35 @@ If you see CloudFormation after a few minutes, you're ready to deploy!
 ##### Linting
 
 Before committing changes, the code can be easily linted by utilizing the `lint` target of the Makefile. This will call the same linting routines used by the GitHub actions.
+
+### Finish Deployment Build
+
+Tbere are a few steps that need to be done to complete the deployment
+
+Update Portal SSO Token in Secrets Manager. This requires the SSO Token to have been formed by CDK.
+
+Restart Hub pod (for SSO token changes to take effect). This requires JupyterHub to be running after the CDK build.
+
+1. With the child AWS account, go to the EKS Console.
+2. Select the $LAB_SHORT_NAME cluster.
+3. Click on the Connect button in the upper right
+4. Within CloudShell, run the command `kubectl -n jupyter delete pod -l component=hub` (?)
+
+## Architecture
+
+At a high level, the new cluster is a highly customized JupyterHub on EKS, deployed via
+a CDK + Actions pipeline.
+
+![Architecture Diagram](docs/OSL%20Cluster%20v2%20Arch%20Diagram.svg)
+
+[Read more about the choices and behavior of the OpenScienceLab-Cluster-V2 architecture](ARCHITECTURE.md).
+
+### Troubleshooting
+
+#### My Cluster is inaccessible for some reason
+
+Did you
+
+1. Change your SSO secret?
+1. Respawn the hub pod after changing SSO secret, or any other variables?
+1. Double check your portal lab card has the correct cluster deployment url?
