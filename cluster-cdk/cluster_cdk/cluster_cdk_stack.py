@@ -799,6 +799,7 @@ class ClusterCdkStack(Stack):
                         "tornado_settings": {
                             "cookie_options": {"expires_days": 1.0},
                         },
+                        "authenticate_prometheus": False,
                     },
                     "Authenticator": {
                         "admin_users": self.ADMIN_USERS,
@@ -875,6 +876,15 @@ class ClusterCdkStack(Stack):
                         "/usr/local/etc/jupyterhub/jupyterhub_config.d/post_stop_hook.py",
                     )
                 ),
+                "services": {
+                    # Service at https://<your-hub-url>/services/opencost
+                    "opencost-ui": {
+                        "name": "opencost",
+                        # Points to the internal cluster DNS of the OpenCost UI service
+                        "url": "http://opencost.opencost.svc.cluster.local:9090",  # http://<service-name>.<namespace>.svc.cluster.local:<port>
+                        "admin": True,  # Restricts access to JupyterHub administrators only
+                    }
+                },
             },
             "proxy": {
                 "https": {"enabled": False},
@@ -1589,6 +1599,62 @@ class ClusterCdkStack(Stack):
             version=self.autoscaler_helm_version,
             values=autoscaler_helm_chart_values,
         )
+
+        #####################################################################
+        #
+        #    Setup Monitoring via Prometheus and OpenCost
+        #
+        #####################################################################
+
+        prometheus_chart = self.cluster.add_helm_chart(
+            "PrometheusChart",
+            chart="prometheus",
+            release="prometheus",
+            repository="https://prometheus-community.github.io/helm-charts",
+            namespace="prometheus-system",
+            create_namespace=True,
+            values={
+                "alertmanager": {"enabled": False},
+                "prometheus-pushgateway": {"enabled": False},
+                # Crucial step: Allow kube-state-metrics to expose your custom pod labels
+                "nodeExporter": {"enabled": True},
+                "kube-state-metrics": {
+                    "enabled": True,
+                    "metricLabelsAllowlist": [
+                        "pods=[opensciencelab.local/node-type,opensciencelab.local/user-profile-name,opensciencelab.local/lab-short-name,opensciencelab.local/username]"
+                    ],
+                },
+                "server": {
+                    "persistentVolume": {"enabled": False},
+                    # "resources": {
+                    #    "requests": {"cpu": "500m", "memory": "512Mi"},
+                    #    "limits": {"cpu": "1000m", "memory": "1024Mi"},
+                    # },
+                    # NODE SELECTOR FOR PROMETHEUS SERVER POD
+                    "nodeSelector": {"hub.jupyter.org/node-purpose": "core"},
+                },
+            },
+        )
+
+        opencost_chart = self.cluster.add_helm_chart(
+            "OpenCostChart",
+            chart="opencost",
+            release="opencost",
+            repository="https://opencost.github.io/opencost-helm-chart",
+            namespace="opencost",
+            create_namespace=True,
+            values={
+                "opencost": {
+                    "prometheus": {
+                        "internalService-name": "prometheus-server.prometheus-system.svc"
+                    },
+                    "ui": {"enabled": True},
+                    "nodeSelector": {"hub.jupyter.org/node-purpose": "core"},
+                }
+            },
+        )
+
+        opencost_chart.node.add_dependency(prometheus_chart)
 
         #####################################################################
         #
