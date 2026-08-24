@@ -13,7 +13,17 @@ the underlying load balancer and networking is not automatically deleted.
 If this is not done, resource deletion will hang and the load balancer and networking will fail deletion.
 Then manual cleanup will need to occur and the whole process will take about two hours.
 
-## Deployment Information
+## Troubleshooting
+
+### My Cluster is inaccessible for some reason
+
+Did you
+
+- Change your SSO secret?
+- Respawn the hub pod after changing SSO secret, or any other variables?
+- Double check your portal lab card has the correct cluster deployment url?
+
+## Pre-Deployment Information
 
 ### AWS Accounts
 
@@ -23,13 +33,15 @@ Then manual cleanup will need to occur and the whole process will take about two
 | `test`   | Non-Prod    | 97**\*\*\*\***89 |
 | `prod`   | Prod        | 70**\*\*\*\***05 |
 
+These accounts are for OpenSARLab and development. Other deployments for labs, classes, etc are not included in this table.
+
+**All cluster AWS account are assumed to be federated or children of another management account.** This is required for the `UI_IAM_ROLE` to work correctly.
+
 ### Maturities
 
-- Non-`main` branches with specified prefix/suffix (eg `ab/ticket.feature`) will deploy a matched
-  prefix (ie `ab`) dev maturity ( and `dev` GitHub environment!) deployment.
+- Non-`main` branches with specified prefix/suffix (eg `ab/ticket.feature`) will be considered dev maturity.
 - Merges into `main` branch will create/update the `test` maturity deployment.
-- Prod-level deployments (OpenSARLab, Custom Deployments) are manually deployed to via
-  the deploy Action `workflow_dispatch`.
+- Prod-level deployments (OpenSARLab, Custom Deployments) are manually deployed to via the deploy Action `workflow_dispatch`. Prod maturities are usually tags.
 
 ### On User Volumes and Snapshots
 
@@ -69,11 +81,11 @@ Various EBS tags are created on server start and stop. Some relevant ones are
 - `volume-delete-tag`: The datetime the EBS volume should be deleted. Calculated on server stop.
 - `snapshot-delete-time`: The datetime the EBS snapshot should be deleted. Calculated on server stop.
 
-### Building and Deploying the Cluster From GitHub Actions
+## Building and Deploying the Cluster (GitHub Actions)
 
 In actions, this is done through an OIDC Provider in AWS and requires no local authentication.
 
-#### Setup OIDC Provider within AWS (as needed)
+### Setup OIDC Provider within AWS (as needed)
 
 One is required per account and per region. If previously set up, this step can be disregarded.
 
@@ -103,7 +115,7 @@ Search CloudFormation for "OIDC". If not present, then create OIDC connection as
    	
 CDKToolkit cloudformation template should be installed in account
 
-#### Setup GitHub Environment
+### Setup GitHub Environment
 
 Go to Settings > Secrets and variables > Actions.
 
@@ -166,28 +178,40 @@ DAYS_TILL_VOLUME_DELETION=2             # Number of days after server stop when 
 DAYS_TILL_SNAPSHOT_DELETION=7           # Number of days after server stop when the user's snapshot will be deleted
 ```
 
-#### Validate Environment
+### Validate Environment
 
 To validate the environment with deploying, run run GitHub Action https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/actions/workflows/deploy-cluster-validate-env.yaml.
 
-#### Build with GitHub Actions
+### Build with GitHub Actions
 
 Run GitHub Action https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/actions/workflows/deploy-cluster-cdk-app.yaml
 
-From build output, record Load Balancer URL
-   
-Confirm SNS Topic Subscription from email
+You will need to select from the workflow dispatch the Environment/LAB_SHORT_NAME and the code to be ran. Optionally, you can run the test suite. 
+Code merged into `main` will be automatically built on cluster `test`.
 
-### Building and Deploying the Cluster From Your Local Computer
+#### SNS Topic Subscription
 
-#### Ensure AWS credentials are present on your computer
+On inital build, the SNS Topic Subscription confirmation will be sent to the configured email. The given hyperlink will need to be clicked.
+If the email doesn't show up in the inbox, check the spam folder. If it still doesn't show up, perhaps an internal firewall is blocking the email. 
+This possible blockage would also affect other OSL services and will need to be fixed.
+
+#### Load Balancer URL
+
+From the build output, record the Load Balancer URL for later use.
+
+## Building and Deploying the Cluster (Locally)
+
+To increase development velocity, it might be easier and faster to locally push changes to AWS.
+When making changes to non-dev maturities, use GitHub Actions to avoid environment corruption.
+
+### Ensure AWS credentials are present on your computer
 
 The Makefile + Docker process will need to communicate with AWS. There are two options to set AWS permssions:
 
 Profile must be present in `~/.aws/credentials` and the `AWS_DEFAULT_PROFILE` env var needs to be set accordingly, 
 **_OR_** `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` must be set.
 
-##### `~/.aws` configuration
+#### `~/.aws` configuration
 
 You will need a section in `~/.aws/credentials` like
 
@@ -200,7 +224,7 @@ aws_secret_access_key = <YOUR KEY VALUE HERE>
 You can generate AWS Access Keys from the IAM console:
 [AWS docs](https://docs.aws.amazon.com/IAM/latest/UserGuide/access-key-self-managed.html#Using_CreateAccessKey)
 
-##### Updating environment variables
+### Update local environment variables
 
 You can deploy a new stack without conflicting with any others.
 
@@ -216,9 +240,13 @@ nano .env
 `.env`:
 
 ```bash
-# Required make variables
+# Required make variables for local development
 export AWS_DEFAULT_PROFILE=me                  # The profile configured to access AWS Account
 export LAB_SHORT_NAME="dd"                     # Short deployment prefix value
+
+# Optional. For running storage management lambda outside AWS
+export AWS_CLI_PATH=/usr/local/bin/aws         # Path to your installation of awscli
+export SSO_SECRET_ARN=arn:aws:.....            # Arn location of cluster SSO secret
 
 # Infrastructure Configuration
 export JUPYTER_HUB_IMAGE_PATH="ghcr.io/asfopensarlab/opensciencelab-jupyterhub"  # Needs to exist for opensciencelab-jupyterhub image
@@ -237,13 +265,9 @@ export SNAPSHOT_GRACEPERIOD_DAYS=1           # Number of days to retain snapshot
 # Volume and snapshot lifecycle times
 export DAYS_TILL_VOLUME_DELETION=2             # Number of days after server stop when the user's volume will be deleted
 export DAYS_TILL_SNAPSHOT_DELETION=7           # Number of days after server stop when the user's snapshot will be deleted
-
-# For running storage management lambda outside AWS
-export AWS_CLI_PATH=/usr/local/bin/aws         # Path to your installation of awscli
-export SSO_SECRET_ARN=arn:aws:.....            # Arn location of cluster SSO secret
 ```
 
-For example configurations, see the [GitHub Environments](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/settings/environments)
+For example configuration values, see the [GitHub Environments](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/settings/environments)
 in the cluster repository.
 
 Once you've updated the values of the variables in your `.env`, load them into your
@@ -253,19 +277,27 @@ environment:
 source .env
 ```
 
-##### Pre-Deploy
+Caution: this will override any other local environments.
+
+### Pre-Deploy off `main` branch
 
 Initial stack deployments take a long time. If the initial stack deploy fails, it takes
 a very long time to delete and retry. It can be helpful to deploy the main stack prior
 to beginning development to create a stable cluster before feature development.
 
-##### Start CDK Shell
+### Start CDK Shell
 
 From the root of the cloned repo, start the container:
 
 ```shell
 $ make cdk-shell
 [ root@a7a585db4d88:/cdk ]#
+```
+
+Run `make aws-info` and check the AWS user and account numbers:
+
+```shell
+[ root@a7a585db4d88:/cdk ]# make aws-info
 ```
 
 Run `make synth-cluster` to test your environment:
@@ -277,28 +309,40 @@ Run `make synth-cluster` to test your environment:
 
 If you see CloudFormation after a few minutes, you're ready to deploy!
 
-##### Deploy via CDK
+### Deploy via CDK
 
 ```shell
 [ root@a7a585db4d88:/cdk ]# make deploy-cluster
 ```
 
-##### Linting
+#### SNS Topic Subscription
 
-Before committing changes, the code can be easily linted by utilizing the `lint` target of the Makefile. This will call the same linting routines used by the GitHub actions.
+On initial build, the SNS Topic Subscription confirmation will be sent to the configured email. The given hyperlink will need to be clicked.
+If the email doesn't show up in the inbox, check the spam folder. If it still doesn't show up, perhaps an internal firewall is blocking the email. 
+This possible blockage would also affect other OSL services and will need to be fixed.
 
-### Finish Deployment Build
+#### Load Balancer URL
 
-Tbere are a few steps that need to be done to complete the deployment
+From the initial build output, record the Load Balancer URL for later use.
 
-Update Portal SSO Token in Secrets Manager. This requires the SSO Token to have been formed by CDK.
+### Linting
 
-Restart Hub pod (for SSO token changes to take effect). This requires JupyterHub to be running after the CDK build.
+Before committing changes, the code can be easily linted by utilizing the `lint` target of the Makefile. This will call the same linting routines used by the GitHub Actions.
 
-1. With the child AWS account, go to the EKS Console.
-2. Select the $LAB_SHORT_NAME cluster.
-3. Click on the Connect button in the upper right
-4. Within CloudShell, run the command `kubectl -n jupyter delete pod -l component=hub` (?)
+## Post-Deployment 
+
+Tbere are a few steps after cluster build that need to be done to complete the full setup.
+
+- Add Load Balancer URL to Portal [profile](https://github.com/ASFOpenSARlab/opensciencelab-portal-v2/blob/main/portal-cdk/lambda_main/util/labs/__init__.py).
+
+- Update Portal SSO Token in cluster Secrets Manager. SSO Token is from Portal.
+
+- Restart Hub pod (for SSO token changes to take effect).
+
+   1. With the child AWS account, go to the EKS Console.
+   2. Select the $LAB_SHORT_NAME cluster.
+   3. Click on the Connect button in the upper right
+   4. Within CloudShell, run the command `kubectl -n jupyter delete pod -l component=hub` (?)
 
 ## Architecture
 
@@ -308,13 +352,3 @@ a CDK + Actions pipeline.
 ![Architecture Diagram](docs/OSL%20Cluster%20v2%20Arch%20Diagram.svg)
 
 [Read more about the choices and behavior of the OpenScienceLab-Cluster-V2 architecture](ARCHITECTURE.md).
-
-### Troubleshooting
-
-#### My Cluster is inaccessible for some reason
-
-Did you
-
-1. Change your SSO secret?
-1. Respawn the hub pod after changing SSO secret, or any other variables?
-1. Double check your portal lab card has the correct cluster deployment url?
