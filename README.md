@@ -90,36 +90,36 @@ In actions, this is done through an OIDC Provider in AWS and requires no local a
 One is required per account and per region. If previously set up, this step can be disregarded.
 
 Search CloudFormation for "OIDC". If not present, then create OIDC connection as follows:
-   
+
 1. Check /oidc-cdk/github_repos.conf to see if the GitHub repo containing cluster v2 code is present
-   
+
 2. Set AWS_DEFAULT_PROFILE. This is critical!
-   
+
     `export AWS_DEFAULT_PROFILE=geos`
-   	
-3. Within the root of the code, 
-   
+
+3. Within the root of the code,
+
     `make cdk-shell`
-        
+
 4. Check credentials and account
-   
+
     `make aws-info`
-        
+
 5. Bootstrap CDK into account/region to we can use native CDK deploy features
-   
+
     `make manual-cdk-bootstrap`
-   	
+
 6. Add OIDC connection to account/region for GitHub use
-   
+
     `make deploy-oidc`
-   	
+
 CDKToolkit cloudformation template should be installed in account
 
 ### Setup GitHub Environment
 
 Go to Settings > Secrets and variables > Actions.
 
-There are three levels of precedence: Organization, Repository, and Environment. 
+There are three levels of precedence: Organization, Repository, and Environment.
 Defaults for production OpenSARLab are held in Repository. Overrides are usually in Environment.
 
 To add an environment, go to Settings > Environments, click _New Environment_, name the enviroment with the LAB_SHORT_NAME value,
@@ -180,24 +180,18 @@ DAYS_TILL_SNAPSHOT_DELETION=7           # Number of days after server stop when 
 
 ### Validate Environment
 
-To validate the environment with deploying, run run GitHub Action https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/actions/workflows/deploy-cluster-validate-env.yaml.
+To validate the environment with deploying, run [Validation GitHub Action](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/actions/workflows/deploy-cluster-validate-env.yaml).
 
 ### Build with GitHub Actions
 
-Run GitHub Action https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/actions/workflows/deploy-cluster-cdk-app.yaml
+Run [Build GitHub Action](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/actions/workflows/deploy-cluster-cdk-app.yaml)
 
-You will need to select from the workflow dispatch the Environment/LAB_SHORT_NAME and the code to be ran. Optionally, you can run the test suite. 
+You will need to select from the workflow dispatch the Environment/LAB_SHORT_NAME and the code to be ran. Optionally, you can run the test suite.
 Code merged into `main` will be automatically built on cluster `test`.
 
-#### SNS Topic Subscription
+### After deploying
 
-On inital build, the SNS Topic Subscription confirmation will be sent to the configured email. The given hyperlink will need to be clicked.
-If the email doesn't show up in the inbox, check the spam folder. If it still doesn't show up, perhaps an internal firewall is blocking the email. 
-This possible blockage would also affect other OSL services and will need to be fixed.
-
-#### Load Balancer URL
-
-From the build output, record the Load Balancer URL for later use.
+Go to [post build](#post-build).
 
 ## Building and Deploying the Cluster (Locally)
 
@@ -208,7 +202,7 @@ When making changes to non-dev maturities, use GitHub Actions to avoid environme
 
 The Makefile + Docker process will need to communicate with AWS. There are two options to set AWS permssions:
 
-Profile must be present in `~/.aws/credentials` and the `AWS_DEFAULT_PROFILE` env var needs to be set accordingly, 
+Profile must be present in `~/.aws/credentials` and the `AWS_DEFAULT_PROFILE` env var needs to be set accordingly,
 **_OR_** `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` must be set.
 
 #### `~/.aws` configuration
@@ -315,23 +309,23 @@ If you see CloudFormation after a few minutes, you're ready to deploy!
 [ root@a7a585db4d88:/cdk ]# make deploy-cluster
 ```
 
-#### SNS Topic Subscription
+### After deploying via CDK
 
-On initial build, the SNS Topic Subscription confirmation will be sent to the configured email. The given hyperlink will need to be clicked.
-If the email doesn't show up in the inbox, check the spam folder. If it still doesn't show up, perhaps an internal firewall is blocking the email. 
-This possible blockage would also affect other OSL services and will need to be fixed.
-
-#### Load Balancer URL
-
-From the initial build output, record the Load Balancer URL for later use.
+Go to [post build](#post-build).
 
 ### Linting
 
 Before committing changes, the code can be easily linted by utilizing the `lint` target of the Makefile. This will call the same linting routines used by the GitHub Actions.
 
-## Post-Deployment 
+## Post Build
 
 Tbere are a few steps after cluster build that need to be done to complete the full setup.
+
+- From the initial build output, record the Load Balancer URL for later use.
+
+- On initial build, the SNS Topic Subscription confirmation will be sent to the configured email. The given hyperlink will need to be clicked.
+If the email doesn't show up in the inbox, check the spam folder. If it still doesn't show up, perhaps an internal firewall is blocking the email.
+This possible blockage would also affect other OSL services and will need to be fixed.
 
 - Add Load Balancer URL to Portal [profile](https://github.com/ASFOpenSARlab/opensciencelab-portal-v2/blob/main/portal-cdk/lambda_main/util/labs/__init__.py).
 
@@ -341,8 +335,8 @@ Tbere are a few steps after cluster build that need to be done to complete the f
 
    1. With the child AWS account, go to the EKS Console.
    2. Select the $LAB_SHORT_NAME cluster.
-   3. Click on the Connect button in the upper right
-   4. Within CloudShell, run the command `kubectl -n jupyter delete pod -l component=hub` (?)
+   3. Click on the Connect button in the upper right. This will take you to CloudShell with the proper kubectl credentials.
+   4. Within CloudShell, run the command `kubectl -n jupyter delete pod -l component=hub`
 
 ## Architecture
 
