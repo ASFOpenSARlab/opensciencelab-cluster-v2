@@ -816,6 +816,7 @@ class ClusterCdkStack(Stack):
                         "pod_name_template": "jupyter-{username}",
                         # https://jupyterhub-kubespawner.readthedocs.io/en/latest/spawner.html#kubespawner.KubeSpawner.delete_pvc
                         "delete_pvc": False,
+                        "slug_scheme": "escape",
                     },
                     # Other kubespawner values are set per lab profile at ./jupyterhub/config.d/profiles.py
                 },
