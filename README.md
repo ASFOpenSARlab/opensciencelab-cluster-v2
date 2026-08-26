@@ -15,7 +15,6 @@ a CDK + Actions pipeline.
 > The network load balancer is created via annotaions on a custom k8s service resource. > When the CDK stack is destroyed,
 > the underlying load balancer and networking is not automatically deleted.
 >
-> [!WARNING]
 > Before deleting the stack, you MUST open AWS CloudShell and manually run `kubectl -n jupyter delete svc proxy-public-loadbalancer`.
 
 If this is not done, resource deletion will hang and the load balancer and networking will fail deletion.
