@@ -79,11 +79,14 @@ Various EBS tags are created on server start and stop. Some relevant ones are
 - `volume-delete-tag`: The datetime the EBS volume should be deleted. Calculated on server stop.
 - `snapshot-delete-time`: The datetime the EBS snapshot should be deleted. Calculated on server stop.
 
-## Building and Deploying the Cluster (GitHub Actions)
+## Building and Deploying the Cluster (GitHub Actions) (_Approx 60 minutes_)
 
 In actions, this is done through an OIDC Provider in AWS and requires no local authentication.
 
-### Setup OIDC Provider within AWS (as needed)
+The estimate of 60 minutes assumes that all steps will need to be completed. Times will be less if OIDC is already setup,
+the unique environmental vars are few, or if the cluster is just being updated.
+
+### Setup OIDC Provider within AWS (as needed) (_10 minutes_)
 
 One Provider is required per account and per region. If previously set up, this step can be disregarded.
 
@@ -113,7 +116,7 @@ Search CloudFormation for "OIDC". If not present, then create OIDC connection as
 
 CDKToolkit cloudformation template should be installed in account
 
-### Setup GitHub Environment
+### Setup GitHub Environment (_15 minutes_)
 
 Go to Settings > Secrets and variables > Actions.
 
@@ -177,11 +180,11 @@ DAYS_TILL_VOLUME_DELETION=2             # Number of days after server stop when 
 DAYS_TILL_SNAPSHOT_DELETION=7           # Number of days after server stop when the user's snapshot will be deleted
 ```
 
-### Validate Environment
+### Validate Environment  (_2 minutes_)
 
 To validate the environment before you deploy, run the [Validation GitHub Action](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/actions/workflows/deploy-cluster-validate-env.yaml).
 
-### Build with GitHub Actions
+### Build with GitHub Actions  (_20 minutes_)
 
 Run [Build GitHub Action](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/actions/workflows/deploy-cluster-cdk-app.yaml)
 
@@ -192,12 +195,12 @@ Code merged into `main` will be automatically built on cluster `test`.
 
 Go to [post build](#post-build).
 
-## Building and Deploying the Cluster (Locally)
+## Building and Deploying the Cluster (Locally) (_Approx 40 minutes_)
 
 To increase development velocity, it might be easier and faster to locally push changes to AWS.
 When making changes to non-dev maturities, use GitHub Actions to avoid environment corruption.
 
-### Ensure AWS credentials are present on your computer
+### Ensure AWS credentials are present on your computer (_5 minutes_)
 
 The Makefile + Docker process will need to communicate with AWS. There are two options to set AWS permssions:
 
@@ -217,7 +220,7 @@ aws_secret_access_key = <YOUR KEY VALUE HERE>
 You can generate AWS Access Keys from the IAM console:
 [AWS docs](https://docs.aws.amazon.com/IAM/latest/UserGuide/access-key-self-managed.html#Using_CreateAccessKey)
 
-### Update local environment variables
+### Update local environment variables (_5 minutes_)
 
 You can deploy a new stack without conflicting with any others.
 
@@ -273,7 +276,7 @@ source .env
 > [!CAUTION]
 > This will override any other local environments.
 
-### Pre-Deploy off `main` branch
+### Pre-Deploy off `main` branch (_20 minutes_)
 
 Initial stack deployments take a long time. If the initial stack deploy fails, it takes
 a very long time to delete and retry. It can be helpful to deploy the main stack prior
@@ -321,7 +324,7 @@ Before committing changes, the code can be easily linted by utilizing the `lint`
 
 There are a few steps after cluster build that need to be done to complete the full setup.
 
-### Cluster Configuration
+### Cluster Configuration (_2 minutes_)
 
 - From the initial build output, record the Load Balancer URL for later use.
 
@@ -329,11 +332,11 @@ There are a few steps after cluster build that need to be done to complete the f
 If the email doesn't show up in the inbox, check the spam folder. If it still doesn't show up, perhaps an internal firewall is blocking the email.
 This possible blockage would also affect other OSL services and will need to be fixed.
 
-### [OpenScienceLab SSO Portal](https://github.com/ASFOpenSARlab/opensciencelab-portal-v2) Integration
+### [OpenScienceLab SSO Portal](https://github.com/ASFOpenSARlab/opensciencelab-portal-v2) Integration (_10 minutes_)
 
 - Add Load Balancer URL to Portal [profile](https://github.com/ASFOpenSARlab/opensciencelab-portal-v2/blob/main/portal-cdk/lambda_main/util/labs/__init__.py).
 
-- Update Portal SSO Token in cluster Secrets Manager. SSO Token is from Portal.
+- Update Portal SSO Token within cluster Secrets Manager. SSO Token is from Portal.
 
 - Restart Hub pod (for SSO token changes to take effect).
 
