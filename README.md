@@ -4,21 +4,12 @@ OpenScienceLab is a customized JupyterHub ecosystem developed by the Alaska Sate
 
 The OpenScienceLab Cluster v2 repo contains code used to deploy kubernetes clusters and other resources within AWS.
 
-It is meant to be used in tandem with other GitHub repos including
-
-- [The OpenScienceLab Portal](https://github.com/ASFOpenSARlab/opensciencelab-portal-v2)
-- [JupyterLab Images](https://github.com/ASFOpenSARlab/lab-images)
-- [Cluster System Images](https://github.com/ASFOpenSARlab/opensciencelab-system-containers)
-- [Linting and Actions Images](https://github.com/ASFOpenSARlab/osl-utils)
-- [GitPuller Extension](https://github.com/ASFOpenSARlab/nbgitpuller-jl-interface)
-- [JupyterLab Tours Extensions](https://github.com/ASFOpenSARlab/opensciencelab-tours)
-- [Addtional JupyterLab Extensions](https://github.com/ASFOpenSARlab/opensarlab-extensions)
-
 For more information or to report a bug, contact [ASF](mailto:uso@asf.alaska.edu).
 
 ## Table of Contents
 
 - [Architecture](#architecture)
+- [Cluster Dependencies in Other GitHub repos](#cluster-dependencies-in-other-github-repos)
 - [Pre-Deployment Information](#pre-deployment-information)
 - [Building and Deploying the Cluster (GitHub Actions)](#building-and-deploying-the-cluster-github-actions-approx-60-minutes)
 - [Building and Deploying the Cluster (Locally)](#building-and-deploying-the-cluster-locally-approx-40-minutes)
@@ -34,6 +25,18 @@ a CDK + Actions pipeline.
 ![Architecture Diagram](docs/OSL%20Cluster%20v2%20Arch%20Diagram.svg)
 
 [Read more about the choices and behavior of the OpenScienceLab-Cluster-V2 architecture](ARCHITECTURE.md).
+
+## Cluster Dependencies in Other GitHub repos
+
+The following GitHub repos are meant to be used in tandem:
+
+- [The OpenScienceLab Portal](https://github.com/ASFOpenSARlab/opensciencelab-portal-v2)
+- [JupyterLab Images](https://github.com/ASFOpenSARlab/lab-images)
+- [Cluster System Images](https://github.com/ASFOpenSARlab/opensciencelab-system-containers)
+- [Linting and Actions Images](https://github.com/ASFOpenSARlab/osl-utils)
+- [GitPuller Extension](https://github.com/ASFOpenSARlab/nbgitpuller-jl-interface)
+- [JupyterLab Tours Extensions](https://github.com/ASFOpenSARlab/opensciencelab-tours)
+- [Addtional JupyterLab Extensions](https://github.com/ASFOpenSARlab/opensarlab-extensions)
 
 ## Pre-Deployment Information
 
@@ -361,14 +364,14 @@ This possible blockage would also affect other OSL services and will need to be 
 
 ## Deleting Cluster
 
-1. > [!IMPORTANT]
-   > The network load balancer is created via annotaions on a custom k8s service resource.
-   > When the CDK stack is destroyed, the underlying load balancer and networking is not automatically deleted.
-   >
-   > Before deleting the stack, you MUST open AWS CloudShell and manually run `kubectl -n jupyter delete svc proxy-public-loadbalancer`.
-   >
-   > If this is not done, resource deletion will hang and the load balancer and networking will fail deletion.
-   > Then manual cleanup will need to occur and the whole process will take about two hours.
+> [!IMPORTANT]
+> The network load balancer is created via annotaions on a custom k8s service resource.
+> When the CDK stack is destroyed, the underlying load balancer and networking is not automatically deleted.
+>
+> Before deleting the stack, you MUST open AWS CloudShell and manually run `kubectl -n jupyter delete svc proxy-public-loadbalancer`.
+>
+> If this is not done, resource deletion will hang and the load balancer and networking will fail deletion.
+> Then manual cleanup will need to occur and the whole process will take about two hours.
 
 1. Within AWS CloudFormation, for stack `stack-{LAB_SHORT_NAME}` click _Delete stack_.
 
