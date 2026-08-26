@@ -2,12 +2,11 @@
 
 ## Required On Stack Deletion
 
-!IMPORTANT
+> [!IMPORTANT]
+> The network load balancer is created via annotaions on a custom k8s service resource. > When the CDK stack is destroyed,
+> the underlying load balancer and networking is not automatically deleted.
 
-The network load balancer is created via annotaions on a custom k8s service resource. When the CDK stack is destroyed,
-the underlying load balancer and networking is not automatically deleted.
-
-> [!WARNNG]
+> [!WARNING]
 > Before deleting the stack, you MUST open AWS CloudShell and manually run `kubectl -n jupyter delete svc proxy-public-loadbalancer`.
 
 If this is not done, resource deletion will hang and the load balancer and networking will fail deletion.
@@ -39,7 +38,7 @@ These accounts are for OpenSARLab and development. Other deployments for labs, c
 
 ### Maturities
 
-- Non-`main` branches with specified prefix/suffix (eg `ab/ticket.feature`) will be considered dev maturity.
+- Non-`main` branches with specified prefix/suffix (eg `ab/ticket.feature`) are considered a dev maturity.
 - Merges into `main` branch will create/update the `test` maturity deployment.
 - Prod-level deployments (OpenSARLab, Custom Deployments) are manually deployed to via the deploy Action `workflow_dispatch`. Prod maturities are usually tags.
 
@@ -87,7 +86,7 @@ In actions, this is done through an OIDC Provider in AWS and requires no local a
 
 ### Setup OIDC Provider within AWS (as needed)
 
-One is required per account and per region. If previously set up, this step can be disregarded.
+One Provider is required per account and per region. If previously set up, this step can be disregarded.
 
 Search CloudFormation for "OIDC". If not present, then create OIDC connection as follows:
 
@@ -180,7 +179,7 @@ DAYS_TILL_SNAPSHOT_DELETION=7           # Number of days after server stop when 
 
 ### Validate Environment
 
-To validate the environment with deploying, run [Validation GitHub Action](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/actions/workflows/deploy-cluster-validate-env.yaml).
+To validate the environment before you deploy, run the [Validation GitHub Action](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/actions/workflows/deploy-cluster-validate-env.yaml).
 
 ### Build with GitHub Actions
 
@@ -271,7 +270,8 @@ environment:
 source .env
 ```
 
-Caution: this will override any other local environments.
+> [!CAUTION]
+> This will override any other local environments.
 
 ### Pre-Deploy off `main` branch
 
@@ -319,7 +319,8 @@ Before committing changes, the code can be easily linted by utilizing the `lint`
 
 ## Post Build
 
-Tbere are a few steps after cluster build that need to be done to complete the full setup.
+There are a few steps after cluster build that need to be done to complete the full setup.
+### Cluster Configuration
 
 - From the initial build output, record the Load Balancer URL for later use.
 
@@ -327,6 +328,7 @@ Tbere are a few steps after cluster build that need to be done to complete the f
 If the email doesn't show up in the inbox, check the spam folder. If it still doesn't show up, perhaps an internal firewall is blocking the email.
 This possible blockage would also affect other OSL services and will need to be fixed.
 
+### [OpenScienceLab SSO Portal](https://github.com/ASFOpenSARlab/opensciencelab-portal-v2) Integration
 - Add Load Balancer URL to Portal [profile](https://github.com/ASFOpenSARlab/opensciencelab-portal-v2/blob/main/portal-cdk/lambda_main/util/labs/__init__.py).
 
 - Update Portal SSO Token in cluster Secrets Manager. SSO Token is from Portal.
