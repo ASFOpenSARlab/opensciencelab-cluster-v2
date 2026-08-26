@@ -1,5 +1,15 @@
 # opensciencelab-cluster-v2
 
+## Table of Contents
+
+- [Architecture](#architecture)
+- [Pre-Deployment Information](#pre-deployment-information)
+- [Building and Deploying the Cluster (GitHub Actions)](#building-and-deploying-the-cluster-github-actions-approx-60-minutes)
+- [Building and Deploying the Cluster (Locally)](#building-and-deploying-the-cluster-locally-approx-40-minutes)
+- [Post Build](#post-build)
+- [Deleting Cluster](#deleting-cluster)
+- [Troubleshooting](#troubleshooting)
+
 ## Architecture
 
 At a high level, the new cluster is a highly customized JupyterHub on EKS, deployed via
@@ -8,17 +18,6 @@ a CDK + Actions pipeline.
 ![Architecture Diagram](docs/OSL%20Cluster%20v2%20Arch%20Diagram.svg)
 
 [Read more about the choices and behavior of the OpenScienceLab-Cluster-V2 architecture](ARCHITECTURE.md).
-
-## Required On Stack Deletion
-
-> [!IMPORTANT]
-> The network load balancer is created via annotaions on a custom k8s service resource. > When the CDK stack is destroyed,
-> the underlying load balancer and networking is not automatically deleted.
->
-> Before deleting the stack, you MUST open AWS CloudShell and manually run `kubectl -n jupyter delete svc proxy-public-loadbalancer`.
-
-If this is not done, resource deletion will hang and the load balancer and networking will fail deletion.
-Then manual cleanup will need to occur and the whole process will take about two hours.## Troubleshooting
 
 ## Pre-Deployment Information
 
@@ -343,6 +342,24 @@ This possible blockage would also affect other OSL services and will need to be 
    2. Select the $LAB_SHORT_NAME cluster.
    3. Click on the Connect button in the upper right. This will take you to CloudShell with the proper kubectl credentials.
    4. Within CloudShell, run the command `kubectl -n jupyter delete pod -l component=hub`
+
+## Deleting Cluster
+
+1. > [!IMPORTANT]
+   > The network load balancer is created via annotaions on a custom k8s service resource.
+   > When the CDK stack is destroyed, the underlying load balancer and networking is not automatically deleted.
+   >
+   > Before deleting the stack, you MUST open AWS CloudShell and manually run `kubectl -n jupyter delete svc proxy-public-loadbalancer`.
+   >
+   > If this is not done, resource deletion will hang and the load balancer and networking will fail deletion.
+   > Then manual cleanup will need to occur and the whole process will take about two hours.
+
+1. Within AWS CloudFormation, for stack `stack-{LAB_SHORT_NAME}` click _Delete stack_.
+
+1. Delete volumes and snapshots that belong to the cluster
+      - Filter by `osl-billing={LAB_SHORT_NAME}`
+
+1. Update [OpenScienceLab Portal](https://github.com/ASFOpenSARlab/opensciencelab-portal-v2)
 
 ## Troubleshooting
 
