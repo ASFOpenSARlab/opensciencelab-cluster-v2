@@ -1,5 +1,14 @@
 # opensciencelab-cluster-v2
 
+## Architecture
+
+At a high level, the new cluster is a highly customized JupyterHub on EKS, deployed via
+a CDK + Actions pipeline.
+
+![Architecture Diagram](docs/OSL%20Cluster%20v2%20Arch%20Diagram.svg)
+
+[Read more about the choices and behavior of the OpenScienceLab-Cluster-V2 architecture](ARCHITECTURE.md).
+
 ## Required On Stack Deletion
 
 > [!IMPORTANT]
@@ -10,17 +19,7 @@
 > Before deleting the stack, you MUST open AWS CloudShell and manually run `kubectl -n jupyter delete svc proxy-public-loadbalancer`.
 
 If this is not done, resource deletion will hang and the load balancer and networking will fail deletion.
-Then manual cleanup will need to occur and the whole process will take about two hours.
-
-## Troubleshooting
-
-### My Cluster is inaccessible for some reason
-
-Did you
-
-- Change your SSO secret?
-- Respawn the hub pod after changing SSO secret, or any other variables?
-- Double check your portal lab card has the correct cluster deployment url?
+Then manual cleanup will need to occur and the whole process will take about two hours.## Troubleshooting
 
 ## Pre-Deployment Information
 
@@ -141,6 +140,7 @@ ADMIN_USERS="nobody"                    # Comma seperated list of users to embed
 
 # PORTAL_DOMAINS is comma seperated portal urls with the first being the primary
 # No commas allowed in names.
+# The scheme (https://, http://) should not be included in the urls. Internally, only `https://` is used.
 PORTAL_DOMAINS="<CLOUDFRONT-URL>, <CLOUDFRONT-URL>"
 
 PROFILE_DEFINITIONS="""
@@ -185,7 +185,7 @@ To validate the environment before you deploy, run the [Validation GitHub Action
 
 Run [Build GitHub Action](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/actions/workflows/deploy-cluster-cdk-app.yaml)
 
-You will need to select from the workflow dispatch the Environment/LAB_SHORT_NAME and the code to be ran. Optionally, you can run the test suite.
+You will need to select from the workflow dispatch the environment and the code to be deployed. Optionally, you can run the test suite.
 Code merged into `main` will be automatically built on cluster `test`.
 
 ### After deploying
@@ -320,6 +320,7 @@ Before committing changes, the code can be easily linted by utilizing the `lint`
 ## Post Build
 
 There are a few steps after cluster build that need to be done to complete the full setup.
+
 ### Cluster Configuration
 
 - From the initial build output, record the Load Balancer URL for later use.
@@ -329,6 +330,7 @@ If the email doesn't show up in the inbox, check the spam folder. If it still do
 This possible blockage would also affect other OSL services and will need to be fixed.
 
 ### [OpenScienceLab SSO Portal](https://github.com/ASFOpenSARlab/opensciencelab-portal-v2) Integration
+
 - Add Load Balancer URL to Portal [profile](https://github.com/ASFOpenSARlab/opensciencelab-portal-v2/blob/main/portal-cdk/lambda_main/util/labs/__init__.py).
 
 - Update Portal SSO Token in cluster Secrets Manager. SSO Token is from Portal.
@@ -340,11 +342,12 @@ This possible blockage would also affect other OSL services and will need to be 
    3. Click on the Connect button in the upper right. This will take you to CloudShell with the proper kubectl credentials.
    4. Within CloudShell, run the command `kubectl -n jupyter delete pod -l component=hub`
 
-## Architecture
+## Troubleshooting
 
-At a high level, the new cluster is a highly customized JupyterHub on EKS, deployed via
-a CDK + Actions pipeline.
+### My Cluster is inaccessible for some reason
 
-![Architecture Diagram](docs/OSL%20Cluster%20v2%20Arch%20Diagram.svg)
+Did you
 
-[Read more about the choices and behavior of the OpenScienceLab-Cluster-V2 architecture](ARCHITECTURE.md).
+- Change your SSO secret?
+- Respawn the hub pod after changing SSO secret, or any other variables?
+- Double check your portal lab card has the correct cluster deployment url?
