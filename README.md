@@ -1,5 +1,21 @@
 # opensciencelab-cluster-v2
 
+OpenScienceLab is a customized JupyterHub ecosystem developed by the Alaska Satellite Facility (ASF) and primarily used for Synthetic Aperture Radar (SAR) research and teaching.
+
+The OpenScienceLab Cluster v2 repo contains code used to deploy kubernetes clusters and other resources within AWS.
+
+It is meant to be used in tandem with other GitHub repos including
+
+- [The OpenScienceLab Portal](https://github.com/ASFOpenSARlab/opensciencelab-portal-v2)
+- [JupyterLab Images](https://github.com/ASFOpenSARlab/lab-images)
+- [Cluster System Images](https://github.com/ASFOpenSARlab/opensciencelab-system-containers)
+- [Linting and Actions Images](https://github.com/ASFOpenSARlab/osl-utils)
+- [GitPuller Extension](https://github.com/ASFOpenSARlab/nbgitpuller-jl-interface)
+- [JupyterLab Tours Extensions](https://github.com/ASFOpenSARlab/opensciencelab-tours)
+- [Addtional JupyterLab Extensions](https://github.com/ASFOpenSARlab/opensarlab-extensions)
+
+For more information or to report a bug, contact [ASF](mailto:uso@asf.alaska.edu).
+
 ## Table of Contents
 
 - [Architecture](#architecture)
