@@ -52,7 +52,7 @@ All cluster AWS account are assumed to be federated or children of another manag
 
 ### On User Volumes and Snapshots
 
-The following assumes that all EBS volumes and snapshots are tagged with `kubernetes.io/cluster/{cluster_name}=owned`.
+The following assumes that all EBS volumes and snapshots are tagged with `kubernetes.io/cluster/{LAB_SHORT_NAME}=owned`.
 
 Kubernetes handles user storage internally via the [kubernetes objects](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) Persistent Volume Claim (PVC) and Persistent Volume (PV). These map directly to AWS EBS volumes and snapshots. To ensure users don't lose their data, snapshots are taken often. On server startup, storage assigned to the user is checked accoring to four scenerios:
 
@@ -61,11 +61,13 @@ Kubernetes handles user storage internally via the [kubernetes objects](https://
 3. If the user doesn't have an existing PVC but does have an EBS volume, a PVC and PV is created from the volume. This should be rare. This case is most likely when a volume is manually created (or restored). Any EBS snapshots with the same claim name will be ignored.
 4. If the user doesn't have an existing PVC nor EBS volume, but does have a EBS snapshot, an EBS volume will be restored and the associated PVC and PV will be created.
 
-WARNING: Never have more than one EBS volume with the same `kubernetes.io/created-for/pvc/name` value. This will throw a 500 error for users.
+<!-- markdownlint-disable MD028 -->
+> [!WARNING]: Never have more than one EBS volume with the same `kubernetes.io/created-for/pvc/name` value. This will throw a 500 error for users.
 
-WARNING: If more than one EBS snapshot is found with the same `kubernetes.io/created-for/pvc/name` value, the most recent will be restored.
+> [!WARNING]: If there is more than one EBS snapshot with the same `kubernetes.io/created-for/pvc/name` value, the most recent will be restored.
 
-WARNING: If an EBS volume `kubernetes.io/created-for/pvc/name` tag is manually changed, then the script will treat it like it doesn't exist. Since the existing PVC is referencing an apparently non-existing volume, the PVC will be deleted and the real volume will also be deleted. Therefore, NEVER modify the `kubernetes.io/created-for/pvc/name` EBS volume tag. It is safer to create a snapshot and restore a volume from that.
+> [!WARNING]: If an EBS volume `kubernetes.io/created-for/pvc/name` value is manually changed to something else, then the volume script will not be able to find it. Since the existing PVC for the user is referencing an apparently non-existing volume, the PVC will be deleted and the consequently the real volume will also be deleted. Therefore, use extreme caution when modifying the `kubernetes.io/created-for/pvc/name` EBS volume value. If a copy of the volume with a different pvc name is desired, clone the volume or create a snapshot with appropriate tags.
+<!-- markdownlint-enable MD028 -->
 
 If the restoring EBS snapshot has a size bigger than the configured value, the restored volume size will be the same as the snapshot.
 
