@@ -42,15 +42,7 @@ The following GitHub repos are meant to be used in tandem:
 
 ### AWS Accounts
 
-| Maturity | Environment | AWS Account      |
-| -------- | ----------- | ---------------- |
-| `dev`    | Non-prod    | 97**\*\*\*\***89 |
-| `test`   | Non-Prod    | 97**\*\*\*\***89 |
-| `prod`   | Prod        | 70**\*\*\*\***05 |
-
-These accounts are for OpenSARLab and development. Other deployments for labs, classes, etc are not included in this table.
-
-**All cluster AWS account are assumed to be federated or children of another management account.** This is required for the `UI_IAM_ROLE` to work correctly.
+All cluster AWS account are assumed to be federated or children of another management account. This is required for the `UI_IAM_ROLE` to work correctly.
 
 ### Maturities
 
