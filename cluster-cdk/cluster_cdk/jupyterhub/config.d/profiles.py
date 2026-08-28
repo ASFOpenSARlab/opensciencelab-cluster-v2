@@ -198,7 +198,7 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
                         "--FileContentsManager.delete_to_trash=False",
                     ],
                     "mem_limit": lab_profile.get("memory_limit", None),
-                    "memory_guarantee": lab_profile.get("memory_guarantee", None),
+                    "mem_guarantee": lab_profile.get("memory_guarantee", None),
                     "cpu_limit": lab_profile.get("cpu_limit", None),
                     "cpu_guarantee": lab_profile.get("cpu_guarantee", None),
                     "storage_capacity": lab_profile.get("storage_capacity", "10Gi"),
