@@ -111,9 +111,12 @@ class PortalAuthLogoutHandler(BaseHandler):
             self.log.error("PortalAuth Login lab name not found")
             raise My401Exception("No lab name")
 
-    async def render_logout_page(self):
+    async def post(self):
+        raise My401Exception("Not allowed")
+
+    async def get(self):
         portal_domain = await _get_portal_domain(self.request)
-        self.redirect(f"https://{portal_domain}/portal/hub/logout", permanent=True)
+        self.redirect(f"https://{portal_domain}/logout", permanent=True)
 
 
 class PortalAuthenticator(Authenticator):
