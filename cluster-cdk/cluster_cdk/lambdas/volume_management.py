@@ -581,6 +581,7 @@ def alert_fatal_exception(exception_message):
 def lambda_handler(_event, _context):
     try:
         reset_concerning_issues()
+        raise Exception("I am a test exception")
         run_volume_management()
     except Exception as E:
         alert_fatal_exception(traceback.format_exc())
