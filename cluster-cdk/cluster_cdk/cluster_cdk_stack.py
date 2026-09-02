@@ -1260,9 +1260,7 @@ class ClusterCdkStack(Stack):
             # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_s3/Bucket.html
             # Bucket that contains configmap files used by cryptnono
             # Bucket prefix name cannot be more than 38 characters long
-            bucket_name_prefix = f"cryptnono-configs-{self.LAB_SHORT_NAME}"[
-                0:38
-            ].lower()
+            bucket_name_prefix = f"crypt-conf-{self.LAB_SHORT_NAME}"[0:36].lower()
 
             execwhacker_bucket = s3.Bucket(
                 self,
