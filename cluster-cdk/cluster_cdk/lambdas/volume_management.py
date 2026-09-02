@@ -323,10 +323,7 @@ def snapshot_has_required_tags(snapshot):
 
     for required_tag in REQUIRED_SNAPSHOT_TAGS:
         if not tags.get(required_tag):
-            add_concerning_issue(
-                message=f"Required tag {required_tag} not found in {snapshot.id}",
-                snapshot=snapshot.id,
-            )
+            logger.warning(f"Required tag {required_tag} not found in {snapshot.id}")
             return False
 
     return True
