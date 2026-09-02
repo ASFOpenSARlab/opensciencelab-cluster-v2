@@ -913,9 +913,7 @@ class ClusterCdkStack(Stack):
         # Use the helm chart
         self.load_balancer_controller_version = "3.2.1"
 
-        alb_sa = self.cluster.add_service_account(
-            "aws-load-balancer-controller-sa", namespace="kube-system"
-        )
+        alb_sa = self.cluster.add_service_account("alb-sa", namespace="kube-system")
 
         alb_controller_url = f"https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v{self.load_balancer_controller_version}/docs/install/iam_policy.json"
         policy_json = requests.get(url=alb_controller_url).json()
