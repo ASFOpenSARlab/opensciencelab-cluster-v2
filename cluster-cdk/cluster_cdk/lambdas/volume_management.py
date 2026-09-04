@@ -11,7 +11,7 @@ import boto3
 import jinja2
 import kubernetes
 import requests
-
+from botocore.exceptions import ClientError
 from opensarlab.auth import encryptedjwt
 
 CLAIM_TAG = "kubernetes.io/created-for/pvc/name"
@@ -211,25 +211,14 @@ def get_eks_client():
     return kubernetes.client.CoreV1Api()
 
 
-def get_all_pvcs(kube_client):
-    """Return a list of all PVC's in the jupyter namespace of the cluster"""
-    all_pvcs = kube_client.list_namespaced_persistent_volume_claim(namespace="jupyter")
-    return [
-        pvc.metadata.name for pvc in all_pvcs.items if pvc.metadata.name != "hub-db-dir"
-    ]
-
-
-def delete_pvc(claim_user, all_pvcs, kube_client):
-    """Delete a user's volume by removing their PVC in K8s"""
+def delete_pvc(
+    claim_user: str, volume_id: str, kube_client: kubernetes.client.CoreV1Api
+) -> None:
+    """
+    Delete a user's volume by removing their PVC in K8s.
+    If the PVC doesn't exist, delete volume directly.
+    """
     user_claim_id = f"claim-{claim_user}"
-
-    # Verify the PVC exists
-    if user_claim_id not in all_pvcs:
-        add_concerning_issue(
-            user=user_claim_id,
-            message=f"user pvc {user_claim_id} does not exist in {CLUSTER_NAME}",
-        )
-        return False
 
     # Attempt to remove PVC
     try:
@@ -238,13 +227,18 @@ def delete_pvc(claim_user, all_pvcs, kube_client):
             namespace="jupyter",
         )
     except kubernetes.client.rest.ApiException:
-        exception_message = f"Could not delete PVC {user_claim_id} in {CLUSTER_NAME}"
-        add_concerning_issue(message=exception_message, user=claim_user)
-        logger.exception(exception_message)
-        return True
-
-    # PVC Successfully deleted
-    return True
+        logger.warning(
+            f"User claim {user_claim_id} can not be deleted in {CLUSTER_NAME}. Deleting volume '{volume_id}' directly..."
+        )
+        try:
+            ec2_resource = get_ec2_resource()
+            volume = ec2_resource.Volume(volume_id)
+            volume.delete()
+            logger.info("Volume {volume_id} deleted in {CLUSTER_NAME}")
+        except ClientError as e:
+            exception_message = f"Error deleting volume {volume_id} in {CLUSTER_NAME}: {e.response['Error']['Message']}"
+            add_concerning_issue(message=exception_message, user=claim_user)
+            logger.exception(exception_message)
 
 
 def filter_users(all_items):
@@ -519,10 +513,6 @@ def run_volume_management():
     user_snapshots = get_user_snapshots()
     logger.info("Found %s user snapshots", len(user_snapshots))
 
-    logger.info("Querying for PVCs...")
-    all_pvcs = get_all_pvcs(kube_client)
-    logger.info("Found %s user PVCs", len(all_pvcs))
-
     for claim_user, volume in user_volumes.items():
         logger.info(
             f"VOLUME: {claim_user} | ID: {volume.id} | Size: {volume.size}GB | State: {volume.state}"
@@ -539,8 +529,7 @@ def run_volume_management():
             logger.error(" - Ignoring volume with invalid snapshot tags")
         elif is_expired(volume):
             logger.info(" - Volume is expired!")
-            if not delete_pvc(claim_user, all_pvcs, kube_client):
-                logger.error(" - There was a problem removing PVC for %s", volume.id)
+            delete_pvc(claim_user, volume.id, kube_client)
 
     for claim_user, snapshot in user_snapshots.items():
         logger.info(
