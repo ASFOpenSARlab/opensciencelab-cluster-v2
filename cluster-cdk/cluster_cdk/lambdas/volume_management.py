@@ -235,7 +235,7 @@ def delete_pvc(
             ec2_resource = get_ec2_resource()
             volume = ec2_resource.Volume(volume_id)
             volume.delete()
-            logger.info("Volume {volume_id} deleted in {CLUSTER_NAME}")
+            logger.info(f"Volume {volume_id} deleted in {CLUSTER_NAME}")
         except ClientError as e:
             exception_message = f"Error deleting volume {volume_id} in {CLUSTER_NAME}: {e.response['Error']['Message']}"
             add_concerning_issue(message=exception_message, user=claim_user)
