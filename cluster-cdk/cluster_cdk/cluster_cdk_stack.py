@@ -151,20 +151,20 @@ class ClusterCdkStack(Stack):
 
         # Create explicit public subnet with an exact CIDR 
         public_subnet_1 = ec2.CfnSubnet(
-            self, 
+            self,
             "PublicSubnet1",
             vpc_id=self.vpc,
             cidr_block="10.0.250.0/20",
             availability_zone=f"{self.region}{self.AZ_LETTER}",
-            map_public_ip_on_launch=True
-        )        
+            map_public_ip_on_launch=True,
+        )
         public_subnet_2 = ec2.CfnSubnet(
-            self, 
+            self,
             "PublicSubnet2",
             vpc_id=self.vpc,
             cidr_block="10.0.125.0/20",
             availability_zone=f"{self.region}d",
-            map_public_ip_on_launch=True
+            map_public_ip_on_launch=True,
         )
 
         #####################################################################
