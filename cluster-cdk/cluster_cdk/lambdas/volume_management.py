@@ -8,6 +8,7 @@ import traceback
 import urllib.parse
 
 import boto3
+import escapism
 import jinja2
 import kubernetes
 import requests
@@ -323,6 +324,12 @@ def snapshot_has_required_tags(snapshot):
     return True
 
 
+def get_unescaped_user(claim_user: str) -> str:
+    """Unescape claim name to get actual username"""
+    unescaped_username = claim_user.replace("claim-", "")
+    return escapism.unescape(unescaped_username, escape_char="-")
+
+
 def send_snapshot_warning(snapshot, claim_user):
     """Email the user warning of snapshot expiration"""
     # Delete Time:
@@ -330,16 +337,18 @@ def send_snapshot_warning(snapshot, claim_user):
     expiry = expiry_time(tags.get("snapshot-delete-time"))
     expiry_string = expiry.strftime("%Y-%m-%d %H:%M:%S UTC")
 
+    unescaped_user = get_unescaped_user(claim_user)
+
     # Create email
     email_template = JINJA_LOADER.get_template("snapshot_warning_email.j2")
     email_template_params = {
-        "username": claim_user,
+        "username": unescaped_user,
         "lab_short_name": LAB_SHORT_NAME,
         "volume_delete_time": expiry_string,
         "portal_domain_name": PORTAL_DOMAIN,
     }
     email_payload = {
-        "to": {"username": claim_user},
+        "to": {"username": unescaped_user},
         "from": {"username": "osl-admin"},
         "cc": {"username": "osl-admin"},
         "subject": "OpenScienceLab Notification - Storage Warning",
@@ -373,14 +382,16 @@ def send_snapshot_delete(snapshot, claim_user):
         logger.info(" - Deletion email sent previously")
         return None
 
+    unescaped_user = get_unescaped_user(claim_user)
+
     # Create email
     email_template = JINJA_LOADER.get_template("volume_delete_email.j2")
     email_template_params = {
-        "username": claim_user,
+        "username": unescaped_user,
         "lab_short_name": LAB_SHORT_NAME,
     }
     email_payload = {
-        "to": {"username": claim_user},
+        "to": {"username": unescaped_user},
         "from": {"username": "osl-admin"},
         "cc": {"username": "osl-admin"},
         "subject": "OpenScienceLab Notification - Storage Deleted",
