@@ -134,11 +134,11 @@ class ClusterCdkStack(Stack):
         #####################################################################
 
         # Two subnets for EKS
-        #public_subnet = ec2.SubnetConfiguration(
+        # public_subnet = ec2.SubnetConfiguration(
         #    name="PublicSubnet",
         #    subnet_type=ec2.SubnetType.PUBLIC,
         #    cidr_mask=24,
-        #)
+        # )
         private_subnet = ec2.SubnetConfiguration(
             name="PrivateSubnetWithEgress",
             subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
