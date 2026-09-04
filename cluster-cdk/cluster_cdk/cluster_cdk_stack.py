@@ -164,7 +164,7 @@ class ClusterCdkStack(Stack):
             map_public_ip_on_launch=True,
             tags=[
                 CfnTag(key="Name", value="PublicSubnet1"),
-            ]
+            ],
         )
         _ = ec2.CfnSubnet(
             self,
@@ -175,7 +175,7 @@ class ClusterCdkStack(Stack):
             map_public_ip_on_launch=True,
             tags=[
                 CfnTag(key="Name", value="PublicSubnet2"),
-            ]
+            ],
         )
 
         #####################################################################
