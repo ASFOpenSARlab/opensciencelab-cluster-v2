@@ -913,9 +913,7 @@ class ClusterCdkStack(Stack):
         # Use the helm chart
         self.load_balancer_controller_version = "3.2.1"
 
-        alb_sa = self.cluster.add_service_account(
-            "aws-load-balancer-controller-sa", namespace="kube-system"
-        )
+        alb_sa = self.cluster.add_service_account("alb-sa", namespace="kube-system")
 
         alb_controller_url = f"https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v{self.load_balancer_controller_version}/docs/install/iam_policy.json"
         policy_json = requests.get(url=alb_controller_url).json()
@@ -1260,9 +1258,7 @@ class ClusterCdkStack(Stack):
             # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_s3/Bucket.html
             # Bucket that contains configmap files used by cryptnono
             # Bucket prefix name cannot be more than 38 characters long
-            bucket_name_prefix = f"cryptnono-configs-{self.LAB_SHORT_NAME}"[
-                0:38
-            ].lower()
+            bucket_name_prefix = f"crypt-conf-{self.LAB_SHORT_NAME}"[0:36].lower()
 
             execwhacker_bucket = s3.Bucket(
                 self,
