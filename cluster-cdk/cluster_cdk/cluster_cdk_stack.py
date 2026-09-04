@@ -34,7 +34,6 @@ from aws_cdk import (  # type: ignore
     aws_sns_subscriptions as sns_subs,
     lambda_layer_kubectl_v34,
     lambda_layer_awscli,
-    CfnTag,
 )
 
 from constructs import Construct  # type: ignore
@@ -164,10 +163,7 @@ class ClusterCdkStack(Stack):
             availability_zone=f"{self.region}{self.AZ_LETTER}",
             map_public_ip_on_launch=True,
             tags=[
-                CfnTag(
-                    key="Name",
-                    value="PublicSubnet1"
-                ),
+                CfnTag(key="Name", value="PublicSubnet1"),
             ]
         )
         _ = ec2.CfnSubnet(
@@ -178,10 +174,7 @@ class ClusterCdkStack(Stack):
             availability_zone=f"{self.region}d",
             map_public_ip_on_launch=True,
             tags=[
-                CfnTag(
-                    key="Name",
-                    value="PublicSubnet2"
-                ),
+                CfnTag(key="Name", value="PublicSubnet2"),
             ]
         )
 
