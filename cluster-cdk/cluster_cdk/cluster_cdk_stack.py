@@ -133,6 +133,11 @@ class ClusterCdkStack(Stack):
         #
         #####################################################################
         # Two subnets for EKS
+        public_subnet = ec2.SubnetConfiguration(
+            name="PublicSubnet",
+            subnet_type=ec2.SubnetType.PUBLIC,
+            cidr_mask=24,
+        )
         private_subnet = ec2.SubnetConfiguration(
             name="PrivateSubnetWithEgress",
             subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
@@ -146,7 +151,7 @@ class ClusterCdkStack(Stack):
             availability_zones=[f"{self.region}{self.AZ_LETTER}", f"{self.region}d"],
             ip_addresses=ec2.IpAddresses.cidr("10.0.0.0/16"),
             # Configure subnet types for EKS (e.g., Public and Private)
-            subnet_configuration=[private_subnet],
+            subnet_configuration=[public_subnet, private_subnet],
         )
 
         # Create explicit public subnet with an exact CIDR
