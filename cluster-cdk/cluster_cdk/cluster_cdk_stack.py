@@ -137,7 +137,7 @@ class ClusterCdkStack(Stack):
         public_subnet = ec2.SubnetConfiguration(
             name="PublicSubnet",
             subnet_type=ec2.SubnetType.PUBLIC,
-            cidr_mask=24,
+            cidr_mask=20,
         )
         private_subnet = ec2.SubnetConfiguration(
             name="PrivateSubnetWithEgress",
