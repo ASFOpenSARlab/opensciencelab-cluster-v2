@@ -137,14 +137,20 @@ class ClusterCdkStack(Stack):
         public_subnet = ec2.SubnetConfiguration(
             name="PublicSubnet",
             subnet_type=ec2.SubnetType.PUBLIC,
-            cidr_mask=20,
+            cidr_mask=24,
         )
+        print(public_subnet)
         private_subnet = ec2.SubnetConfiguration(
             name="PrivateSubnetWithEgress",
             subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
             cidr_mask=24,
         )
 
+        larger_public_subnet = ec2.SubnetConfiguration(
+            name="LargerPublicSubnet",
+            subnet_type=ec2.SubnetType.PUBLIC,
+            cidr_mask=20,
+        )
         # Create a custom VPC restricted to the single AZ
         self.vpc = ec2.Vpc(
             self,
@@ -152,7 +158,7 @@ class ClusterCdkStack(Stack):
             availability_zones=[f"{self.region}{self.AZ_LETTER}", f"{self.region}d"],
             ip_addresses=ec2.IpAddresses.cidr("10.0.0.0/16"),
             # Configure subnet types for EKS (e.g., Public and Private)
-            subnet_configuration=[public_subnet, private_subnet],
+            subnet_configuration=[larger_public_subnet, private_subnet],
         )
 
         #####################################################################
