@@ -315,6 +315,9 @@ class ClusterCdkStack(Stack):
                     self.IS_CRYPTNONO_ENABLED
                 ).lower()
 
+            # Adding generic label to force nodegroup update
+            node_labels["lab_short_name"] = self.LAB_SHORT_NAME
+
             # Root volume of EC2 defaults to 20GiB. If defined as something else, it must be within EBS's storage range.
             root_volume_size = int(node.get("root_volume_size", "20"))
             if root_volume_size < 1:
@@ -385,7 +388,6 @@ class ClusterCdkStack(Stack):
                 min_size=node.get("group_min_size"),
                 force_update=True,
                 enable_node_auto_repair=True,
-                labels={"LAB_SHORT_NAME": self.LAB_SHORT_NAME},
                 # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_ec2/InstanceClass.html
                 instance_types=[
                     ec2.InstanceType(instance) for instance in node["instance"]
