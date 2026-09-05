@@ -367,11 +367,11 @@ class ClusterCdkStack(Stack):
 
             # Create 2 groups
             auto_select = ec2.SubnetSelection(
-                    subnet_type=ec2.SubnetType.PUBLIC,
-                    availability_zones=[
-                        f"{self.region}{self.AZ_LETTER}"
-                    ],  # Force compute into one AZ
-                )
+                subnet_type=ec2.SubnetType.PUBLIC,
+                availability_zones=[
+                    f"{self.region}{self.AZ_LETTER}"
+                ],  # Force compute into one AZ
+            )
 
             new_select = ec2.SubnetSelection(subnets=[larger_public_subnet])
 
