@@ -132,11 +132,12 @@ class ClusterCdkStack(Stack):
         #    Setup Networking
         #
         #####################################################################
+
         # Two subnets for EKS
         public_subnet = ec2.SubnetConfiguration(
             name="PublicSubnet",
             subnet_type=ec2.SubnetType.PUBLIC,
-            cidr_mask=24,
+            cidr_mask=18,
         )
         private_subnet = ec2.SubnetConfiguration(
             name="PrivateSubnetWithEgress",
@@ -152,30 +153,6 @@ class ClusterCdkStack(Stack):
             ip_addresses=ec2.IpAddresses.cidr("10.0.0.0/16"),
             # Configure subnet types for EKS (e.g., Public and Private)
             subnet_configuration=[public_subnet, private_subnet],
-        )
-
-        # Create explicit public subnet with an exact CIDR
-        _ = ec2.CfnSubnet(
-            self,
-            "PublicSubnet1",
-            vpc_id=self.vpc,
-            cidr_block="10.0.250.0/20",
-            availability_zone=f"{self.region}{self.AZ_LETTER}",
-            map_public_ip_on_launch=True,
-            tags=[
-                CfnTag(key="Name", value="PublicSubnet1"),
-            ],
-        )
-        _ = ec2.CfnSubnet(
-            self,
-            "PublicSubnet2",
-            vpc_id=self.vpc,
-            cidr_block="10.0.125.0/20",
-            availability_zone=f"{self.region}d",
-            map_public_ip_on_launch=True,
-            tags=[
-                CfnTag(key="Name", value="PublicSubnet2"),
-            ],
         )
 
         #####################################################################
@@ -315,9 +292,6 @@ class ClusterCdkStack(Stack):
                     self.IS_CRYPTNONO_ENABLED
                 ).lower()
 
-            # Adding generic label to force nodegroup update
-            node_labels["lab_short_name"] = self.LAB_SHORT_NAME
-
             # Root volume of EC2 defaults to 20GiB. If defined as something else, it must be within EBS's storage range.
             root_volume_size = int(node.get("root_volume_size", "20"))
             if root_volume_size < 1:
@@ -386,8 +360,6 @@ class ClusterCdkStack(Stack):
                 capacity_type=eks.CapacityType.ON_DEMAND,
                 max_size=node.get("group_max_size"),
                 min_size=node.get("group_min_size"),
-                force_update=True,
-                enable_node_auto_repair=True,
                 # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_ec2/InstanceClass.html
                 instance_types=[
                     ec2.InstanceType(instance) for instance in node["instance"]
