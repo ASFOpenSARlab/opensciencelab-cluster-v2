@@ -155,7 +155,7 @@ class ClusterCdkStack(Stack):
         )
 
         # Create explicit public subnet with an exact CIDR
-        _ = ec2.CfnSubnet(
+        larger_public_subnet = ec2.CfnSubnet(
             self,
             "PublicSubnet1",
             vpc_id=self.vpc,
@@ -164,17 +164,6 @@ class ClusterCdkStack(Stack):
             map_public_ip_on_launch=True,
             tags=[
                 CfnTag(key="Name", value="PublicSubnet1"),
-            ],
-        )
-        _ = ec2.CfnSubnet(
-            self,
-            "PublicSubnet2",
-            vpc_id=self.vpc,
-            cidr_block="10.0.125.0/20",
-            availability_zone=f"{self.region}d",
-            map_public_ip_on_launch=True,
-            tags=[
-                CfnTag(key="Name", value="PublicSubnet2"),
             ],
         )
 
@@ -376,6 +365,31 @@ class ClusterCdkStack(Stack):
                 ),
             )
 
+            # Create 2 groups
+            auto_select = ec2.SubnetSelection(
+                    subnet_type=ec2.SubnetType.PUBLIC,
+                    availability_zones=[
+                        f"{self.region}{self.AZ_LETTER}"
+                    ],  # Force compute into one AZ
+                )
+
+            new_select = ec2.SubnetSelection(subnets=[larger_public_subnet])
+
+            # 2. Extract the actual subnet objects from the VPC using the selections
+            auto_subnets = self.vpc.select_subnets(
+                subnet_type=auto_select.subnet_type,
+                subnet_group_name=auto_select.subnet_group_name,
+            ).subnets
+
+            new_subnets = self.vpc.select_subnets(
+                subnet_type=new_select.subnet_type,
+                subnet_group_name=new_select.subnet_group_name,
+            ).subnets
+
+            # 3. Combine the native Python lists
+            combined_subnets = auto_subnets + new_subnets
+            final_subnet_selection = ec2.SubnetSelection(subnets=combined_subnets)
+
             # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/NodegroupOptions.html
             node_group = self.cluster.add_nodegroup_capacity(
                 f"{node['name']}{self.LAB_SHORT_NAME}",
@@ -393,12 +407,7 @@ class ClusterCdkStack(Stack):
                 ),
                 # Force the compute in the public subnet, in a single AZ
                 # This also automagically adds the "k8s.io/cluster-autoscaler/CLUSTER_NAME: owned" tag to the ASG and thus EC2s
-                subnets=ec2.SubnetSelection(
-                    subnet_type=ec2.SubnetType.PUBLIC,
-                    availability_zones=[
-                        f"{self.region}{self.AZ_LETTER}"
-                    ],  # Force compute into one AZ
-                ),
+                subnets=final_subnet_selection,
                 labels=node_labels,
             )
 
