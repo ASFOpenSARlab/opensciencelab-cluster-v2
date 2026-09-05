@@ -1089,6 +1089,7 @@ class ClusterCdkStack(Stack):
                     "ec2:DescribeVolumes",
                     "ec2:DescribeSnapshots",
                     "ec2:CreateSnapshot",
+                    "ec2:DeleteVolume",
                     "ec2:DeleteSnapshot",
                     "ec2:CreateTags",
                 ],
