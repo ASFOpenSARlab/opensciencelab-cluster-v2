@@ -578,9 +578,9 @@ def alert_fatal_exception(exception_message):
 def lambda_handler(_event, _context):
     try:
         reset_concerning_issues()
-        raise Exception("I am a test exception")
+        raise Exception(f"I am a test exception{os.getcwd()}")
         run_volume_management()
-    except Exception as E:
+    except Exception as _:
         alert_fatal_exception(traceback.format_exc())
         add_concerning_issue(message=f"Uncaught Exception: {traceback.format_exc()}")
         logger.exception("Uncaught Exception:")
