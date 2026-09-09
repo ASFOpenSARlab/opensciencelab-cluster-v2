@@ -137,7 +137,7 @@ class ClusterCdkStack(Stack):
         public_subnet = ec2.SubnetConfiguration(
             name="PublicSubnet",
             subnet_type=ec2.SubnetType.PUBLIC,
-            cidr_mask=24,
+            cidr_mask=18,
         )
         private_subnet = ec2.SubnetConfiguration(
             name="PrivateSubnetWithEgress",
@@ -1089,6 +1089,7 @@ class ClusterCdkStack(Stack):
                     "ec2:DescribeVolumes",
                     "ec2:DescribeSnapshots",
                     "ec2:CreateSnapshot",
+                    "ec2:DeleteVolume",
                     "ec2:DeleteSnapshot",
                     "ec2:CreateTags",
                 ],
