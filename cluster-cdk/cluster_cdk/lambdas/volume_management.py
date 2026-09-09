@@ -140,7 +140,7 @@ def tags_to_dict(tags):
     return {item["Key"]: item["Value"] for item in tags}
 
 
-def get_unattached_volumes():
+def get_all_unattached_volumes_in_account():
     """Return a list of available EBS Volumes"""
     unattached_volumes = []
     ec2_resource = get_ec2_resource()
@@ -149,10 +149,10 @@ def get_unattached_volumes():
             unattached_volumes.append(volume)
         else:
             logger.debug("Ignoring attached volume %s", volume.id)
-    return ec2_resource.volumes.all()
+    return unattached_volumes
 
 
-def get_all_snapshots():
+def get_all_snapshots_in_account() -> list:
     """get all volume snapshots owned by this AWS account"""
     this_account = boto3.client("sts").get_caller_identity().get("Account")
     ec2_resource = get_ec2_resource()
@@ -242,8 +242,8 @@ def delete_pvc(
             logger.exception(exception_message)
 
 
-def filter_users(all_items):
-    """Filter resources by claim tagged users"""
+def filter_by_user_and_lab(all_items: list) -> dict:
+    """Filter resources by claim tagged users. Assume one volume/snapshot per person."""
     user_items = {}
     for item in all_items:
         item_tags = tags_to_dict(item.tags)
@@ -482,12 +482,12 @@ def get_snapshot_for_volume(volume, user_snapshots):
 
 def get_user_volumes():
     """Return unattached user volumes for a cluster"""
-    return filter_users(get_unattached_volumes())
+    return filter_by_user_and_lab(get_all_unattached_volumes_in_account())
 
 
 def get_user_snapshots():
     """Return user snapshots for a cluster"""
-    return filter_users(get_all_snapshots())
+    return filter_by_user_and_lab(get_all_snapshots_in_account())
 
 
 def send_email_to_portal(email_payload):
