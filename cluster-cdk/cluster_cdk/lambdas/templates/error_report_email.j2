@@ -18,7 +18,9 @@
                 {% if "snapshot" in issue %}{{ issue["snapshot"] }}{% endif %}
             </td>
             <td>
-                {% if "message" in issue %}{{ issue["message"] }}{% endif %}
+                <pre>
+                    {% if "message" in issue %}{{ issue["message"] }}{% endif %}
+                </pre>
             </td>
         </tr>
     {% endfor %}
