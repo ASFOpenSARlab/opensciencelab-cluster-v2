@@ -511,6 +511,7 @@ def run_volume_management():
 
     # Verify we have the SSO Secret or die
     set_sso_secret()
+    raise Exception(f"I am a test exception {os.getcwd()}")
 
     # Loop up resources
     logger.info("Setting up EKS Client for %s", CLUSTER_NAME)
@@ -578,7 +579,6 @@ def alert_fatal_exception(exception_message):
 def lambda_handler(_event, _context):
     try:
         reset_concerning_issues()
-        raise Exception(f"I am a test exception{os.getcwd()}")
         run_volume_management()
     except Exception as _:
         alert_fatal_exception(traceback.format_exc())
