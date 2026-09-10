@@ -579,7 +579,7 @@ def lambda_handler(_event, _context):
     try:
         reset_concerning_issues()
         run_volume_management()
-    except Exception as _:
+    except Exception:
         alert_fatal_exception(traceback.format_exc())
         add_concerning_issue(message=f"Uncaught Exception: {traceback.format_exc()}")
         logger.exception("Uncaught Exception:")
