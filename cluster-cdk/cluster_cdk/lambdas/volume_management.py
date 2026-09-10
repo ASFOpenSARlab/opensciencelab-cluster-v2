@@ -511,7 +511,6 @@ def run_volume_management():
 
     # Verify we have the SSO Secret or die
     set_sso_secret()
-    raise Exception(f"I am a test exception")
 
     # Loop up resources
     logger.info("Setting up EKS Client for %s", CLUSTER_NAME)

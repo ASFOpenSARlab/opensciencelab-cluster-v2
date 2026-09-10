@@ -1037,7 +1037,6 @@ class ClusterCdkStack(Stack):
                 "SNAPSHOT_GRACEPERIOD_DAYS": self.SNAPSHOT_GRACEPERIOD_DAYS,
                 "PORTAL_DOMAINS": self.PORTAL_DOMAINS,
                 "SSO_SECRET_ARN": self.sso_token.secret_arn,
-                "OPENSARLAB_SSO_TOKEN_PATH": "/tmp/sso_token",
                 "ALERT_SNS_TOPIC_ARN": self.alert_sns_topic.topic_arn,
             },
         )
