@@ -10,7 +10,11 @@ Makefile commands:
 
     manual-cdk-bootstrap:   Bootstrap an account for CDK. Especially for OIDC.
 
-    test:                   Run PyTest tests
+    test:                   Run all PyTest tests
+
+	cluster-test:           Run cluster tests only
+
+	lambda-test:            Run lambda tests only
 
     run-volume-lambda:      Attempt to execute volume lambda locally
 
@@ -39,7 +43,8 @@ _DANGER := "\033[31m%s\033[0m %s\n" # Red text for "printf"
 # Respect pathing
 export PWD=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 PROJECT_DIR := $(if $(CI_PROJECT_DIR),$(CI_PROJECT_DIR:/=),$(PWD:/=/))
-BUILD_DEPS ?= /tmp/.build/lambda/python
+BUILD_LAMBDA_DEPS ?= /tmp/.build/lambda/python
+BUILD_DEV_LAMBDA_DEPS ?= /tmp/.build/tests/python
 
 # These env vars should be defined in either a local or github environment
 IMAGE_NAME ?= ghcr.io/asfopensarlab/osl-utils:main
@@ -149,31 +154,56 @@ install-reqs:
 	  ( echo "Installing cluster-cdk/requirements.txt" && \
 		pip install -r cluster-cdk/requirements.txt ) )
 
-.PHONY := bundle-deps
-bundle-deps:
-	echo "Checking if ${BUILD_DEPS} exists..." && \
-	if [[ ! -d ${BUILD_DEPS} ]]; then \
-		mkdir -p ${BUILD_DEPS} && \
+.PHONY := bundle-lambda-deps
+bundle-lambda-deps:
+	echo "Checking if ${BUILD_LAMBDA_DEPS} exists..." && \
+	if [[ ! -d ${BUILD_LAMBDA_DEPS} ]]; then \
+		mkdir -p ${BUILD_LAMBDA_DEPS} && \
 		pip install \
 			-r cluster-cdk/cluster_cdk/lambdas/requirements.txt \
 			--platform manylinux2014_x86_64 \
 			--python-version 3.13 \
 			--only-binary=:all: \
-			-t ${BUILD_DEPS} \
+			-t ${BUILD_LAMBDA_DEPS} \
 			--upgrade ; \
 	else \
-		echo "Skipping deps bundled in ${BUILD_DEPS}. Remove to rebuild."; \
+		echo "Skipping deps bundled in ${BUILD_LAMBDA_DEPS}. Remove to rebuild."; \
+	fi
+
+.PHONY := bundle-dev-lambda-deps
+bundle-dev-lambda-deps:
+	echo "Checking if ${BUILD_DEV_LAMBDA_DEPS} exists..." && \
+	if [[ ! -d ${BUILD_DEV_LAMBDA_DEPS} ]]; then \
+		mkdir -p ${BUILD_DEV_LAMBDA_DEPS} && \
+		pip install \
+			-r cluster-cdk/requirements-dev.txt \
+			--platform manylinux2014_x86_64 \
+			--python-version 3.13 \
+			--only-binary=:all: \
+			-t ${BUILD_DEV_LAMBDA_DEPS} \
+			--upgrade ; \
+	else \
+		echo "Skipping deps bundled in ${BUILD_DEV_LAMBDA_DEPS}. Remove to rebuild."; \
 	fi
 
 .PHONY := run-volume-lambda
-run-volume-lambda: bundle-deps
-	export PYTHONPATH="${BUILD_DEPS}:$${PYTHONPATH}" && \
+run-volume-lambda: bundle-lambda-deps
+	export PYTHONPATH="${BUILD_LAMBDA_DEPS}:$${PYTHONPATH}" && \
 	export CLUSTER_NAME="${CLUSTER_NAME}" && \
 	python3 cluster-cdk/cluster_cdk/lambdas/volume_management.py
 
 .PHONY := test
-test: remove-cdk-out validate-env install-reqs bundle-deps
-	@echo "Running tests for Cluster (${LAB_SHORT_NAME})"
+test: cluster-test lambda-test
+
+.PHONY := cluster-test
+cluster-test: remove-cdk-out validate-env install-reqs
+	@echo "NOT IMPLEMENTED. Running tests for Cluster (${LAB_SHORT_NAME})"
+
+.PHONY := lambda-test
+lambda-test: remove-cdk-out bundle-lambda-deps bundle-dev-lambda-deps
+	@echo "Running lambda tests for Cluster (${LAB_SHORT_NAME})"
+	export PYTHONPATH="${BUILD_DEV_LAMBDA_DEPS}:${BUILD_LAMBDA_DEPS}:$${PYTHONPATH}" && \
+	cd ./cluster-cdk/cluster_cdk/lambdas/ && pytest -v .
 
 .PHONY := validate-env
 validate-env:
@@ -181,12 +211,12 @@ validate-env:
 	cd ./cluster-cdk/cluster_cdk && python validate_env.py
 
 .PHONY := synth-cluster
-synth-cluster: validate-env install-reqs bundle-deps
+synth-cluster: validate-env install-reqs bundle-lambda-deps
 	@echo "Synthesizing ${LAB_SHORT_NAME}/cluster-cdk"
 	cd ./cluster-cdk && cdk synth
 
 .PHONY := deploy-cluster
-deploy-cluster: validate-env install-reqs bundle-deps
+deploy-cluster: validate-env install-reqs bundle-lambda-deps
 	@echo "Deploying ${LAB_SHORT_NAME}/cluster-cdk"
 	cd ./cluster-cdk && cdk --require-approval never deploy
 

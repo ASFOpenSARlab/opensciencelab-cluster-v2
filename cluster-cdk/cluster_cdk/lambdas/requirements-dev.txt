@@ -1,0 +1,8 @@
+aws-cdk-cli==2.1134.0
+aws-cdk-lib==2.263.0
+# aws-cdk.lambda_layer_kubectl_v34==2.1.0
+boto3==1.43.27
+kubernetes==36.0.2
+pytest>=8.4.2
+requests==2.33.1
+moto>=5.2.3
