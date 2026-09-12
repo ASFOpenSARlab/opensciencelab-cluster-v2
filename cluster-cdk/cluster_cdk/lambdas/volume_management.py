@@ -54,7 +54,6 @@ JINJA_LOADER = jinja2.Environment(
 SSO_SECRET = None
 CONCERNING_ISSUES = []
 
-
 ec2_client = None
 ec2_resource = None
 
@@ -222,7 +221,7 @@ def get_claim_name(item):
     return claim_name
 
 
-def get_eks_client():
+def get_eks_api():
     """use awscli to generate a KUBECONFIG for the cluster"""
     # Hacky way to set up kubectl
     result = subprocess.run(
@@ -264,16 +263,14 @@ def get_eks_client():
     return k8s_client.CoreV1Api()
 
 
-def delete_pvc(
-    claim_name: str, volume_id: str, kube_client: k8s_client.CoreV1Api
-) -> None:
+def delete_pvc(claim_name: str, volume_id: str, k8s_api: k8s_client.CoreV1Api) -> None:
     """
     Delete a user's volume by removing their PVC in K8s.
     If the PVC doesn't exist, delete volume directly.
     """
     # Attempt to remove PVC
     try:
-        kube_client.delete_namespaced_persistent_volume_claim(
+        k8s_api.delete_namespaced_persistent_volume_claim(
             name=claim_name,
             namespace="jupyter",
         )
@@ -564,7 +561,7 @@ def run_volume_management():
 
     # Loop up resources
     logger.info("Setting up EKS Client for %s", CLUSTER_NAME)
-    kube_client = get_eks_client()
+    k8s_api = get_eks_api()
 
     logger.info("Querying for Volumes...")
     user_volumes: dict = get_user_volumes()
@@ -590,7 +587,7 @@ def run_volume_management():
             logger.error(" - Ignoring volume with invalid snapshot tags")
         elif is_expired(volume):
             logger.info(" - Volume is expired!")
-            delete_pvc(claim_name, volume.id, kube_client)
+            delete_pvc(claim_name, volume.id, k8s_api)
 
     for claim_name, snapshot in user_snapshots.items():
         logger.info(

@@ -203,7 +203,7 @@ cluster-test: remove-cdk-out validate-env install-reqs
 lambda-test: remove-cdk-out bundle-lambda-deps bundle-dev-lambda-deps
 	@echo "Running lambda tests for Cluster (${LAB_SHORT_NAME})"
 	export PYTHONPATH="${BUILD_DEV_LAMBDA_DEPS}:${BUILD_LAMBDA_DEPS}:$${PYTHONPATH}" && \
-	cd ./cluster-cdk/cluster_cdk/lambdas/ && pytest --log-cli-level=INFO -v .
+	cd ./cluster-cdk/cluster_cdk/lambdas/ && pytest --log-cli-level=INFO -s -v .
 
 .PHONY := validate-env
 validate-env:

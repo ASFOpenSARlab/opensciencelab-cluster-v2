@@ -1,12 +1,12 @@
-import os
+import importlib
 import datetime
 
 import boto3
 import pytest
-from unittest.mock import MagicMock, patch
-
+from unittest.mock import patch, MagicMock
 from moto import mock_aws
-from volume_management import lambda_handler
+
+import volume_management
 
 AWS_REGION_NAME = "us-west-2"
 
@@ -17,42 +17,71 @@ TOMORROW = NOW + datetime.timedelta(hours=24)
 NEXT_WEEK = NOW + datetime.timedelta(weeks=1)
 
 
-class MockDatetime(datetime.datetime):
-    @classmethod
-    def now(cls, tz=None):
-        return NOW
+@pytest.fixture
+def setup_mock_secret_manager():
+    """Setup a secrets manager secret to manage secrets"""
+    with mock_aws():
+        secret_manager = boto3.client("secretsmanager", region_name=AWS_REGION_NAME)
 
+        response = secret_manager.create_secret(
+            Name="mock-sso-secret",
+            SecretString="xY0AoI3Bu61kwXZWGpegNxF_A00YOsE-kLqHVSgsdvQ=",
+        )
 
-def mock_set_sso_token() -> str:
-    return "mock"
-
-
-def mock_send_email_to_portal(email_payload: dict) -> None:
-    print(f"{email_payload}=")
+        yield response["ARN"]
 
 
 @pytest.fixture
-def mock_get_eks_client():
-    """Fixture to mock kubernetes.client.CoreV1Api and load_kube_config."""
-    # Prevent the test from trying to load an actual local kubeconfig file
-    with patch("volume_management.k8s_config.load_kube_config"):
+def setup_mock_portal_post():
+    with patch("requests.post") as mock_post:
+        # Configure the default mock response
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"message": "Success!"}
+        mock_post.return_value = mock_response
+
+        # Yield the mock object so the test can inspect or modify it
+        yield mock_post
+
+
+@pytest.fixture
+def patched_volume_management(
+    setup_mock_secret_manager, setup_mock_portal_post, monkeypatch
+):
+
+    class MockDatetime(datetime.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return NOW
+
+    def mock_get_eks_api():
+        """Fixture to mock kubernetes.client.CoreV1Api and load_kube_config."""
+        # Prevent the test from trying to load an actual local kubeconfig file
         # Patch CoreV1Api where it is imported/used in your application module
-        with patch("volume_management.k8s_client.CoreV1Api") as mock_core_v1_class:
+        with (
+            patch("volume_management.k8s_config.load_kube_config"),
+            patch("volume_management.k8s_client.CoreV1Api") as mock_core_v1_class,
+        ):
             # mock_core_v1_class() represents the instantiated 'v1' object
-            mock_api_instance = mock_core_v1_class.return_value
-            yield mock_api_instance
+            mock_instance = MagicMock()
+            mock_core_v1_class.return_value = mock_instance
+
+            yield mock_instance
+
+    # Mock internal functions using monkeypatch
+    monkeypatch.setattr("volume_management.datetime.datetime", MockDatetime)
+    monkeypatch.setattr("volume_management.get_eks_api", mock_get_eks_api)
+
+    # Mock default parameters
+    monkeypatch.setenv("LAB_SHORT_NAME", "mocklab")
+    monkeypatch.setenv("CLUSTER_NAME", "mock")
+    monkeypatch.setenv("SSO_SECRET_ARN", setup_mock_secret_manager)
+    monkeypatch.setenv("ALERT_SNS_TOPIC_ARN", "")
+    monkeypatch.setenv("PORTAL_DOMAINS", "mock.cloudfront.net")
 
 
 @pytest.fixture
-def setup_mock_aws_credentials():
-    """Mocked AWS Credentials for moto. Just to make sure nothing unfortunate happens."""
-    os.environ["AWS_ACCESS_KEY_ID"] = "mock"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "mock"
-    os.environ["AWS_DEFAULT_REGION"] = AWS_REGION_NAME
-
-
-@pytest.fixture
-def setup_mock_volumes(setup_mock_aws_credentials):
+def setup_mock_volumes():
     """Context manager to provision volumes with various tags."""
     with mock_aws():
         ec2 = boto3.client("ec2", region_name=AWS_REGION_NAME)
@@ -62,12 +91,28 @@ def setup_mock_volumes(setup_mock_aws_credentials):
                 "name": "new_volume",
                 "tags": [
                     {"Key": "volume-delete-time", "Value": f"{TOMORROW}"},
+                    {
+                        "Key": f"tag:{volume_management.CLUSTER_TAG}",
+                        "Value": "mocklab",
+                    },
+                    {
+                        "Key": f"tag:{volume_management.CLAIM_TAG}",
+                        "Value": "mockuser",
+                    },
                 ],
             },
             {
                 "name": "expired_volume",
                 "tags": [
                     {"Key": "volume-delete-time", "Value": f"{YESTERDAY}"},
+                    {
+                        "Key": f"tag:{volume_management.CLUSTER_TAG}",
+                        "Value": "mocklab",
+                    },
+                    {
+                        "Key": f"tag:{volume_management.CLAIM_TAG}",
+                        "Value": "mockuser",
+                    },
                 ],
             },
             {
@@ -75,6 +120,14 @@ def setup_mock_volumes(setup_mock_aws_credentials):
                 "tags": [
                     {"Key": "do-not-delete", "Value": "true"},
                     {"Key": "volume-delete-time", "Value": f"{YESTERDAY}"},
+                    {
+                        "Key": f"tag:{volume_management.CLUSTER_TAG}",
+                        "Value": "mocklab",
+                    },
+                    {
+                        "Key": f"tag:{volume_management.CLAIM_TAG}",
+                        "Value": "mockuser",
+                    },
                 ],
             },
         ]
@@ -92,7 +145,7 @@ def setup_mock_volumes(setup_mock_aws_credentials):
 
 
 @pytest.fixture
-def setup_mock_snapshots(setup_mock_aws_credentials, setup_mock_volumes):
+def setup_mock_snapshots(setup_mock_volumes):
     """Context manager to provision snapshots with various tags."""
     with mock_aws():
         ec2 = boto3.client("ec2", region_name=AWS_REGION_NAME)
@@ -102,18 +155,42 @@ def setup_mock_snapshots(setup_mock_aws_credentials, setup_mock_volumes):
                 "name": "new_snapshot",
                 "tags": [
                     {"Key": "snapshot-delete-time", "Value": f"{NEXT_WEEK}"},
+                    {
+                        "Key": f"tag:{volume_management.CLUSTER_TAG}",
+                        "Value": "mocklab",
+                    },
+                    {
+                        "Key": f"tag:{volume_management.CLAIM_TAG}",
+                        "Value": "mockuser",
+                    },
                 ],
             },
             {
                 "name": "older_snapshot",
                 "tags": [
                     {"Key": "snapshot-delete-time", "Value": f"{TOMORROW}"},
+                    {
+                        "Key": f"tag:{volume_management.CLUSTER_TAG}",
+                        "Value": "mocklab",
+                    },
+                    {
+                        "Key": f"tag:{volume_management.CLAIM_TAG}",
+                        "Value": "mockuser",
+                    },
                 ],
             },
             {
                 "name": "expired_snapshot",
                 "tags": [
                     {"Key": "snapshot-delete-time", "Value": f"{YESTERDAY}"},
+                    {
+                        "Key": f"tag:{volume_management.CLUSTER_TAG}",
+                        "Value": "mocklab",
+                    },
+                    {
+                        "Key": f"tag:{volume_management.CLAIM_TAG}",
+                        "Value": "mockuser",
+                    },
                 ],
             },
         ]
@@ -131,29 +208,17 @@ def setup_mock_snapshots(setup_mock_aws_credentials, setup_mock_volumes):
 
 
 def test_new_volume_no_shapshot(
-    setup_mock_volumes, setup_mock_snapshots, mock_get_eks_client, monkeypatch
+    patched_volume_management,
+    setup_mock_volumes,
+    setup_mock_snapshots,
+    monkeypatch,
 ):
     """New volume created with no snapshot"""
-    # Mock internal variables using monkeypatch
-    monkeypatch.setattr("volume_management.datetime.datetime", MockDatetime)
-    monkeypatch.setattr("volume_management.set_sso_secret", mock_set_sso_token)
-    monkeypatch.setattr(
-        "volume_management.send_email_to_portal", mock_send_email_to_portal
-    )
-    monkeypatch.setattr("volume_management.get_eks_client", mock_get_eks_client)
-
-    monkeypatch.setenv("LAB_SHORT_NAME", "mock")
-    monkeypatch.setenv("CLUSTER_NAME", "mock")
     monkeypatch.setenv("SNAPSHOT_WARNING_DAYS", "1")
     monkeypatch.setenv("SNAPSHOT_GRACEPERIOD_DAYS", "1")
-    monkeypatch.setenv("ALERT_SNS_TOPIC_ARN", "")
-    monkeypatch.setenv("PORTAL_DOMAINS", "mock.cloudfront.net")
 
-    # 2. Run script with an empty event parameter
-    result = lambda_handler({}, None)
-    print(result)
+    result = volume_management.lambda_handler({}, None)
 
-    # 3. Assertions
-    # assert result["statusCode"] == 200
-    # assert setup_mock_volumes["prod_alpha"] in processed
-    # assert setup_mock_volumes["staging_alpha"] not in processed
+    assert result["statusCode"] == 200
+    assert len(setup_mock_volumes) == 3
+    assert len(setup_mock_snapshots) == 3
