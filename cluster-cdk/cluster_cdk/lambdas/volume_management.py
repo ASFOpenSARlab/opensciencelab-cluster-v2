@@ -9,7 +9,7 @@ import traceback
 import boto3
 import escapism
 import jinja2
-import kubernetes
+from kubernetes import client as k8s_client, config as k8s_config
 import requests
 from botocore.exceptions import ClientError
 from opensarlab.auth import encryptedjwt
@@ -260,12 +260,12 @@ def get_eks_client():
         )
 
     # Read kubeconfig file
-    kubernetes.config.load_kube_config(config_file=KUBECONFIG)
-    return kubernetes.client.CoreV1Api()
+    k8s_config.load_kube_config(config_file=KUBECONFIG)
+    return k8s_client.CoreV1Api()
 
 
 def delete_pvc(
-    claim_name: str, volume_id: str, kube_client: kubernetes.client.CoreV1Api
+    claim_name: str, volume_id: str, kube_client: k8s_client.CoreV1Api
 ) -> None:
     """
     Delete a user's volume by removing their PVC in K8s.
@@ -277,7 +277,7 @@ def delete_pvc(
             name=claim_name,
             namespace="jupyter",
         )
-    except kubernetes.client.rest.ApiException:
+    except k8s_client.rest.ApiException:
         logger.warning(
             f"User claim {claim_name} can not be deleted in {CLUSTER_NAME}. Deleting volume '{volume_id}' directly..."
         )
@@ -640,6 +640,8 @@ def lambda_handler(_event, _context):
     except Exception:
         alert_fatal_exception(traceback.format_exc())
         logger.exception("Uncaught Exception:")
+
+    return {"statusCode": 200, "body": "Storage management successfull!"}
 
 
 if __name__ == "__main__":
