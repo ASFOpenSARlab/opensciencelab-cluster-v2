@@ -29,6 +29,7 @@ SNAPSHOT_WARNING_DAYS: list[int] = sorted(
 SNAPSHOT_GRACEPERIOD_DAYS = float(os.getenv("SNAPSHOT_GRACEPERIOD_DAYS", "1.0"))
 SNS_ALERT_TOPIC_ARN = os.getenv("ALERT_SNS_TOPIC_ARN")
 PORTAL_DOMAIN = os.getenv("PORTAL_DOMAINS", "").split(",")[0].strip()
+SSO_SECRET_ARN = os.getenv("SSO_SECRET_ARN")
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 AWS_CLI_PATH = os.getenv("AWS_CLI_PATH", "/opt/awscli/aws")
@@ -54,15 +55,7 @@ JINJA_LOADER = jinja2.Environment(
 SSO_SECRET = None
 CONCERNING_ISSUES = []
 
-ec2_client = None
 ec2_resource = None
-
-
-def get_ec2_client():
-    global ec2_client
-    if not ec2_client:
-        ec2_client = boto3.client("ec2")
-    return ec2_client
 
 
 def get_ec2_resource():
@@ -75,9 +68,8 @@ def get_ec2_resource():
 def set_sso_secret():
     """Grab the SSO secret for sending emails. Die if this fails. No Exception Handling"""
     global SSO_SECRET
-    secret_arn = os.getenv("SSO_SECRET_ARN")
     ssm_client = boto3.client("secretsmanager")
-    SSO_SECRET = ssm_client.get_secret_value(SecretId=secret_arn)["SecretString"]
+    SSO_SECRET = ssm_client.get_secret_value(SecretId=SSO_SECRET_ARN)["SecretString"]
 
 
 def reset_concerning_issues():
@@ -296,10 +288,10 @@ def filter_by_user(all_items: list) -> dict:
         item_tags = tags_to_dict(item.tags)
 
         claim_name = get_claim_name(item)
-        if not claim_name:
-            # Not a PVC item
-            logger.debug("Skipping non-claim %s: %s", item.id, item_tags.get(CLAIM_TAG))
-            continue
+        # if not claim_name:
+        #     # Not a PVC item
+        #     logger.debug("Skipping non-claim %s: %s", item.id, item_tags.get(CLAIM_TAG))
+        #     continue
 
         if CLUSTER_NAME and item_tags.get(CLUSTER_TAG, "") != CLUSTER_NAME:
             # Wrong Cluster
