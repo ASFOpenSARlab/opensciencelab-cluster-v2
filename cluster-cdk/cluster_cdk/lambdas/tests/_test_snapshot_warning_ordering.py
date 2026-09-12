@@ -2,7 +2,7 @@ from unittest.mock import patch
 from moto import mock_aws
 import datetime
 
-from cluster_cdk.lambdas.volume_management import (
+from volume_management import (
     DATE_FORMAT,
     should_send_snapshot_warning_email,
     send_snapshot_warning,
@@ -27,13 +27,11 @@ class TestShouldSendSnapshotWarning:
                     "2026-01-10 01:00:00+0000", DATE_FORMAT
                 )
 
-        monkeypatch.setattr(
-            "cluster_cdk.lambdas.volume_management.datetime.datetime", MockDatetime
-        )
+        monkeypatch.setattr("volume_management.datetime.datetime", MockDatetime)
 
         MONKEYPATCH_SNAPSHOT_WARNING_DAYS = [10, 5, 3, 1]
         monkeypatch.setattr(
-            "cluster_cdk.lambdas.volume_management.SNAPSHOT_WARNING_DAYS",
+            "volume_management.SNAPSHOT_WARNING_DAYS",
             MONKEYPATCH_SNAPSHOT_WARNING_DAYS,
         )
 
@@ -53,13 +51,11 @@ class TestShouldSendSnapshotWarning:
                     "2026-01-21 01:00:00+0000", DATE_FORMAT
                 )
 
-        monkeypatch.setattr(
-            "cluster_cdk.lambdas.volume_management.datetime.datetime", MockDatetime
-        )
+        monkeypatch.setattr("volume_management.datetime.datetime", MockDatetime)
 
         MONKEYPATCH_SNAPSHOT_WARNING_DAYS = [10, 5, 3, 1]
         monkeypatch.setattr(
-            "cluster_cdk.lambdas.volume_management.SNAPSHOT_WARNING_DAYS",
+            "volume_management.SNAPSHOT_WARNING_DAYS",
             MONKEYPATCH_SNAPSHOT_WARNING_DAYS,
         )
 
@@ -79,13 +75,11 @@ class TestShouldSendSnapshotWarning:
                     "2026-01-22 01:00:00+0000", DATE_FORMAT
                 )
 
-        monkeypatch.setattr(
-            "cluster_cdk.lambdas.volume_management.datetime.datetime", MockDatetime
-        )
+        monkeypatch.setattr("volume_management.datetime.datetime", MockDatetime)
 
         MONKEYPATCH_SNAPSHOT_WARNING_DAYS = [10, 5, 3, 1]
         monkeypatch.setattr(
-            "cluster_cdk.lambdas.volume_management.SNAPSHOT_WARNING_DAYS",
+            "volume_management.SNAPSHOT_WARNING_DAYS",
             MONKEYPATCH_SNAPSHOT_WARNING_DAYS,
         )
 
@@ -106,13 +100,11 @@ class TestShouldSendSnapshotWarning:
                     "2026-01-26 01:00:00+0000", DATE_FORMAT
                 )
 
-        monkeypatch.setattr(
-            "cluster_cdk.lambdas.volume_management.datetime.datetime", MockDatetime
-        )
+        monkeypatch.setattr("volume_management.datetime.datetime", MockDatetime)
 
         MONKEYPATCH_SNAPSHOT_WARNING_DAYS = [10, 5, 3, 1]
         monkeypatch.setattr(
-            "cluster_cdk.lambdas.volume_management.SNAPSHOT_WARNING_DAYS",
+            "volume_management.SNAPSHOT_WARNING_DAYS",
             MONKEYPATCH_SNAPSHOT_WARNING_DAYS,
         )
 
@@ -133,13 +125,11 @@ class TestShouldSendSnapshotWarning:
                     "2026-01-29 01:00:00+0000", DATE_FORMAT
                 )
 
-        monkeypatch.setattr(
-            "cluster_cdk.lambdas.volume_management.datetime.datetime", MockDatetime
-        )
+        monkeypatch.setattr("volume_management.datetime.datetime", MockDatetime)
 
         MONKEYPATCH_SNAPSHOT_WARNING_DAYS = [10, 5, 3, 1]
         monkeypatch.setattr(
-            "cluster_cdk.lambdas.volume_management.SNAPSHOT_WARNING_DAYS",
+            "volume_management.SNAPSHOT_WARNING_DAYS",
             MONKEYPATCH_SNAPSHOT_WARNING_DAYS,
         )
 
@@ -160,13 +150,11 @@ class TestShouldSendSnapshotWarning:
                     "2026-02-10 01:00:00+0000", DATE_FORMAT
                 )
 
-        monkeypatch.setattr(
-            "cluster_cdk.lambdas.volume_management.datetime.datetime", MockDatetime
-        )
+        monkeypatch.setattr("volume_management.datetime.datetime", MockDatetime)
 
         MONKEYPATCH_SNAPSHOT_WARNING_DAYS = [10, 5, 3, 1]
         monkeypatch.setattr(
-            "cluster_cdk.lambdas.volume_management.SNAPSHOT_WARNING_DAYS",
+            "volume_management.SNAPSHOT_WARNING_DAYS",
             MONKEYPATCH_SNAPSHOT_WARNING_DAYS,
         )
 
@@ -192,12 +180,10 @@ class TestSendSnapshotWarning:
                     "2026-01-10 01:00:00+0000", DATE_FORMAT
                 )
 
-        monkeypatch.setattr(
-            "cluster_cdk.lambdas.volume_management.datetime.datetime", MockDatetime
-        )
+        monkeypatch.setattr("volume_management.datetime.datetime", MockDatetime)
 
         monkeypatch.setattr(
-            "cluster_cdk.lambdas.volume_management.send_email_to_portal",
+            "volume_management.send_email_to_portal",
             lambda *args, **kwargs: None,
         )
 
