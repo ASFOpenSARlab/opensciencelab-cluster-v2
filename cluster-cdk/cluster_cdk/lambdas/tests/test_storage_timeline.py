@@ -1,4 +1,3 @@
-import importlib
 import datetime
 
 import boto3
@@ -49,7 +48,6 @@ def setup_mock_portal_post():
 def patched_volume_management(
     setup_mock_secret_manager, setup_mock_portal_post, monkeypatch
 ):
-
     class MockDatetime(datetime.datetime):
         @classmethod
         def now(cls, tz=None):
