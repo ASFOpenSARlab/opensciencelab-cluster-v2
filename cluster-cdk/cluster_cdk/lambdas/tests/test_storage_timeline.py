@@ -94,11 +94,11 @@ def mock_volumes(config: list) -> dict:
                             {"Key": "Name", "Value": item["name"]},
                             {
                                 "Key": "volume-delete-time",
-                                "Value": f"{NOW + datetime.timedelta(days=item['vol_days'])}",
+                                "Value": item["volume-delete-time"],
                             },
                             {
                                 "Key": "snapshot-delete-time",
-                                "Value": f"{NOW + datetime.timedelta(days=item['snap_days'])}",
+                                "Value": item["snapshot-delete-time"],
                             },
                             {
                                 "Key": volume_management.CLUSTER_TAG,
@@ -134,11 +134,11 @@ def mock_snapshots(config: list, mock_volumes: dict) -> dict:
                             {"Key": "Name", "Value": item["name"]},
                             {
                                 "Key": "volume-delete-time",
-                                "Value": f"{NOW + datetime.timedelta(days=item['vol_days'])}",
+                                "Value": item["volume-delete-time"],
                             },
                             {
                                 "Key": "snapshot-delete-time",
-                                "Value": f"{NOW + datetime.timedelta(days=item['snap_days'])}",
+                                "Value": item["snapshot-delete-time"],
                             },
                             {
                                 "Key": volume_management.CLUSTER_TAG,
@@ -163,7 +163,13 @@ def test_new_volume_no_snapshot(
     monkeypatch,
 ):
     """New volume created with no snapshot"""
-    volume_configs = [{"name": "new_volume", "vol_days": 2, "snap_days": 28}]
+    volume_configs = [
+        {
+            "name": "new_volume",
+            "volume-delete-time": "2000-01-03 00:00:00+0000",
+            "snapshot-delete-time": "2000-01-30 00:00:00+0000",
+        }
+    ]
 
     vols = mock_volumes(volume_configs)
 
@@ -184,7 +190,13 @@ def test_expired_volume_no_snapshot(
     monkeypatch,
 ):
     """Expired volume with no snapshot"""
-    volume_configs = [{"name": "new_volume", "vol_days": -1, "snap_days": 25}]
+    volume_configs = [
+        {
+            "name": "new_volume",
+            "volume-delete-time": "1999-12-31 00:00:00+0000",
+            "snapshot-delete-time": "2000-01-15 00:00:00+0000",
+        }
+    ]
 
     vols = mock_volumes(volume_configs)
 
@@ -205,7 +217,13 @@ def test_expired_volume_with_snapshot(
     monkeypatch,
 ):
     """Expired volume with no snapshot"""
-    volume_configs = [{"name": "new_volume", "vol_days": -1, "snap_days": 25}]
+    volume_configs = [
+        {
+            "name": "new_volume",
+            "volume-delete-time": "1999-12-31 00:00:00+0000",
+            "snapshot-delete-time": "2000-01-15 00:00:00+0000",
+        }
+    ]
 
     vols = mock_volumes(volume_configs)
 
@@ -213,8 +231,8 @@ def test_expired_volume_with_snapshot(
         {
             "name": "new_snap",
             "associated": "new_volume",
-            "vol_days": -1,
-            "snap_days": 25,
+            "volume-delete-time": "1999-12-31 00:00:00+0000",
+            "snapshot-delete-time": "2000-01-15 00:00:00+0000",
         }
     ]
 
