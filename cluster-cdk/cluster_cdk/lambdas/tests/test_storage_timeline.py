@@ -77,242 +77,157 @@ def patched_volume_management(
     monkeypatch.setattr("volume_management.PORTAL_DOMAIN", "mock.cloudfront.net")
 
 
-@pytest.fixture
-def mock_volumes():
+def mock_volumes(config: list) -> dict:
     """Context manager to provision volumes with various tags."""
     with mock_aws():
         ec2 = boto3.client("ec2", region_name=AWS_REGION_NAME)
 
-        volume_configs = [
-            {
-                "name": "new_volume",
-                "tags": [
-                    {"Key": "Name", "Value": "new_volume"},
-                    {
-                        "Key": "volume-delete-time",
-                        "Value": f"{NOW + datetime.timedelta(days=2)}",
-                    },
-                    {
-                        "Key": "snapshot-delete-time",
-                        "Value": f"{NOW + datetime.timedelta(days=28)}",
-                    },
-                    {
-                        "Key": volume_management.CLUSTER_TAG,
-                        "Value": "mocklab",
-                    },
-                    {
-                        "Key": volume_management.CLAIM_TAG,
-                        "Value": "claim-mockuser1",
-                    },
-                ],
-            },
-            {
-                "name": "another_volume",
-                "tags": [
-                    {"Key": "Name", "Value": "another_volume"},
-                    {
-                        "Key": "volume-delete-time",
-                        "Value": f"{NOW + datetime.timedelta(days=2)}",
-                    },
-                    {
-                        "Key": "snapshot-delete-time",
-                        "Value": f"{NOW + datetime.timedelta(days=28)}",
-                    },
-                    {
-                        "Key": volume_management.CLUSTER_TAG,
-                        "Value": "mocklab",
-                    },
-                    {
-                        "Key": volume_management.CLAIM_TAG,
-                        "Value": "claim-mockuser2",
-                    },
-                ],
-            },
-            {
-                "name": "expired_volume",
-                "tags": [
-                    {"Key": "Name", "Value": "expired_volume"},
-                    {
-                        "Key": "volume-delete-time",
-                        "Value": f"{NOW + datetime.timedelta(days=0)}",
-                    },
-                    {
-                        "Key": "snapshot-delete-time",
-                        "Value": f"{NOW + datetime.timedelta(days=26)}",
-                    },
-                    {
-                        "Key": volume_management.CLUSTER_TAG,
-                        "Value": "mocklab",
-                    },
-                    {
-                        "Key": volume_management.CLAIM_TAG,
-                        "Value": "claim-mockuser3",
-                    },
-                ],
-            },
-            {
-                "name": "protected_expired_volume",
-                "tags": [
-                    {"Key": "Name", "Value": "protected_expired_volume"},
-                    {"Key": "do-not-delete", "Value": "true"},
-                    {
-                        "Key": "volume-delete-time",
-                        "Value": f"{NOW + datetime.timedelta(days=-1)}",
-                    },
-                    {
-                        "Key": "snapshot-delete-time",
-                        "Value": f"{NOW + datetime.timedelta(days=27)}",
-                    },
-                    {
-                        "Key": volume_management.CLUSTER_TAG,
-                        "Value": "mocklab",
-                    },
-                    {
-                        "Key": volume_management.CLAIM_TAG,
-                        "Value": "claim-mockuser4",
-                    },
-                ],
-            },
-        ]
-
         created_volumes = {}
-        for config in volume_configs:
+        for num, item in enumerate(config):
             v = ec2.create_volume(
                 AvailabilityZone=f"{AWS_REGION_NAME}a",
                 Size=10,
-                TagSpecifications=[{"ResourceType": "volume", "Tags": config["tags"]}],
+                TagSpecifications=[
+                    {
+                        "ResourceType": "volume",
+                        "Tags": [
+                            {"Key": "Name", "Value": item["name"]},
+                            {
+                                "Key": "volume-delete-time",
+                                "Value": f"{NOW + datetime.timedelta(days=item['vol_days'])}",
+                            },
+                            {
+                                "Key": "snapshot-delete-time",
+                                "Value": f"{NOW + datetime.timedelta(days=item['snap_days'])}",
+                            },
+                            {
+                                "Key": volume_management.CLUSTER_TAG,
+                                "Value": "mocklab",
+                            },
+                            {
+                                "Key": volume_management.CLAIM_TAG,
+                                "Value": f"claim-mockuser{num}",
+                            },
+                        ],
+                    }
+                ],
             )
-            created_volumes[config["name"]] = v
+            created_volumes[item["name"]] = v
 
-        yield created_volumes
+        return created_volumes
 
 
-@pytest.fixture
-def mock_snapshots(mock_volumes):
-    """Context manager to provision snapshots with various tags."""
+def mock_snapshots(config: list, mock_volumes: dict) -> dict:
+    """Context manager to provision EBS snapshots with various tags."""
     with mock_aws():
         ec2 = boto3.client("ec2", region_name=AWS_REGION_NAME)
 
-        snapshot_configs = [
-            {
-                "name": "new_snapshot",
-                "associated_volume": "new_volume",
-                "tags": [
-                    {"Key": "Name", "Value": "new_snapshot"},
-                    {
-                        "Key": "volume-delete-time",
-                        "Value": f"{NOW + datetime.timedelta(days=1)}",
-                    },
-                    {
-                        "Key": "snapshot-delete-time",
-                        "Value": f"{NOW + datetime.timedelta(days=27)}",
-                    },
-                    {
-                        "Key": volume_management.CLUSTER_TAG,
-                        "Value": "mocklab",
-                    },
-                    {
-                        "Key": volume_management.CLAIM_TAG,
-                        "Value": "claim-mockuser1",
-                    },
-                ],
-            },
-            {
-                "name": "older_snapshot",
-                "associated_volume": "another_volume",
-                "tags": [
-                    {"Key": "Name", "Value": "older_snapshot"},
-                    {
-                        "Key": "volume-delete-time",
-                        "Value": f"{NOW + datetime.timedelta(days=-14)}",
-                    },
-                    {
-                        "Key": "snapshot-delete-time",
-                        "Value": f"{NOW + datetime.timedelta(days=14)}",
-                    },
-                    {
-                        "Key": volume_management.CLUSTER_TAG,
-                        "Value": "mocklab",
-                    },
-                    {
-                        "Key": volume_management.CLAIM_TAG,
-                        "Value": "claim-mockuser2",
-                    },
-                ],
-            },
-            {
-                "name": "expired_snapshot",
-                "associated_volume": "expired_volume",
-                "tags": [
-                    {"Key": "Name", "Value": "expired_snapshot"},
-                    {
-                        "Key": "volume-delete-time",
-                        "Value": f"{NOW + datetime.timedelta(days=-28)}",
-                    },
-                    {
-                        "Key": "snapshot-delete-time",
-                        "Value": f"{NOW + datetime.timedelta(days=0)}",
-                    },
-                    {
-                        "Key": volume_management.CLUSTER_TAG,
-                        "Value": "mocklab",
-                    },
-                    {
-                        "Key": volume_management.CLAIM_TAG,
-                        "Value": "claim-mockuser3",
-                    },
-                ],
-            },
-            {
-                "name": "past_snapshot",
-                "associated_volume": "expired_volume",
-                "tags": [
-                    {"Key": "Name", "Value": "past_snapshot"},
-                    {
-                        "Key": "volume-delete-time",
-                        "Value": f"{NOW + datetime.timedelta(days=-30)}",
-                    },
-                    {
-                        "Key": "snapshot-delete-time",
-                        "Value": f"{NOW + datetime.timedelta(days=-2)}",
-                    },
-                    {
-                        "Key": volume_management.CLUSTER_TAG,
-                        "Value": "mocklab",
-                    },
-                    {
-                        "Key": volume_management.CLAIM_TAG,
-                        "Value": "claim-mockuser3",
-                    },
-                ],
-            },
-        ]
-
         created_snapshots = {}
-        for config in snapshot_configs:
+        for num, item in enumerate(config):
+            associated_volume = item["associated"]
             s = ec2.create_snapshot(
-                VolumeId=mock_volumes["new_volume"]["VolumeId"],
+                VolumeId=mock_volumes[associated_volume]["VolumeId"],
                 TagSpecifications=[
-                    {"ResourceType": "snapshot", "Tags": config["tags"]}
+                    {
+                        "ResourceType": "snapshot",
+                        "Tags": [
+                            {"Key": "Name", "Value": item["name"]},
+                            {
+                                "Key": "volume-delete-time",
+                                "Value": f"{NOW + datetime.timedelta(days=item['vol_days'])}",
+                            },
+                            {
+                                "Key": "snapshot-delete-time",
+                                "Value": f"{NOW + datetime.timedelta(days=item['snap_days'])}",
+                            },
+                            {
+                                "Key": volume_management.CLUSTER_TAG,
+                                "Value": "mocklab",
+                            },
+                            {
+                                "Key": volume_management.CLAIM_TAG,
+                                "Value": "claim-mockuser1",
+                            },
+                        ],
+                    }
                 ],
             )
-            created_snapshots[config["name"]] = s
-        yield created_snapshots
+            created_snapshots[item["name"]] = s
+
+        return created_snapshots
 
 
-def test_new_volume_no_shapshot(
-    mock_volumes,
-    mock_snapshots,
-    monkeypatch,
+# Various tests
+def test_new_volume_no_snapshot(
     patched_volume_management,
+    monkeypatch,
 ):
     """New volume created with no snapshot"""
+    volume_configs = [{"name": "new_volume", "vol_days": 2, "snap_days": 28}]
+
+    vols = mock_volumes(volume_configs)
+
     monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
     monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
     monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
 
+    # Run lambda
     result = volume_management.lambda_handler({}, None)
 
+    # Results
     assert result["statusCode"] == 200
-    assert len(mock_volumes) == 4
-    assert len(mock_snapshots) == 3
+    assert len(vols) == 1
+
+
+def test_expired_volume_no_snapshot(
+    patched_volume_management,
+    monkeypatch,
+):
+    """Expired volume with no snapshot"""
+    volume_configs = [{"name": "new_volume", "vol_days": -1, "snap_days": 25}]
+
+    vols = mock_volumes(volume_configs)
+
+    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+
+    # Run lambda
+    result = volume_management.lambda_handler({}, None)
+
+    # Results
+    assert result["statusCode"] == 200
+    assert len(vols) == 1
+
+
+def test_expired_volume_with_snapshot(
+    patched_volume_management,
+    monkeypatch,
+):
+    """Expired volume with no snapshot"""
+    volume_configs = [{"name": "new_volume", "vol_days": -1, "snap_days": 25}]
+
+    vols = mock_volumes(volume_configs)
+
+    snapshot_configs = [
+        {
+            "name": "new_snap",
+            "associated": "new_volume",
+            "vol_days": -1,
+            "snap_days": 25,
+        }
+    ]
+
+    snaps = mock_snapshots(snapshot_configs, vols)
+
+    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+
+    # Run lambda
+    result = volume_management.lambda_handler({}, None)
+
+    # Results
+    assert result["statusCode"] == 200
+    assert len(vols) == 0
+    assert len(snaps) == 1
