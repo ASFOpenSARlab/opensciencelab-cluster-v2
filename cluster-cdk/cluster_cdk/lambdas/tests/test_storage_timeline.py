@@ -1,5 +1,4 @@
 import datetime
-from contextlib import ExitStack
 
 import boto3
 import pytest
