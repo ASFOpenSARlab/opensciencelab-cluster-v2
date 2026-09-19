@@ -266,9 +266,10 @@ def delete_pvc(claim_name: str, volume_id: str, k8s_api: k8s_client.CoreV1Api) -
             name=claim_name,
             namespace="jupyter",
         )
+        logger.info(f"Volume claim '{claim_name}' deleted in {CLUSTER_NAME}.")
     except k8s_client.rest.ApiException:
         logger.warning(
-            f"User claim {claim_name} can not be deleted in {CLUSTER_NAME}. Deleting volume '{volume_id}' directly..."
+            f"User claim {claim_name} can not be deleted in {CLUSTER_NAME}. Deleting volume '{volume_id}' directly."
         )
         try:
             ec2_resource = get_ec2_resource()
@@ -348,7 +349,7 @@ def is_expired(item, grace_period_days=0):
 
     logger.debug(f" - Now datetime: {now} Expiration datetime: {expire_time}")
 
-    return now > expire_time
+    return now >= expire_time
 
 
 def snapshot_has_required_tags(snapshot):
@@ -491,7 +492,7 @@ def should_send_snapshot_warning_email(snapshot):
     # * it is currently after when the next warning should be sent
     if (
         next_warning_date
-        and datetime.datetime.now(datetime.timezone.utc) > next_warning_date
+        and datetime.datetime.now(datetime.timezone.utc) >= next_warning_date
     ):
         return True
     return False
@@ -572,9 +573,9 @@ def run_volume_management():
         snapshot_from_volume = get_snapshot_for_volume(volume, user_snapshots)
 
         if is_delete_protected(volume):
-            logger.info(" - Volume is Delete protected!")
+            logger.info(" - Volume is Delete protected! Will do nothing.")
         elif not snapshot_from_volume:
-            logger.warning(" - Volume has no active snapshot")
+            logger.warning(" - Volume has no active snapshot. Will do nothing.")
         elif not snapshot_has_required_tags(snapshot_from_volume):
             logger.error(" - Ignoring volume with invalid snapshot tags")
         elif is_expired(volume):
@@ -587,9 +588,9 @@ def run_volume_management():
         )
 
         if not snapshot_has_required_tags(snapshot):
-            logger.warning(" - Snapshot is missing tags!")
+            logger.warning(" - Snapshot is missing tags! Will do nothing.")
         elif is_delete_protected(snapshot):
-            logger.info(" - Snapshot is Delete protected!")
+            logger.info(" - Snapshot is Delete protected! Will do nothing.")
         elif is_expired(snapshot, grace_period_days=SNAPSHOT_GRACEPERIOD_DAYS):
             logger.info(" - Deleting Snapshot")
             snapshot.delete()
