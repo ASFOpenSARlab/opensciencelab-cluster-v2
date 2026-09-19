@@ -379,10 +379,18 @@ This possible blockage would also affect other OSL services and will need to be 
 
 ## Troubleshooting
 
-### My Cluster is inaccessible for some reason
+### My Cluster is Inaccessible for Some Reason
 
 Did you
 
 - Change your SSO secret?
 - Respawn the hub pod after changing SSO secret, or any other variables?
 - Double check your portal lab card has the correct cluster deployment url?
+
+### I Can't Connect to my Cluster in EKS
+
+If you see a message like
+
+`⚠️ Configuration complete, but unable to connect to cluster <YOURCLUSTER>`
+
+Try deleting `~/.kube/config-<YOURCLUSTER>` and retry connecting to cluster
