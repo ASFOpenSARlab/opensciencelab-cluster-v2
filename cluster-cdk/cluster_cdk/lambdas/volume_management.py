@@ -546,6 +546,9 @@ def run_volume_management():
         logger.info(
             f"SNAPSHOT: {claim_user} | ID: {snapshot.id} | Size: {snapshot.volume_size}GB | State: {snapshot.state}"
         )
+        if user_volumes[claim_user]:
+            logger.info(" - Volume exists, skipping")
+            continue
 
         if not snapshot_has_required_tags(snapshot):
             logger.warning(" - Snapshot is missing tags!")
