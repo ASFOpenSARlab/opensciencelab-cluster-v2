@@ -153,7 +153,7 @@ def get_unattached_volumes():
 
 
 def get_inactive_snapshots():
-    """get all volume snapshots owned by this AWS account"""
+    """get all volume snapshots without an active volume owned by this AWS account"""
     this_account = boto3.client("sts").get_caller_identity().get("Account")
     ec2_resource = get_ec2_resource()
 
@@ -166,7 +166,13 @@ def get_inactive_snapshots():
         tags_to_dict(t).get(CLAIM_TAG, "") for t in ec2_resource.volumes.all()
     ]
 
-    inactive_snapshots = [s for s in all_snapshots if s not in all_active_claims]
+    inactive_snapshots = []
+    for s in all_snapshots:
+        if s not in all_active_claims:
+            inactive_snapshots.append(s)
+        else:
+            logger.debug("Ignoring snapshot with active volume: ", s.id)
+
     return inactive_snapshots
 
 
