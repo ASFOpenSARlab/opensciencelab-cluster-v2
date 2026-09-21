@@ -551,7 +551,7 @@ def test_almost_expired_snapshot_with_restored_volume_and_do_not_send_warning(
         {
             "claim_name": "claim-mockuser0",
             "name": "new_volume",
-            "volume-delete-time": "2000-01-01 18:00:00+0000",
+            "volume-delete-time": "2000-01-15 00:00:00+0000",
             "snapshot-delete-time": "2000-01-02 00:00:00+0000",
         }
     ]
@@ -565,7 +565,7 @@ def test_almost_expired_snapshot_with_restored_volume_and_do_not_send_warning(
             "claim_name": "claim-mockuser0",
             "name": "new_snap",
             "associated": "new_volume",
-            "volume-delete-time": "2000-01-01 18:00:00+0000",
+            "volume-delete-time": "2000-01-15 00:00:00+0000",
             "snapshot-delete-time": "2000-01-02 00:00:00+0000",
         }
     ]
