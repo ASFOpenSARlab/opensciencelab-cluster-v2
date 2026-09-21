@@ -152,14 +152,22 @@ def get_unattached_volumes():
     return ec2_resource.volumes.all()
 
 
-def get_all_snapshots():
+def get_inactive_snapshots():
     """get all volume snapshots owned by this AWS account"""
     this_account = boto3.client("sts").get_caller_identity().get("Account")
     ec2_resource = get_ec2_resource()
-    return ec2_resource.snapshots.filter(
+
+    all_snapshots = ec2_resource.snapshots.filter(
         OwnerIds=[this_account],
         Filters=[{"Name": "status", "Values": ["completed"]}],
     )
+
+    all_active_claims = [
+        tags_to_dict(t).get(CLAIM_TAG, "") for t in ec2_resource.volumes.all()
+    ]
+
+    inactive_snapshots = [s for s in all_snapshots if s not in all_active_claims]
+    return inactive_snapshots
 
 
 def get_claim_user(item):
@@ -487,7 +495,7 @@ def get_user_volumes():
 
 def get_user_snapshots():
     """Return user snapshots for a cluster"""
-    return filter_users(get_all_snapshots())
+    return filter_users(get_inactive_snapshots())
 
 
 def send_email_to_portal(email_payload):
@@ -546,9 +554,6 @@ def run_volume_management():
         logger.info(
             f"SNAPSHOT: {claim_user} | ID: {snapshot.id} | Size: {snapshot.volume_size}GB | State: {snapshot.state}"
         )
-        if user_volumes[claim_user]:
-            logger.info(" - Volume exists, skipping")
-            continue
 
         if not snapshot_has_required_tags(snapshot):
             logger.warning(" - Snapshot is missing tags!")
