@@ -540,6 +540,67 @@ def test_almost_expired_snapshot_and_do_send_warning(
     assert "Sending a snapshot warning email!" in caplog.text
 
 
+def test_almost_expired_snapshot_with_restored_volume_and_do_not_send_warning(
+    mock_k8s,
+    patched_volume_management,
+    monkeypatch,
+    caplog,
+):
+    # Create initial volume that the snapshot will be based off
+    volume_configs = [
+        {
+            "claim_name": "claim-mockuser0",
+            "name": "new_volume",
+            "volume-delete-time": "2000-01-01 18:00:00+0000",
+            "snapshot-delete-time": "2000-01-02 00:00:00+0000",
+        }
+    ]
+
+    vols = mock_volumes(volume_configs)
+    assert len(vols) == 1
+    assert "new_volume" in vols
+
+    snapshot_configs = [
+        {
+            "claim_name": "claim-mockuser0",
+            "name": "new_snap",
+            "associated": "new_volume",
+            "volume-delete-time": "2000-01-01 18:00:00+0000",
+            "snapshot-delete-time": "2000-01-02 00:00:00+0000",
+        }
+    ]
+
+    snaps = mock_snapshots(
+        snapshot_configs,
+        vols,
+        remove_volume_after_snapshot_creation=False,
+    )
+    assert "new_snap" in snaps
+    assert len(snaps) == 1
+
+    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
+    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+
+    # Run lambda
+    result = volume_management.lambda_handler({}, None)
+
+    # Confirm expected results
+    assert result["statusCode"] == 200
+
+    vols_after_run = volume_management.get_user_volumes()
+    assert len(vols_after_run) == 1
+    assert "claim-mockuser0" in vols_after_run
+
+    snaps_after_run = volume_management.get_user_snapshots()
+    assert len(snaps_after_run) == 1
+    assert "claim-mockuser0" in snaps_after_run
+    assert "Snapshot is in grace period!" not in caplog.text
+    assert "Deletion email sent" not in caplog.text
+    assert "Sending a snapshot warning email!" not in caplog.text
+
+
 def test_expired_snapshot_within_grace_period_and_not_delete_snapshot(
     mock_k8s, patched_volume_management, monkeypatch, caplog
 ):
