@@ -617,6 +617,11 @@ def run_volume_management():
             snapshot, user_volumes
         )
 
+        # Don't do anything to the snapshot if there is a volume.
+        if is_active_volume_for_snapshot:
+            logger.info("Active volume found for snapshot. Will do nothing.")
+            continue
+
         if not snapshot_has_required_tags(snapshot):
             logger.warning(" - Snapshot is missing tags! Will do nothing.")
         elif is_delete_protected(snapshot):
@@ -624,12 +629,10 @@ def run_volume_management():
         elif is_expired(snapshot, grace_period_days=SNAPSHOT_GRACEPERIOD_DAYS):
             logger.info(" - Deleting Snapshot")
             snapshot.delete()
-        elif not is_active_volume_for_snapshot and is_expired(snapshot):
+        elif is_expired(snapshot):
             logger.info(" - Snapshot is in grace period!")
             send_snapshot_delete(snapshot, claim_name)
-        elif not is_active_volume_for_snapshot and should_send_snapshot_warning_email(
-            snapshot
-        ):
+        elif should_send_snapshot_warning_email(snapshot):
             logger.info(" - Sending a snapshot warning email!")
             send_snapshot_warning(snapshot, claim_name)
 
