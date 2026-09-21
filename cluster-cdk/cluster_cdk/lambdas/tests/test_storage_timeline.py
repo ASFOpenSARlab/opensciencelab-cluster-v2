@@ -159,7 +159,9 @@ def mock_volumes(config: list) -> dict:
 
 
 def mock_snapshots(
-    config: list, mock_volumes: dict, remove_volume_on_snapshot_creation: bool = False
+    config: list,
+    mock_volumes: dict,
+    remove_volume_after_snapshot_creation: bool = False,
 ) -> dict:
     """Context manager to provision EBS snapshots with various tags."""
     with mock_aws():
@@ -199,7 +201,7 @@ def mock_snapshots(
             )
             created_snapshots[item["name"]] = s
 
-            if remove_volume_on_snapshot_creation:
+            if remove_volume_after_snapshot_creation:
                 ec2.delete_volume(VolumeId=volume_id)
 
         return created_snapshots
@@ -353,11 +355,11 @@ def test_unexpired_snapshot_with_no_volume_and_do_keep_snapshot(
         }
     ]
 
-    remove_volume_on_snapshot_creation = True
+    remove_volume_after_snapshot_creation = True
     snaps = mock_snapshots(
         snapshot_configs,
         vols,
-        remove_volume_on_snapshot_creation=remove_volume_on_snapshot_creation,
+        remove_volume_after_snapshot_creation=remove_volume_after_snapshot_creation,
     )
     assert "new_snap" in snaps
     assert len(snaps) == 1
@@ -378,6 +380,102 @@ def test_unexpired_snapshot_with_no_volume_and_do_keep_snapshot(
     assert len(vols_after_run) == 0
     assert "claim-mockuser0" not in vols_after_run
     assert len(snaps_after_run) == 1
+
+
+def test_duplicate_unexpired_snapshots_with_no_volume_and_delete_duplicate(
+    mock_k8s, patched_volume_management, monkeypatch, caplog
+):
+    # Created volume and duplicate snapshots and then delete volume
+    vols_duplicated = mock_volumes(
+        [
+            {
+                "claim_name": "claim-mockuser0",
+                "name": "mockuser0_volume",
+                "volume-delete-time": "1999-12-15 00:00:00+0000",
+                "snapshot-delete-time": "2000-01-15 00:00:00+0000",
+            },
+        ]
+    )
+
+    mock_snapshots(
+        [
+            {
+                "claim_name": "claim-mockuser0",
+                "name": "new_snap",
+                "associated": "mockuser0_volume",
+                "volume-delete-time": "1999-12-15 00:00:00+0000",
+                "snapshot-delete-time": "2000-01-15 00:00:00+0000",
+            },
+        ],
+        vols_duplicated,
+        # Don't delete volume so it can be used again for the duplicate snapshot
+        remove_volume_after_snapshot_creation=False,
+    )
+
+    mock_snapshots(
+        [
+            {
+                "claim_name": "claim-mockuser0",
+                "name": "duplicate_snap",
+                "associated": "mockuser0_volume",
+                "volume-delete-time": "1999-12-15 00:00:00+0000",
+                "snapshot-delete-time": "2000-01-15 00:00:00+0000",
+            },
+        ],
+        vols_duplicated,
+        remove_volume_after_snapshot_creation=True,
+    )
+
+    # Create normal volume, take non-duplicate snapshot as a control, and then delete volume
+    vols_not_duplicated = mock_volumes(
+        [
+            {
+                "claim_name": "claim-mockuser1",
+                "name": "mockuser1_volume",
+                "volume-delete-time": "1999-12-20 00:00:00+0000",
+                "snapshot-delete-time": "2000-01-20 00:00:00+0000",
+            },
+        ]
+    )
+
+    mock_snapshots(
+        [
+            {
+                "claim_name": "claim-mockuser1",
+                "name": "other_snap",
+                "associated": "mockuser1_volume",
+                "volume-delete-time": "1999-12-20 00:00:00+0000",
+                "snapshot-delete-time": "2000-01-20 00:00:00+0000",
+            },
+        ],
+        vols_not_duplicated,
+        remove_volume_after_snapshot_creation=True,
+    )
+
+    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
+    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+
+    # Confirm number of volumes and snapshots
+    vols_before_run = volume_management.get_user_volumes()
+    assert len(vols_before_run) == 0
+
+    snaps_before_run = volume_management.get_all_completed_snapshots_in_lab()
+    assert len(snaps_before_run) == 3
+
+    # Run lambda
+    result = volume_management.lambda_handler({}, None)
+
+    # Confirm expected results
+    assert result["statusCode"] == 200
+
+    vols_after_run = volume_management.get_user_volumes()
+    assert len(vols_after_run) == 0
+
+    snaps_after_run = volume_management.get_user_snapshots()
+    assert len(snaps_after_run) == 2
+    assert "Duplicate snapshot found. Deleting " in caplog.text
 
 
 def test_almost_expired_snapshot_and_do_send_warning(
@@ -410,11 +508,11 @@ def test_almost_expired_snapshot_and_do_send_warning(
         }
     ]
 
-    remove_volume_on_snapshot_creation = True
+    remove_volume_after_snapshot_creation = True
     snaps = mock_snapshots(
         snapshot_configs,
         vols,
-        remove_volume_on_snapshot_creation=remove_volume_on_snapshot_creation,
+        remove_volume_after_snapshot_creation=remove_volume_after_snapshot_creation,
     )
     assert "new_snap" in snaps
     assert len(snaps) == 1
@@ -469,11 +567,11 @@ def test_expired_snapshot_within_grace_period_and_not_delete_snapshot(
         }
     ]
 
-    remove_volume_on_snapshot_creation = True
+    remove_volume_after_snapshot_creation = True
     snaps = mock_snapshots(
         snapshot_configs,
         vols,
-        remove_volume_on_snapshot_creation=remove_volume_on_snapshot_creation,
+        remove_volume_after_snapshot_creation=remove_volume_after_snapshot_creation,
     )
     assert "new_snap" in snaps
     assert len(snaps) == 1
@@ -529,11 +627,11 @@ def test_expired_snapshot_with_no_volume_and_beyond_grace_period_and_do_delete_s
         }
     ]
 
-    remove_volume_on_snapshot_creation = True
+    remove_volume_after_snapshot_creation = True
     snaps = mock_snapshots(
         snapshot_configs,
         vols,
-        remove_volume_on_snapshot_creation=remove_volume_on_snapshot_creation,
+        remove_volume_after_snapshot_creation=remove_volume_after_snapshot_creation,
     )
     assert "new_snap" in snaps
     assert len(snaps) == 1

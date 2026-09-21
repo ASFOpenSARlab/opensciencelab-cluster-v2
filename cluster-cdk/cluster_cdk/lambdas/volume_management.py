@@ -199,6 +199,9 @@ def delete_older_duplicates(snapshots: list) -> list:
             if i == 0:
                 reduced_snapshots.append(value["snapshot"])
             else:
+                logger.warning(
+                    f"Duplicate snapshot found. Deleting {value['snapshot']}"
+                )
                 value["snapshot"].delete()
 
     return reduced_snapshots
