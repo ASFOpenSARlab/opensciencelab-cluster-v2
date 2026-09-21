@@ -149,7 +149,7 @@ def get_unattached_volumes():
             unattached_volumes.append(volume)
         else:
             logger.debug("Ignoring attached volume %s", volume.id)
-    return ec2_resource.volumes.all()
+    return unattached_volumes
 
 
 def get_all_snapshots():
