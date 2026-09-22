@@ -519,21 +519,6 @@ def get_snapshot_for_volume(volume, user_snapshots):
     return None
 
 
-def is_there_a_volume_for_snapshot(snapshot, user_volumes: dict) -> bool:
-    """Check if a specific snapshot has an active associated volume"""
-    for claim_name, volume in user_volumes.items():
-        if volume.volume_id == snapshot.volume_id:
-            logger.info(
-                "Found Snapshot %s for Volume %s for user %s",
-                volume.id,
-                snapshot.volume_id,
-                claim_name,
-            )
-            return True
-
-    return False
-
-
 def get_user_volumes():
     """Return unattached user volumes for a cluster"""
     return filter_by_user(get_all_unattached_volumes_in_lab())
@@ -578,8 +563,6 @@ def run_volume_management():
     user_snapshots: dict = get_user_snapshots()
     logger.info("Found %s user snapshots", len(user_snapshots))
 
-    a_volume_was_deleted = False
-
     for claim_name, volume in user_volumes.items():
         logger.info(
             f"VOLUME: {claim_name} | ID: {volume.id} | Size: {volume.size}GB | State: {volume.state}"
@@ -597,26 +580,11 @@ def run_volume_management():
         elif is_expired(volume):
             logger.info(" - Volume is expired!")
             delete_pvc(claim_name, volume.id, k8s_api)
-            a_volume_was_deleted = True
-
-    # Since a volume was deleted, get all volumes again
-    if a_volume_was_deleted:
-        user_volumes: dict = get_user_volumes()
 
     for claim_name, snapshot in user_snapshots.items():
         logger.info(
             f"SNAPSHOT: {claim_name} | ID: {snapshot.id} | Size: {snapshot.volume_size}GB | State: {snapshot.state}"
         )
-
-        # Does the snapshot have a corresponding volume?
-        is_active_volume_for_snapshot: bool = is_there_a_volume_for_snapshot(
-            snapshot, user_volumes
-        )
-
-        # Don't do anything to the snapshot if there is a volume.
-        if is_active_volume_for_snapshot:
-            logger.info("Active volume found for snapshot. Will do nothing.")
-            continue
 
         if not snapshot_has_required_tags(snapshot):
             logger.warning(" - Snapshot is missing tags! Will do nothing.")
