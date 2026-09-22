@@ -292,10 +292,6 @@ def filter_by_user(all_items: list) -> dict:
         item_tags = tags_to_dict(item.tags)
 
         claim_name = get_claim_name(item)
-        # if not claim_name:
-        #     # Not a PVC item
-        #     logger.debug("Skipping non-claim %s: %s", item.id, item_tags.get(CLAIM_TAG))
-        #     continue
 
         if CLUSTER_NAME and item_tags.get(CLUSTER_TAG, "") != CLUSTER_NAME:
             # Wrong Cluster
