@@ -641,7 +641,7 @@ def lambda_handler(_event, _context):
         alert_fatal_exception(traceback.format_exc())
         logger.exception("Uncaught Exception:")
 
-    return {"statusCode": 200, "body": "Storage management successfull!"}
+    return {"statusCode": 200, "body": "Storage management successful!"}
 
 
 if __name__ == "__main__":
