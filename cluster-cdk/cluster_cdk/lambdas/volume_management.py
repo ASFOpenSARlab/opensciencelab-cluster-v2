@@ -72,6 +72,48 @@ def set_sso_secret():
     SSO_SECRET = ssm_client.get_secret_value(SecretId=SSO_SECRET_ARN)["SecretString"]
 
 
+def get_eks_api():
+    """use awscli to generate a KUBECONFIG for the cluster"""
+    # Hacky way to set up kubectl
+    result = subprocess.run(
+        [
+            AWS_CLI_PATH,
+            "eks",
+            "update-kubeconfig",
+            "--name",
+            CLUSTER_NAME,
+            "--kubeconfig",
+            KUBECONFIG,
+            "--alias",
+            "eks",
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        add_concerning_issue(
+            message=f"Could not generate KUBECONF file: {result.stdout}",
+        )
+
+    # Uhhggg.. Stupid hack because you can't change the aws path in kubeconfig file
+    # https://stackoverflow.com/a/71222634/21674565
+    with open(KUBECONFIG, "r") as file:
+        content = file.read()
+    content = content.replace("command: aws", f"command: {AWS_CLI_PATH}")
+    with open(KUBECONFIG, "w") as file:
+        file.write(content)
+
+    if result.returncode != 0:
+        add_concerning_issue(
+            message=f"Could not generate KUBECONF file: {result.stdout}",
+        )
+
+    # Read kubeconfig file
+    k8s_config.load_kube_config(config_file=KUBECONFIG)
+    return k8s_client.CoreV1Api()
+
+
 def reset_concerning_issues():
     """Reset issues between lambda runs"""
     global CONCERNING_ISSUES
@@ -123,38 +165,20 @@ def email_concerning_issues():
     alert_fatal_exception(exception_message)
 
 
+def get_claim_name(item):
+    """Determine the username from a claim tag"""
+    item_tags = tags_to_dict(item.tags)
+    claim_name = item_tags.get(CLAIM_TAG, "")
+    if not claim_name.startswith("claim-"):
+        return None
+    return claim_name
+
+
 def tags_to_dict(tags):
     """Convert list of dicts tags to single list"""
     if not tags:
         return {}
     return {item["Key"]: item["Value"] for item in tags}
-
-
-def get_all_unattached_volumes_in_lab():
-    """Return a list of available EBS Volumes, sorted from oldest to newest"""
-    ec2_resource = get_ec2_resource()
-    unattached_volumes = ec2_resource.volumes.filter(
-        Filters=[
-            {"Name": "status", "Values": ["available"]},
-            {"Name": f"tag:{CLUSTER_TAG}", "Values": [CLUSTER_NAME]},
-        ]
-    )
-    return sorted(unattached_volumes, key=lambda v: v.create_time)
-
-
-def get_all_completed_snapshots_in_lab() -> list:
-    """Return a list of EBS snapshots without active volumes, owned by this AWS account, sorted from oldest to newest"""
-    this_account = boto3.client("sts").get_caller_identity().get("Account")
-    ec2_resource = get_ec2_resource()
-    snapshots = ec2_resource.snapshots.filter(
-        OwnerIds=[this_account],
-        Filters=[
-            {"Name": "status", "Values": ["completed"]},
-            {"Name": f"tag:{CLUSTER_TAG}", "Values": [CLUSTER_NAME]},
-        ],
-    )
-
-    return sorted(snapshots, key=lambda s: s.start_time)
 
 
 def remove_snapshots_associated_with_active_volumes(snapshots: list) -> list:
@@ -176,6 +200,21 @@ def remove_snapshots_associated_with_active_volumes(snapshots: list) -> list:
             logger.info(f"Ignoring snapshot with active volume: {s.id}")
 
     return inactive_snapshots
+
+
+def get_all_completed_snapshots_in_lab() -> list:
+    """Return a list of EBS snapshots without active volumes, owned by this AWS account, sorted from oldest to newest"""
+    this_account = boto3.client("sts").get_caller_identity().get("Account")
+    ec2_resource = get_ec2_resource()
+    snapshots = ec2_resource.snapshots.filter(
+        OwnerIds=[this_account],
+        Filters=[
+            {"Name": "status", "Values": ["completed"]},
+            {"Name": f"tag:{CLUSTER_TAG}", "Values": [CLUSTER_NAME]},
+        ],
+    )
+
+    return sorted(snapshots, key=lambda s: s.start_time)
 
 
 def does_volume_have_an_associated_snapshot(vol) -> bool:
@@ -231,55 +270,35 @@ def delete_older_duplicate_snapshots(snapshots: list) -> None:
                 value["snapshot"].delete()
 
 
-def get_claim_name(item):
-    """Determine the username from a claim tag"""
-    item_tags = tags_to_dict(item.tags)
-    claim_name = item_tags.get(CLAIM_TAG, "")
-    if not claim_name.startswith("claim-"):
-        return None
-    return claim_name
+def get_all_unattached_volumes_in_lab():
+    """Return a list of available EBS Volumes, sorted from oldest to newest"""
+    ec2_resource = get_ec2_resource()
+    unattached_volumes = ec2_resource.volumes.filter(
+        Filters=[
+            {"Name": "status", "Values": ["available"]},
+            {"Name": f"tag:{CLUSTER_TAG}", "Values": [CLUSTER_NAME]},
+        ]
+    )
+    return sorted(unattached_volumes, key=lambda v: v.create_time)
 
 
-def get_eks_api():
-    """use awscli to generate a KUBECONFIG for the cluster"""
-    # Hacky way to set up kubectl
-    result = subprocess.run(
-        [
-            AWS_CLI_PATH,
-            "eks",
-            "update-kubeconfig",
-            "--name",
-            CLUSTER_NAME,
-            "--kubeconfig",
-            KUBECONFIG,
-            "--alias",
-            "eks",
-        ],
-        capture_output=True,
-        text=True,
+def get_volumes_by_user():
+    """Return unattached user volumes for a cluster"""
+    return filter_by_user(get_all_unattached_volumes_in_lab())
+
+
+def get_user_snapshots_without_volumes_by_user():
+    """Return user snapshots for a cluster"""
+    return filter_by_user(
+        remove_snapshots_associated_with_active_volumes(
+            get_all_completed_snapshots_in_lab()
+        )
     )
 
-    if result.returncode != 0:
-        add_concerning_issue(
-            message=f"Could not generate KUBECONF file: {result.stdout}",
-        )
 
-    # Uhhggg.. Stupid hack because you can't change the aws path in kubeconfig file
-    # https://stackoverflow.com/a/71222634/21674565
-    with open(KUBECONFIG, "r") as file:
-        content = file.read()
-    content = content.replace("command: aws", f"command: {AWS_CLI_PATH}")
-    with open(KUBECONFIG, "w") as file:
-        file.write(content)
-
-    if result.returncode != 0:
-        add_concerning_issue(
-            message=f"Could not generate KUBECONF file: {result.stdout}",
-        )
-
-    # Read kubeconfig file
-    k8s_config.load_kube_config(config_file=KUBECONFIG)
-    return k8s_client.CoreV1Api()
+def get_unfiltered_snapshots_by_user():
+    """Return user snapshots for a cluster without filtering out duplicates and active volumes"""
+    return filter_by_user(get_all_completed_snapshots_in_lab())
 
 
 def delete_pvc(claim_name: str, volume_id: str, k8s_api: k8s_client.CoreV1Api) -> None:
@@ -521,25 +540,6 @@ def should_send_snapshot_warning_email(snapshot):
     return False
 
 
-def get_volumes_by_user():
-    """Return unattached user volumes for a cluster"""
-    return filter_by_user(get_all_unattached_volumes_in_lab())
-
-
-def get_user_snapshots_without_volumes_by_user():
-    """Return user snapshots for a cluster"""
-    return filter_by_user(
-        remove_snapshots_associated_with_active_volumes(
-            get_all_completed_snapshots_in_lab()
-        )
-    )
-
-
-def get_unfiltered_snapshots_by_user():
-    """Return user snapshots for a cluster without filtering out duplicates and active volumes"""
-    return filter_by_user(get_all_completed_snapshots_in_lab())
-
-
 def send_email_to_portal(email_payload):
     """Proxy an email through portal endpoint"""
     encrypted_data = encryptedjwt.encrypt(email_payload, sso_token=SSO_SECRET)
@@ -566,7 +566,6 @@ def run_volume_management():
     logger.info("Setting up EKS Client for %s", CLUSTER_NAME)
     k8s_api = get_eks_api()
 
-    logger.info("Deleting duplicate snapshots...")
     delete_older_duplicate_snapshots(get_all_completed_snapshots_in_lab())
 
     logger.info("Querying for Volumes...")

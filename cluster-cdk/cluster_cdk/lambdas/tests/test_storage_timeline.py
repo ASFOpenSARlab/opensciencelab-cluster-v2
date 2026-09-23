@@ -211,6 +211,11 @@ def mock_snapshots(
 def test_unexpired_volume_with_no_snapshot_and_do_keep_volume(
     mock_k8s, patched_volume_management, monkeypatch, caplog
 ):
+    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
+    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+
     volume_configs = [
         {
             "claim_name": "claim-mockuser0",
@@ -220,13 +225,13 @@ def test_unexpired_volume_with_no_snapshot_and_do_keep_volume(
         }
     ]
 
-    mock_vols = mock_volumes(volume_configs)
-    assert len(mock_vols) == 1
+    mock_volumes(volume_configs)
 
-    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
-    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
-    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
-    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+    vols_before_run = volume_management.get_all_unattached_volumes_in_lab()
+    assert len(vols_before_run) == 1
+
+    snaps_before_run = volume_management.get_all_completed_snapshots_in_lab()
+    assert len(snaps_before_run) == 0
 
     # Run lambda
     result = volume_management.lambda_handler({}, None)
@@ -234,11 +239,10 @@ def test_unexpired_volume_with_no_snapshot_and_do_keep_volume(
     # Confirm expected results
     assert result["statusCode"] == 200
 
-    vols_after_run = volume_management.get_volumes_by_user()
+    vols_after_run = volume_management.get_all_unattached_volumes_in_lab()
     assert len(vols_after_run) == 1
-    assert "claim-mockuser0" in vols_after_run
 
-    snaps_after_run = volume_management.get_unfiltered_snapshots_by_user()
+    snaps_after_run = volume_management.get_all_completed_snapshots_in_lab()
     assert len(snaps_after_run) == 0
 
 
@@ -261,8 +265,11 @@ def test_expired_volume_with_no_snapshot_and_do_keep_volume(
 
     mock_volumes(volume_configs)
 
-    vols_before_run = volume_management.get_volumes_by_user()
+    vols_before_run = volume_management.get_all_unattached_volumes_in_lab()
     assert len(vols_before_run) == 1
+
+    snaps_before_run = volume_management.get_all_completed_snapshots_in_lab()
+    assert len(snaps_before_run) == 0
 
     # Run lambda
     result = volume_management.lambda_handler({}, None)
@@ -270,17 +277,21 @@ def test_expired_volume_with_no_snapshot_and_do_keep_volume(
     # Confirm expected results
     assert result["statusCode"] == 200
 
-    vols_after_run = volume_management.get_volumes_by_user()
+    vols_after_run = volume_management.get_all_unattached_volumes_in_lab()
     assert len(vols_after_run) == 1
-    assert "claim-mockuser0" in vols_after_run
 
-    snaps_after_run = volume_management.get_unfiltered_snapshots_by_user()
+    snaps_after_run = volume_management.get_all_completed_snapshots_in_lab()
     assert len(snaps_after_run) == 0
 
 
 def test_expired_volume_with_unexpired_snapshot_and_do_delete_volume(
     mock_k8s, patched_volume_management, monkeypatch, caplog
 ):
+    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
+    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+
     volume_configs = [
         {
             "claim_name": "claim-mockuser0",
@@ -291,8 +302,6 @@ def test_expired_volume_with_unexpired_snapshot_and_do_delete_volume(
     ]
 
     vols = mock_volumes(volume_configs)
-    assert len(vols) == 1
-    assert "new_volume" in vols
 
     snapshot_configs = [
         {
@@ -304,14 +313,13 @@ def test_expired_volume_with_unexpired_snapshot_and_do_delete_volume(
         }
     ]
 
-    snaps = mock_snapshots(snapshot_configs, vols)
-    assert "new_snap" in snaps
-    assert len(snaps) == 1
+    mock_snapshots(snapshot_configs, vols)
 
-    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
-    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
-    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
-    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+    vols_before_run = volume_management.get_all_unattached_volumes_in_lab()
+    assert len(vols_before_run) == 1
+
+    snaps_before_run = volume_management.get_all_completed_snapshots_in_lab()
+    assert len(snaps_before_run) == 1
 
     # Run lambda
     result = volume_management.lambda_handler({}, None)
@@ -319,18 +327,22 @@ def test_expired_volume_with_unexpired_snapshot_and_do_delete_volume(
     # Confirm expected results
     assert result["statusCode"] == 200
 
-    vols_after_run = volume_management.get_volumes_by_user()
+    vols_after_run = volume_management.get_all_unattached_volumes_in_lab()
     assert len(vols_after_run) == 0
-    assert "claim-mockuser0" not in vols_after_run
     assert "Volume is expired!" in caplog.text
 
-    snaps_after_run = volume_management.get_unfiltered_snapshots_by_user()
+    snaps_after_run = volume_management.get_all_completed_snapshots_in_lab()
     assert len(snaps_after_run) == 1
 
 
 def test_unexpired_snapshot_with_no_volume_and_do_keep_snapshot(
     mock_k8s, patched_volume_management, monkeypatch, caplog
 ):
+    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
+    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+
     # Create initial volume that the snapshot will be based off
     volume_configs = [
         {
@@ -342,8 +354,6 @@ def test_unexpired_snapshot_with_no_volume_and_do_keep_snapshot(
     ]
 
     vols = mock_volumes(volume_configs)
-    assert len(vols) == 1
-    assert "new_volume" in vols
 
     snapshot_configs = [
         {
@@ -355,19 +365,17 @@ def test_unexpired_snapshot_with_no_volume_and_do_keep_snapshot(
         }
     ]
 
-    remove_volume_after_snapshot_creation = True
-    snaps = mock_snapshots(
+    mock_snapshots(
         snapshot_configs,
         vols,
-        remove_volume_after_snapshot_creation=remove_volume_after_snapshot_creation,
+        remove_volume_after_snapshot_creation=True,
     )
-    assert "new_snap" in snaps
-    assert len(snaps) == 1
 
-    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
-    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
-    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
-    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+    vols_before_run = volume_management.get_all_unattached_volumes_in_lab()
+    assert len(vols_before_run) == 0
+
+    snaps_before_run = volume_management.get_all_completed_snapshots_in_lab()
+    assert len(snaps_before_run) == 1
 
     # Run lambda
     result = volume_management.lambda_handler({}, None)
@@ -375,16 +383,21 @@ def test_unexpired_snapshot_with_no_volume_and_do_keep_snapshot(
     # Confirm expected results
     assert result["statusCode"] == 200
 
-    vols_after_run = volume_management.get_volumes_by_user()
-    snaps_after_run = volume_management.get_unfiltered_snapshots_by_user()
+    vols_after_run = volume_management.get_all_unattached_volumes_in_lab()
     assert len(vols_after_run) == 0
-    assert "claim-mockuser0" not in vols_after_run
+
+    snaps_after_run = volume_management.get_all_completed_snapshots_in_lab()
     assert len(snaps_after_run) == 1
 
 
-def test_duplicate_unexpired_snapshots_with_no_volume_and_delete_duplicate(
+def test_duplicate_unexpired_snapshot_with_no_volume_and_do_delete_duplicate(
     mock_k8s, patched_volume_management, monkeypatch, caplog
 ):
+    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
+    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+
     # Created volume and duplicate snapshots and then delete volume
     vols_duplicated = mock_volumes(
         [
@@ -452,16 +465,11 @@ def test_duplicate_unexpired_snapshots_with_no_volume_and_delete_duplicate(
         remove_volume_after_snapshot_creation=True,
     )
 
-    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
-    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
-    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
-    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
-
     # Confirm number of volumes and snapshots
-    vols_before_run = volume_management.get_volumes_by_user()
+    vols_before_run = volume_management.get_all_unattached_volumes_in_lab()
     assert len(vols_before_run) == 0
 
-    snaps_before_run = volume_management.get_unfiltered_snapshots_by_user()
+    snaps_before_run = volume_management.get_all_completed_snapshots_in_lab()
     assert len(snaps_before_run) == 3
 
     # Run lambda
@@ -470,20 +478,27 @@ def test_duplicate_unexpired_snapshots_with_no_volume_and_delete_duplicate(
     # Confirm expected results
     assert result["statusCode"] == 200
 
-    vols_after_run = volume_management.get_volumes_by_user()
+    vols_after_run = volume_management.get_all_unattached_volumes_in_lab()
     assert len(vols_after_run) == 0
 
-    snaps_after_run = volume_management.get_unfiltered_snapshots_by_user()
+    snaps_after_run = volume_management.get_all_completed_snapshots_in_lab()
     assert len(snaps_after_run) == 2
+    assert "claim-mockuser0" == volume_management.get_claim_name(snaps_after_run[0])
+    assert "claim-mockuser1" == volume_management.get_claim_name(snaps_after_run[1])
     assert "Duplicate snapshot found. Deleting " in caplog.text
 
 
-def test_almost_expired_snapshot_and_do_send_warning(
+def test_almost_expired_snapshot_with_no_volume_and_do_send_warning(
     mock_k8s,
     patched_volume_management,
     monkeypatch,
     caplog,
 ):
+    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
+    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+
     # Create initial volume that the snapshot will be based off
     volume_configs = [
         {
@@ -495,8 +510,6 @@ def test_almost_expired_snapshot_and_do_send_warning(
     ]
 
     vols = mock_volumes(volume_configs)
-    assert len(vols) == 1
-    assert "new_volume" in vols
 
     snapshot_configs = [
         {
@@ -508,19 +521,17 @@ def test_almost_expired_snapshot_and_do_send_warning(
         }
     ]
 
-    remove_volume_after_snapshot_creation = True
-    snaps = mock_snapshots(
+    mock_snapshots(
         snapshot_configs,
         vols,
-        remove_volume_after_snapshot_creation=remove_volume_after_snapshot_creation,
+        remove_volume_after_snapshot_creation=True,
     )
-    assert "new_snap" in snaps
-    assert len(snaps) == 1
 
-    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
-    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
-    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
-    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+    vols_before_run = volume_management.get_all_unattached_volumes_in_lab()
+    assert len(vols_before_run) == 0
+
+    snaps_before_run = volume_management.get_all_completed_snapshots_in_lab()
+    assert len(snaps_before_run) == 1
 
     # Run lambda
     result = volume_management.lambda_handler({}, None)
@@ -528,24 +539,27 @@ def test_almost_expired_snapshot_and_do_send_warning(
     # Confirm expected results
     assert result["statusCode"] == 200
 
-    vols_after_run = volume_management.get_volumes_by_user()
+    vols_after_run = volume_management.get_all_unattached_volumes_in_lab()
     assert len(vols_after_run) == 0
-    assert "claim-mockuser0" not in vols_after_run
 
-    snaps_after_run = volume_management.get_unfiltered_snapshots_by_user()
+    snaps_after_run = volume_management.get_all_completed_snapshots_in_lab()
     assert len(snaps_after_run) == 1
-    assert "claim-mockuser0" in snaps_after_run
+    assert "Sending a snapshot warning email!" in caplog.text
     assert "Snapshot is in grace period!" not in caplog.text
     assert "Deletion email sent" not in caplog.text
-    assert "Sending a snapshot warning email!" in caplog.text
 
 
-def test_almost_expired_snapshot_with_restored_volume_and_do_not_send_warning(
+def test_almost_expired_snapshot_with_just_restored_volume_and_do_not_send_warning(
     mock_k8s,
     patched_volume_management,
     monkeypatch,
     caplog,
 ):
+    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
+    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+
     # Create initial volume that the snapshot will be based off
     volume_configs = [
         {
@@ -557,8 +571,6 @@ def test_almost_expired_snapshot_with_restored_volume_and_do_not_send_warning(
     ]
 
     vols = mock_volumes(volume_configs)
-    assert len(vols) == 1
-    assert "new_volume" in vols
 
     snapshot_configs = [
         {
@@ -570,18 +582,17 @@ def test_almost_expired_snapshot_with_restored_volume_and_do_not_send_warning(
         }
     ]
 
-    snaps = mock_snapshots(
+    mock_snapshots(
         snapshot_configs,
         vols,
         remove_volume_after_snapshot_creation=False,
     )
-    assert "new_snap" in snaps
-    assert len(snaps) == 1
 
-    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
-    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
-    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
-    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+    vols_before_run = volume_management.get_all_unattached_volumes_in_lab()
+    assert len(vols_before_run) == 1
+
+    snaps_before_run = volume_management.get_all_completed_snapshots_in_lab()
+    assert len(snaps_before_run) == 1
 
     # Run lambda
     result = volume_management.lambda_handler({}, None)
@@ -589,81 +600,85 @@ def test_almost_expired_snapshot_with_restored_volume_and_do_not_send_warning(
     # Confirm expected results
     assert result["statusCode"] == 200
 
-    vols_after_run = volume_management.get_volumes_by_user()
+    vols_after_run = volume_management.get_all_unattached_volumes_in_lab()
     assert len(vols_after_run) == 1
-    assert "claim-mockuser0" in vols_after_run
 
-    snaps_after_run = volume_management.get_unfiltered_snapshots_by_user()
-    assert len(snaps_after_run) == 0
-    assert "claim-mockuser0" not in snaps_after_run
+    snaps_after_run = volume_management.get_all_completed_snapshots_in_lab()
+    assert len(snaps_after_run) == 1
     assert "Snapshot is in grace period!" not in caplog.text
+    assert "Deletion email sent" not in caplog.text
     assert "Deletion email sent" not in caplog.text
     assert "Sending a snapshot warning email!" not in caplog.text
 
 
-def test_expired_snapshot_within_grace_period_and_not_delete_snapshot(
+def test_expired_snapshot_with_no_volume_and_within_grace_period_and_do_not_delete_snapshot(
     mock_k8s, patched_volume_management, monkeypatch, caplog
 ):
-    # Create initial volume that the snapshot will be based off
-    volume_configs = [
-        {
-            "claim_name": "claim-mockuser0",
-            "name": "new_volume",
-            "volume-delete-time": "1999-11-01 00:00:00+0000",
-            "snapshot-delete-time": "1999-12-31 18:00:00+0000",
-        }
-    ]
-
-    vols = mock_volumes(volume_configs)
-    assert len(vols) == 1
-    assert "new_volume" in vols
-
-    snapshot_configs = [
-        {
-            "claim_name": "claim-mockuser0",
-            "name": "new_snap",
-            "associated": "new_volume",
-            "volume-delete-time": "1999-11-01 00:00:00+0000",
-            "snapshot-delete-time": "1999-12-31 18:00:00+0000",
-        }
-    ]
-
-    remove_volume_after_snapshot_creation = True
-    snaps = mock_snapshots(
-        snapshot_configs,
-        vols,
-        remove_volume_after_snapshot_creation=remove_volume_after_snapshot_creation,
-    )
-    assert "new_snap" in snaps
-    assert len(snaps) == 1
-
     monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
     monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
     monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
     monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
     monkeypatch.setattr("volume_management.SNAPSHOT_GRACEPERIOD_DAYS", 1)
 
+    # Create initial volume that the snapshot will be based off
+    volume_configs = [
+        {
+            "claim_name": "claim-mockuser0",
+            "name": "new_volume",
+            "volume-delete-time": "1999-11-01 00:00:00+0000",
+            "snapshot-delete-time": "1999-12-31 18:00:00+0000",
+        }
+    ]
+
+    vols = mock_volumes(volume_configs)
+
+    snapshot_configs = [
+        {
+            "claim_name": "claim-mockuser0",
+            "name": "new_snap",
+            "associated": "new_volume",
+            "volume-delete-time": "1999-11-01 00:00:00+0000",
+            "snapshot-delete-time": "1999-12-31 18:00:00+0000",
+        }
+    ]
+
+    mock_snapshots(
+        snapshot_configs,
+        vols,
+        remove_volume_after_snapshot_creation=True,
+    )
+
+    vols_before_run = volume_management.get_all_unattached_volumes_in_lab()
+    assert len(vols_before_run) == 0
+
+    snaps_before_run = volume_management.get_all_completed_snapshots_in_lab()
+    assert len(snaps_before_run) == 1
+
     # Run lambda
     result = volume_management.lambda_handler({}, None)
 
     # Confirm expected results
     assert result["statusCode"] == 200
 
-    vols_after_run = volume_management.get_volumes_by_user()
+    vols_after_run = volume_management.get_all_unattached_volumes_in_lab()
     assert len(vols_after_run) == 0
-    assert "claim-mockuser0" not in vols_after_run
 
-    snaps_after_run = volume_management.get_unfiltered_snapshots_by_user()
+    snaps_after_run = volume_management.get_all_completed_snapshots_in_lab()
     assert len(snaps_after_run) == 1
-    assert "claim-mockuser0" in snaps_after_run
     assert "Snapshot is in grace period!" in caplog.text
     assert "Deleting Snapshot" not in caplog.text
     assert "Sending a snapshot warning email!" not in caplog.text
+    assert "Deletion email sent" in caplog.text
 
 
 def test_expired_snapshot_with_no_volume_and_beyond_grace_period_and_do_delete_snapshot(
     mock_k8s, patched_volume_management, monkeypatch, caplog
 ):
+    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
+    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+
     # Create initial volume that the snapshot will be based off
     volume_configs = [
         {
@@ -675,8 +690,6 @@ def test_expired_snapshot_with_no_volume_and_beyond_grace_period_and_do_delete_s
     ]
 
     vols = mock_volumes(volume_configs)
-    assert len(vols) == 1
-    assert "new_volume" in vols
 
     snapshot_configs = [
         {
@@ -688,19 +701,17 @@ def test_expired_snapshot_with_no_volume_and_beyond_grace_period_and_do_delete_s
         }
     ]
 
-    remove_volume_after_snapshot_creation = True
-    snaps = mock_snapshots(
+    mock_snapshots(
         snapshot_configs,
         vols,
-        remove_volume_after_snapshot_creation=remove_volume_after_snapshot_creation,
+        remove_volume_after_snapshot_creation=True,
     )
-    assert "new_snap" in snaps
-    assert len(snaps) == 1
 
-    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
-    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
-    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
-    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+    vols_before_run = volume_management.get_all_unattached_volumes_in_lab()
+    assert len(vols_before_run) == 0
+
+    snaps_before_run = volume_management.get_all_completed_snapshots_in_lab()
+    assert len(snaps_before_run) == 1
 
     # Run lambda
     result = volume_management.lambda_handler({}, None)
@@ -708,12 +719,70 @@ def test_expired_snapshot_with_no_volume_and_beyond_grace_period_and_do_delete_s
     # Confirm expected results
     assert result["statusCode"] == 200
 
-    vols_after_run: dict = volume_management.get_volumes_by_user()
+    vols_after_run: list = volume_management.get_all_unattached_volumes_in_lab()
     assert len(vols_after_run) == 0
-    assert "claim-mockuser0" not in vols_after_run
 
-    snaps_after_run: dict = volume_management.get_unfiltered_snapshots_by_user()
+    snaps_after_run: list = volume_management.get_all_completed_snapshots_in_lab()
     assert len(snaps_after_run) == 0
-    assert "claim-mockuser0" not in snaps_after_run
     assert "Deleting Snapshot" in caplog.text
+    assert "Deletion email sent" not in caplog.text
+    assert "Sending a snapshot warning email!" not in caplog.text
+
+
+def test_expired_snapshot_with_restored_volume_and_beyond_grace_period_and_do_not_delete_snapshot(
+    mock_k8s, patched_volume_management, monkeypatch, caplog
+):
+    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
+    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+
+    # Create initial volume that the snapshot will be based off
+    volume_configs = [
+        {
+            "claim_name": "claim-mockuser0",
+            "name": "new_volume",
+            "volume-delete-time": "2000-11-01 00:00:00+0000",
+            "snapshot-delete-time": "1999-12-01 00:00:00+0000",
+        }
+    ]
+
+    vols = mock_volumes(volume_configs)
+
+    snapshot_configs = [
+        {
+            "claim_name": "claim-mockuser0",
+            "name": "new_snap",
+            "associated": "new_volume",
+            "volume-delete-time": "2000-11-01 00:00:00+0000",
+            "snapshot-delete-time": "1999-12-01 00:00:00+0000",
+        }
+    ]
+
+    mock_snapshots(
+        snapshot_configs,
+        vols,
+        remove_volume_after_snapshot_creation=False,
+    )
+
+    vols_before_run = volume_management.get_all_unattached_volumes_in_lab()
+    assert len(vols_before_run) == 1
+
+    snaps_before_run = volume_management.get_all_completed_snapshots_in_lab()
+    assert len(snaps_before_run) == 1
+
+    # Run lambda
+    result = volume_management.lambda_handler({}, None)
+
+    # Confirm expected results
+    assert result["statusCode"] == 200
+
+    vols_after_run: list = volume_management.get_all_unattached_volumes_in_lab()
+    assert len(vols_after_run) == 1
+
+    snaps_after_run: list = volume_management.get_all_completed_snapshots_in_lab()
+    assert len(snaps_after_run) == 1
+    assert "Deletion email sent" not in caplog.text
+    assert "Snapshot is in grace period!" not in caplog.text
+    assert "Deleting Snapshot" not in caplog.text
     assert "Sending a snapshot warning email!" not in caplog.text
