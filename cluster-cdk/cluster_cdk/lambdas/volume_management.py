@@ -143,7 +143,7 @@ def get_all_unattached_volumes_in_lab():
 
 
 def get_all_completed_snapshots_in_lab() -> list:
-    """Return a list of EBS snapshots owned by this AWS account, sorted from oldest to newest"""
+    """Return a list of EBS snapshots without active volumes, owned by this AWS account, sorted from oldest to newest"""
     this_account = boto3.client("sts").get_caller_identity().get("Account")
     ec2_resource = get_ec2_resource()
     snapshots = ec2_resource.snapshots.filter(
@@ -153,10 +153,38 @@ def get_all_completed_snapshots_in_lab() -> list:
             {"Name": f"tag:{CLUSTER_TAG}", "Values": [CLUSTER_NAME]},
         ],
     )
+
     return sorted(snapshots, key=lambda s: s.start_time)
 
 
-def delete_older_duplicates(snapshots: list) -> list:
+def remove_snapshots_associated_with_active_volumes(snapshots: list) -> list:
+    ec2_resource = get_ec2_resource()
+    all_active_claims = [
+        get_claim_name(v)
+        for v in ec2_resource.volumes.filter(
+            Filters=[
+                {"Name": f"tag:{CLUSTER_TAG}", "Values": [CLUSTER_NAME]},
+            ],
+        )
+    ]
+
+    inactive_snapshots = []
+    for s in snapshots:
+        if get_claim_name(s) not in all_active_claims:
+            inactive_snapshots.append(s)
+        else:
+            logger.info(f"Ignoring snapshot with active volume: {s.id}")
+
+    return inactive_snapshots
+
+
+def does_volume_have_an_associated_snapshot(vol) -> bool:
+    all_snapshots = get_all_completed_snapshots_in_lab()
+
+    return vol.id in [s.volume_id for s in all_snapshots]
+
+
+def delete_older_duplicate_snapshots(snapshots: list) -> None:
     """
     Sometimes there might be an older duplicate of a snapshot. This could occur due to lifecyle managament
     abandoning a snapshot due to the deletion of it's original volume.
@@ -165,8 +193,6 @@ def delete_older_duplicates(snapshots: list) -> list:
     present. The code will handle the one remaining snapshot as appropriate.
 
     Ignore if the `do-not-delete` tag is present. Since the hub db might have a duplicate volume, ignore `hub-db-dir`.
-
-    return: list of snapshots with duplicates removed
 
     """
     reduced_snapshots = []
@@ -203,8 +229,6 @@ def delete_older_duplicates(snapshots: list) -> list:
                     f"Duplicate snapshot found. Deleting {value['snapshot']}"
                 )
                 value["snapshot"].delete()
-
-    return reduced_snapshots
 
 
 def get_claim_name(item):
@@ -351,13 +375,13 @@ def is_expired(item, grace_period_days=0):
     return now >= expire_time
 
 
-def snapshot_has_required_tags(snapshot):
+def has_required_tags(item):
     """Verify snapshot has tags required for proper management"""
-    tags = tags_to_dict(snapshot.tags)
+    tags = tags_to_dict(item.tags)
 
     for required_tag in REQUIRED_SNAPSHOT_TAGS:
         if not tags.get(required_tag):
-            logger.warning(f"Required tag {required_tag} not found in {snapshot.id}")
+            logger.warning(f"Required tag {required_tag} not found in {item.id}")
             return False
 
     return True
@@ -497,36 +521,23 @@ def should_send_snapshot_warning_email(snapshot):
     return False
 
 
-def get_snapshot_for_volume(volume, user_snapshots):
-    """Check if a specific volume has a snapshot available"""
-    for claim_name, snapshot in user_snapshots.items():
-        if snapshot.volume_id == volume.volume_id:
-            logger.info(
-                "Found Snapshot %s for Volume %s for user %s",
-                snapshot.id,
-                volume.volume_id,
-                claim_name,
-            )
-            return snapshot
-        else:
-            logger.debug(
-                "Snapshot %s is for %s, not %s",
-                snapshot.id,
-                snapshot.volume_id,
-                volume.volume_id,
-            )
-
-    return None
-
-
-def get_user_volumes():
+def get_volumes_by_user():
     """Return unattached user volumes for a cluster"""
     return filter_by_user(get_all_unattached_volumes_in_lab())
 
 
-def get_user_snapshots():
+def get_user_snapshots_without_volumes_by_user():
     """Return user snapshots for a cluster"""
-    return filter_by_user(delete_older_duplicates(get_all_completed_snapshots_in_lab()))
+    return filter_by_user(
+        remove_snapshots_associated_with_active_volumes(
+            get_all_completed_snapshots_in_lab()
+        )
+    )
+
+
+def get_unfiltered_snapshots_by_user():
+    """Return user snapshots for a cluster without filtering out duplicates and active volumes"""
+    return filter_by_user(get_all_completed_snapshots_in_lab())
 
 
 def send_email_to_portal(email_payload):
@@ -555,38 +566,38 @@ def run_volume_management():
     logger.info("Setting up EKS Client for %s", CLUSTER_NAME)
     k8s_api = get_eks_api()
 
-    logger.info("Querying for Volumes...")
-    user_volumes: dict = get_user_volumes()
-    logger.info("Found %s user volumes", len(user_volumes))
+    logger.info("Deleting duplicate snapshots...")
+    delete_older_duplicate_snapshots(get_all_completed_snapshots_in_lab())
 
-    logger.info("Querying for Snapshots...")
-    user_snapshots: dict = get_user_snapshots()
-    logger.info("Found %s user snapshots", len(user_snapshots))
+    logger.info("Querying for Volumes...")
+    user_volumes: dict = get_volumes_by_user()
+    logger.info("Found %s user volumes", len(user_volumes))
 
     for claim_name, volume in user_volumes.items():
         logger.info(
             f"VOLUME: {claim_name} | ID: {volume.id} | Size: {volume.size}GB | State: {volume.state}"
         )
 
-        # attempt to find a snapshot for the volume
-        snapshot_from_volume = get_snapshot_for_volume(volume, user_snapshots)
-
         if is_delete_protected(volume):
             logger.info(" - Volume is Delete protected! Will do nothing.")
-        elif not snapshot_from_volume:
-            logger.warning(" - Volume has no active snapshot. Will do nothing.")
-        elif not snapshot_has_required_tags(snapshot_from_volume):
+        elif not has_required_tags(volume):
             logger.error(" - Ignoring volume with invalid snapshot tags")
+        elif not does_volume_have_an_associated_snapshot(volume):
+            logger.info(" - Volume does not have snapshot! Will do nothing.")
         elif is_expired(volume):
             logger.info(" - Volume is expired!")
             delete_pvc(claim_name, volume.id, k8s_api)
+
+    logger.info("Querying for Snapshots...")
+    user_snapshots: dict = get_user_snapshots_without_volumes_by_user()
+    logger.info("Found %s user snapshots", len(user_snapshots))
 
     for claim_name, snapshot in user_snapshots.items():
         logger.info(
             f"SNAPSHOT: {claim_name} | ID: {snapshot.id} | Size: {snapshot.volume_size}GB | State: {snapshot.state}"
         )
 
-        if not snapshot_has_required_tags(snapshot):
+        if not has_required_tags(snapshot):
             logger.warning(" - Snapshot is missing tags! Will do nothing.")
         elif is_delete_protected(snapshot):
             logger.info(" - Snapshot is Delete protected! Will do nothing.")

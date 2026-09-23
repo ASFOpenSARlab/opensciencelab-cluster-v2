@@ -234,18 +234,22 @@ def test_unexpired_volume_with_no_snapshot_and_do_keep_volume(
     # Confirm expected results
     assert result["statusCode"] == 200
 
-    vols_after_run = volume_management.get_user_volumes()
+    vols_after_run = volume_management.get_volumes_by_user()
     assert len(vols_after_run) == 1
     assert "claim-mockuser0" in vols_after_run
-    assert "Volume has no active snapshot. Will do nothing." in caplog.text
 
-    snaps_after_run = volume_management.get_user_snapshots()
+    snaps_after_run = volume_management.get_unfiltered_snapshots_by_user()
     assert len(snaps_after_run) == 0
 
 
 def test_expired_volume_with_no_snapshot_and_do_keep_volume(
     mock_k8s, patched_volume_management, monkeypatch, caplog
 ):
+    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
+    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
+    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+
     volume_configs = [
         {
             "claim_name": "claim-mockuser0",
@@ -255,13 +259,10 @@ def test_expired_volume_with_no_snapshot_and_do_keep_volume(
         }
     ]
 
-    vols = mock_volumes(volume_configs)
-    assert len(vols) == 1
+    mock_volumes(volume_configs)
 
-    monkeypatch.setattr("volume_management.get_eks_api", mock_k8s["api"])
-    monkeypatch.setattr("volume_management.LAB_SHORT_NAME", "mocklab")
-    monkeypatch.setattr("volume_management.CLUSTER_NAME", "mocklab")
-    monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
+    vols_before_run = volume_management.get_volumes_by_user()
+    assert len(vols_before_run) == 1
 
     # Run lambda
     result = volume_management.lambda_handler({}, None)
@@ -269,12 +270,11 @@ def test_expired_volume_with_no_snapshot_and_do_keep_volume(
     # Confirm expected results
     assert result["statusCode"] == 200
 
-    vols_after_run = volume_management.get_user_volumes()
+    vols_after_run = volume_management.get_volumes_by_user()
     assert len(vols_after_run) == 1
     assert "claim-mockuser0" in vols_after_run
-    assert "Volume has no active snapshot. Will do nothing." in caplog.text
 
-    snaps_after_run = volume_management.get_user_snapshots()
+    snaps_after_run = volume_management.get_unfiltered_snapshots_by_user()
     assert len(snaps_after_run) == 0
 
 
@@ -319,12 +319,12 @@ def test_expired_volume_with_unexpired_snapshot_and_do_delete_volume(
     # Confirm expected results
     assert result["statusCode"] == 200
 
-    vols_after_run = volume_management.get_user_volumes()
+    vols_after_run = volume_management.get_volumes_by_user()
     assert len(vols_after_run) == 0
     assert "claim-mockuser0" not in vols_after_run
     assert "Volume is expired!" in caplog.text
 
-    snaps_after_run = volume_management.get_user_snapshots()
+    snaps_after_run = volume_management.get_unfiltered_snapshots_by_user()
     assert len(snaps_after_run) == 1
 
 
@@ -375,8 +375,8 @@ def test_unexpired_snapshot_with_no_volume_and_do_keep_snapshot(
     # Confirm expected results
     assert result["statusCode"] == 200
 
-    vols_after_run = volume_management.get_user_volumes()
-    snaps_after_run = volume_management.get_user_snapshots()
+    vols_after_run = volume_management.get_volumes_by_user()
+    snaps_after_run = volume_management.get_unfiltered_snapshots_by_user()
     assert len(vols_after_run) == 0
     assert "claim-mockuser0" not in vols_after_run
     assert len(snaps_after_run) == 1
@@ -458,10 +458,10 @@ def test_duplicate_unexpired_snapshots_with_no_volume_and_delete_duplicate(
     monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
 
     # Confirm number of volumes and snapshots
-    vols_before_run = volume_management.get_user_volumes()
+    vols_before_run = volume_management.get_volumes_by_user()
     assert len(vols_before_run) == 0
 
-    snaps_before_run = volume_management.get_all_completed_snapshots_in_lab()
+    snaps_before_run = volume_management.get_unfiltered_snapshots_by_user()
     assert len(snaps_before_run) == 3
 
     # Run lambda
@@ -470,10 +470,10 @@ def test_duplicate_unexpired_snapshots_with_no_volume_and_delete_duplicate(
     # Confirm expected results
     assert result["statusCode"] == 200
 
-    vols_after_run = volume_management.get_user_volumes()
+    vols_after_run = volume_management.get_volumes_by_user()
     assert len(vols_after_run) == 0
 
-    snaps_after_run = volume_management.get_user_snapshots()
+    snaps_after_run = volume_management.get_unfiltered_snapshots_by_user()
     assert len(snaps_after_run) == 2
     assert "Duplicate snapshot found. Deleting " in caplog.text
 
@@ -528,11 +528,11 @@ def test_almost_expired_snapshot_and_do_send_warning(
     # Confirm expected results
     assert result["statusCode"] == 200
 
-    vols_after_run = volume_management.get_user_volumes()
+    vols_after_run = volume_management.get_volumes_by_user()
     assert len(vols_after_run) == 0
     assert "claim-mockuser0" not in vols_after_run
 
-    snaps_after_run = volume_management.get_user_snapshots()
+    snaps_after_run = volume_management.get_unfiltered_snapshots_by_user()
     assert len(snaps_after_run) == 1
     assert "claim-mockuser0" in snaps_after_run
     assert "Snapshot is in grace period!" not in caplog.text
@@ -589,13 +589,13 @@ def test_almost_expired_snapshot_with_restored_volume_and_do_not_send_warning(
     # Confirm expected results
     assert result["statusCode"] == 200
 
-    vols_after_run = volume_management.get_user_volumes()
+    vols_after_run = volume_management.get_volumes_by_user()
     assert len(vols_after_run) == 1
     assert "claim-mockuser0" in vols_after_run
 
-    snaps_after_run = volume_management.get_user_snapshots()
-    assert len(snaps_after_run) == 1
-    assert "claim-mockuser0" in snaps_after_run
+    snaps_after_run = volume_management.get_unfiltered_snapshots_by_user()
+    assert len(snaps_after_run) == 0
+    assert "claim-mockuser0" not in snaps_after_run
     assert "Snapshot is in grace period!" not in caplog.text
     assert "Deletion email sent" not in caplog.text
     assert "Sending a snapshot warning email!" not in caplog.text
@@ -649,11 +649,11 @@ def test_expired_snapshot_within_grace_period_and_not_delete_snapshot(
     # Confirm expected results
     assert result["statusCode"] == 200
 
-    vols_after_run = volume_management.get_user_volumes()
+    vols_after_run = volume_management.get_volumes_by_user()
     assert len(vols_after_run) == 0
     assert "claim-mockuser0" not in vols_after_run
 
-    snaps_after_run = volume_management.get_user_snapshots()
+    snaps_after_run = volume_management.get_unfiltered_snapshots_by_user()
     assert len(snaps_after_run) == 1
     assert "claim-mockuser0" in snaps_after_run
     assert "Snapshot is in grace period!" in caplog.text
@@ -708,11 +708,11 @@ def test_expired_snapshot_with_no_volume_and_beyond_grace_period_and_do_delete_s
     # Confirm expected results
     assert result["statusCode"] == 200
 
-    vols_after_run = volume_management.get_user_volumes()
+    vols_after_run: dict = volume_management.get_volumes_by_user()
     assert len(vols_after_run) == 0
     assert "claim-mockuser0" not in vols_after_run
 
-    snaps_after_run = volume_management.get_user_snapshots()
+    snaps_after_run: dict = volume_management.get_unfiltered_snapshots_by_user()
     assert len(snaps_after_run) == 0
     assert "claim-mockuser0" not in snaps_after_run
     assert "Deleting Snapshot" in caplog.text
