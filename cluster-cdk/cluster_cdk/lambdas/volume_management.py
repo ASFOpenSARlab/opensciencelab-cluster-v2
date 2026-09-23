@@ -349,12 +349,14 @@ def filter_by_user(all_items: list) -> dict:
     return user_items
 
 
-def expiry_time(expiry):
+def expiry_time(expiry: str) -> datetime.datetime:
     """Convert expiry time into a datetime object"""
     try:
         return datetime.datetime.strptime(expiry, DATE_FORMAT)
-    except Exception as E:
-        logger.error("Could not convert %s to datatime: %s", expiry, E)
+    except Exception as e:
+        logger.error(
+            f"Could not convert {expiry} to datetime: {e}. Check the 'snapshot-delete-time' tag value."
+        )
         # Return a time in future since the value is garbage
         return datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
             days=100
@@ -416,7 +418,8 @@ def send_snapshot_warning(snapshot, claim_name):
     """Email the user warning of snapshot expiration"""
     # Delete Time:
     tags = tags_to_dict(snapshot.tags)
-    expiry = expiry_time(tags.get("snapshot-delete-time"))
+    snapshot_delete_time: str = tags.get("snapshot-delete-time", "")
+    expiry = expiry_time(snapshot_delete_time)
     expiry_string = expiry.strftime("%Y-%m-%d %H:%M:%S UTC")
 
     unescaped_user = get_unescaped_user(claim_name)
