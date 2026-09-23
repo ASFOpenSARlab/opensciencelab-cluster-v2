@@ -9,6 +9,11 @@ import volume_management
 
 AWS_REGION_NAME = "us-west-2"
 
+
+class VolumeNotFoundError(Exception):
+    """Raised when no volume matches a persistent volume claim."""
+
+
 NOW = datetime.datetime.strptime(
     "2000-01-01 12:30:00+0000", volume_management.DATE_FORMAT
 )
@@ -81,7 +86,7 @@ def mock_k8s():
                         break
 
             if not vol_id:
-                raise Exception(f"Volume not found for claim '{name}'")
+                raise VolumeNotFoundError(f"Volume not found for claim '{name}'")
 
             claimed_volume = ec2_resource.Volume(vol_id)
             claimed_volume.delete()

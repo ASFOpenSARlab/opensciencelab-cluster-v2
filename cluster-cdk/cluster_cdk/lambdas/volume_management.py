@@ -89,6 +89,7 @@ def get_eks_api():
         ],
         capture_output=True,
         text=True,
+        check=False,
     )
 
     if result.returncode != 0:
@@ -122,7 +123,6 @@ def reset_concerning_issues():
 
 def add_concerning_issue(**args):
     """Keep a list of concerning issues to email to admins"""
-    global CONCERNING_ISSUES
 
     # Prevent duplicates
     if args in CONCERNING_ISSUES:
@@ -352,8 +352,10 @@ def filter_by_user(all_items: list) -> dict:
 def expiry_time(expiry: str) -> datetime.datetime:
     """Convert expiry time into a datetime object"""
     try:
-        return datetime.datetime.strptime(expiry, DATE_FORMAT)
-    except Exception as e:
+        return datetime.datetime.strptime(expiry, DATE_FORMAT).replace(
+            tzinfo=datetime.timezone.utc
+        )
+    except (TypeError, ValueError) as e:
         logger.error(
             f"Could not convert {expiry} to datetime: {e}. Check the 'snapshot-delete-time' tag value."
         )
@@ -365,9 +367,7 @@ def expiry_time(expiry: str) -> datetime.datetime:
 
 def is_delete_protected(item) -> bool:
     """Does the item have a delete protection tag?"""
-    if tags_to_dict(item.tags).get("do-not-delete", "") == "true":
-        return True
-    return False
+    return tags_to_dict(item.tags).get("do-not-delete", "") == "true"
 
 
 def is_expired(item, grace_period_days=0):
@@ -519,7 +519,7 @@ def should_send_snapshot_warning_email(snapshot):
             ),
         ),
         DATE_FORMAT,
-    )
+    ).replace(tzinfo=datetime.timezone.utc)
 
     # Get next datetime a warning email should be sent out, None if there are no more emails to send
     next_warning_date = None
@@ -535,12 +535,10 @@ def should_send_snapshot_warning_email(snapshot):
     # Send email if
     # * there is another email to be sent
     # * it is currently after when the next warning should be sent
-    if (
+    return bool(
         next_warning_date
         and datetime.datetime.now(datetime.timezone.utc) >= next_warning_date
-    ):
-        return True
-    return False
+    )
 
 
 def send_email_to_portal(email_payload):

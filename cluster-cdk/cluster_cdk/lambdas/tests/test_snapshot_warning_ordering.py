@@ -22,7 +22,7 @@ class TestShouldSendSnapshotWarning:
             def now(cls, tz=None):
                 return datetime.datetime.strptime(
                     "2026-01-10 01:00:00+0000", volume_management.DATE_FORMAT
-                )
+                ).replace(tzinfo=datetime.timezone.utc)
 
         monkeypatch.setattr("volume_management.datetime.datetime", MockDatetime)
 
@@ -46,7 +46,7 @@ class TestShouldSendSnapshotWarning:
             def now(cls, tz=None):
                 return datetime.datetime.strptime(
                     "2026-01-21 01:00:00+0000", volume_management.DATE_FORMAT
-                )
+                ).replace(tzinfo=datetime.timezone.utc)
 
         monkeypatch.setattr("volume_management.datetime.datetime", MockDatetime)
 
@@ -70,7 +70,7 @@ class TestShouldSendSnapshotWarning:
             def now(cls, tz=None):
                 return datetime.datetime.strptime(
                     "2026-01-22 01:00:00+0000", volume_management.DATE_FORMAT
-                )
+                ).replace(tzinfo=datetime.timezone.utc)
 
         monkeypatch.setattr("volume_management.datetime.datetime", MockDatetime)
 
@@ -95,7 +95,7 @@ class TestShouldSendSnapshotWarning:
             def now(cls, tz=None):
                 return datetime.datetime.strptime(
                     "2026-01-26 01:00:00+0000", volume_management.DATE_FORMAT
-                )
+                ).replace(tzinfo=datetime.timezone.utc)
 
         monkeypatch.setattr("volume_management.datetime.datetime", MockDatetime)
 
@@ -120,7 +120,7 @@ class TestShouldSendSnapshotWarning:
             def now(cls, tz=None):
                 return datetime.datetime.strptime(
                     "2026-01-29 01:00:00+0000", volume_management.DATE_FORMAT
-                )
+                ).replace(tzinfo=datetime.timezone.utc)
 
         monkeypatch.setattr("volume_management.datetime.datetime", MockDatetime)
 
@@ -145,7 +145,7 @@ class TestShouldSendSnapshotWarning:
             def now(cls, tz=None):
                 return datetime.datetime.strptime(
                     "2026-02-10 01:00:00+0000", volume_management.DATE_FORMAT
-                )
+                ).replace(tzinfo=datetime.timezone.utc)
 
         monkeypatch.setattr("volume_management.datetime.datetime", MockDatetime)
 
@@ -179,7 +179,7 @@ class TestSendSnapshotWarning:
             def now(cls, tz=None):
                 return datetime.datetime.strptime(
                     "2026-01-10 01:00:00+0000", volume_management.DATE_FORMAT
-                )
+                ).replace(tzinfo=datetime.timezone.utc)
 
         monkeypatch.setattr("volume_management.datetime.datetime", MockDatetime)
 
