@@ -5,14 +5,14 @@ import os
 import subprocess
 import sys
 import traceback
-import urllib.parse
 
 import boto3
+from botocore.exceptions import ClientError
 import escapism
 import jinja2
-import kubernetes
+from kubernetes import client as k8s_client, config as k8s_config
 import requests
-from botocore.exceptions import ClientError
+
 from opensarlab.auth import encryptedjwt
 
 CLAIM_TAG = "kubernetes.io/created-for/pvc/name"
@@ -20,16 +20,17 @@ CLUSTER_TAG = "KubernetesCluster"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S%z"
 REQUIRED_SNAPSHOT_TAGS = ("volume-delete-time", "snapshot-delete-time")
 
-CLUSTER_NAME = os.getenv("CLUSTER_NAME")
-LAB_SHORT_NAME = os.getenv("LAB_SHORT_NAME", "CLUSTER_NAME")
+LAB_SHORT_NAME = os.getenv("LAB_SHORT_NAME", "UNKNOWN")
+CLUSTER_NAME = os.getenv("CLUSTER_NAME", LAB_SHORT_NAME)
 # Convert SNAPSHOT_WARNING_DAYS string to reverse sorted list of ints
 SNAPSHOT_WARNING_DAYS: list[int] = sorted(
-    list({int(num) for num in os.getenv("SNAPSHOT_WARNING_DAYS", "5").split(",")}),
+    {int(num) for num in os.getenv("SNAPSHOT_WARNING_DAYS", "5").split(",")},
     reverse=True,
 )
 SNAPSHOT_GRACEPERIOD_DAYS = float(os.getenv("SNAPSHOT_GRACEPERIOD_DAYS", "1.0"))
 SNS_ALERT_TOPIC_ARN = os.getenv("ALERT_SNS_TOPIC_ARN")
 PORTAL_DOMAIN = os.getenv("PORTAL_DOMAINS", "").split(",")[0].strip()
+SSO_SECRET_ARN = os.getenv("SSO_SECRET_ARN")
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 AWS_CLI_PATH = os.getenv("AWS_CLI_PATH", "/opt/awscli/aws")
@@ -55,16 +56,7 @@ JINJA_LOADER = jinja2.Environment(
 SSO_SECRET = None
 CONCERNING_ISSUES = []
 
-
-ec2_client = None
 ec2_resource = None
-
-
-def get_ec2_client():
-    global ec2_client
-    if not ec2_client:
-        ec2_client = boto3.client("ec2")
-    return ec2_client
 
 
 def get_ec2_resource():
@@ -77,9 +69,51 @@ def get_ec2_resource():
 def set_sso_secret():
     """Grab the SSO secret for sending emails. Die if this fails. No Exception Handling"""
     global SSO_SECRET
-    secret_arn = os.getenv("SSO_SECRET_ARN")
     ssm_client = boto3.client("secretsmanager")
-    SSO_SECRET = ssm_client.get_secret_value(SecretId=secret_arn)["SecretString"]
+    SSO_SECRET = ssm_client.get_secret_value(SecretId=SSO_SECRET_ARN)["SecretString"]
+
+
+def get_eks_api():
+    """use awscli to generate a KUBECONFIG for the cluster"""
+    # Hacky way to set up kubectl
+    result = subprocess.run(
+        [
+            AWS_CLI_PATH,
+            "eks",
+            "update-kubeconfig",
+            "--name",
+            CLUSTER_NAME,
+            "--kubeconfig",
+            KUBECONFIG,
+            "--alias",
+            "eks",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if result.returncode != 0:
+        add_concerning_issue(
+            message=f"Could not generate KUBECONF file: {result.stdout}",
+        )
+
+    # Uhhggg.. Stupid hack because you can't change the aws path in kubeconfig file
+    # https://stackoverflow.com/a/71222634/21674565
+    with open(KUBECONFIG, "r") as file:
+        content = file.read()
+    content = content.replace("command: aws", f"command: {AWS_CLI_PATH}")
+    with open(KUBECONFIG, "w") as file:
+        file.write(content)
+
+    if result.returncode != 0:
+        add_concerning_issue(
+            message=f"Could not generate KUBECONF file: {result.stdout}",
+        )
+
+    # Read kubeconfig file
+    k8s_config.load_kube_config(config_file=KUBECONFIG)
+    return k8s_client.CoreV1Api()
 
 
 def reset_concerning_issues():
@@ -90,7 +124,6 @@ def reset_concerning_issues():
 
 def add_concerning_issue(**args):
     """Keep a list of concerning issues to email to admins"""
-    global CONCERNING_ISSUES
 
     # Prevent duplicates
     if args in CONCERNING_ISSUES:
@@ -133,6 +166,15 @@ def email_concerning_issues():
     alert_fatal_exception(exception_message)
 
 
+def get_claim_name(item) -> str | None:
+    """Determine the username from a claim tag"""
+    item_tags = tags_to_dict(item.tags)
+    claim_name = item_tags.get(CLAIM_TAG, "")
+    if not claim_name.startswith("claim-"):
+        return None
+    return claim_name
+
+
 def tags_to_dict(tags):
     """Convert list of dicts tags to single list"""
     if not tags:
@@ -140,96 +182,125 @@ def tags_to_dict(tags):
     return {item["Key"]: item["Value"] for item in tags}
 
 
-def get_unattached_volumes():
-    """Return a list of available EBS Volumes"""
-    unattached_volumes = []
+def filter_out_active_snapshots(snapshots: list) -> list:
     ec2_resource = get_ec2_resource()
-    for volume in ec2_resource.volumes.all():
-        if volume.state == "available":
-            unattached_volumes.append(volume)
+    all_active_claims = [
+        get_claim_name(v)
+        for v in ec2_resource.volumes.filter(
+            Filters=[
+                {"Name": f"tag:{CLUSTER_TAG}", "Values": [CLUSTER_NAME]},
+            ],
+        )
+    ]
+
+    inactive_snapshots = []
+    for s in snapshots:
+        if get_claim_name(s) not in all_active_claims:
+            inactive_snapshots.append(s)
         else:
-            logger.debug("Ignoring attached volume %s", volume.id)
-    return ec2_resource.volumes.all()
+            logger.info(f"Ignoring snapshot with active volume: {s.id}")
+
+    return inactive_snapshots
 
 
-def get_all_snapshots():
-    """get all volume snapshots owned by this AWS account"""
+def get_all_completed_snapshots_in_lab() -> list:
+    """Return a list of all completed EBS snapshots, owned by this AWS account, sorted from oldest to newest"""
     this_account = boto3.client("sts").get_caller_identity().get("Account")
     ec2_resource = get_ec2_resource()
-    return ec2_resource.snapshots.filter(
+    snapshots = ec2_resource.snapshots.filter(
         OwnerIds=[this_account],
-        Filters=[{"Name": "status", "Values": ["completed"]}],
-    )
-
-
-def get_claim_user(item):
-    """Determine the username from a claim tag"""
-    item_tags = tags_to_dict(item.tags)
-    if not item_tags.get(CLAIM_TAG, "").startswith("claim-"):
-        return None
-    return urllib.parse.unquote(item_tags.get(CLAIM_TAG)[6:])
-
-
-def get_eks_client():
-    """use awscli to generate a KUBECONFIG for the cluster"""
-    # Hacky way to set up kubectl
-    result = subprocess.run(
-        [
-            AWS_CLI_PATH,
-            "eks",
-            "update-kubeconfig",
-            "--name",
-            CLUSTER_NAME,
-            "--kubeconfig",
-            KUBECONFIG,
-            "--alias",
-            "eks",
+        Filters=[
+            {"Name": "status", "Values": ["completed"]},
+            {"Name": f"tag:{CLUSTER_TAG}", "Values": [CLUSTER_NAME]},
         ],
-        capture_output=True,
-        text=True,
     )
 
-    if result.returncode != 0:
-        add_concerning_issue(
-            message=f"Could not generate KUBECONF file: {result.stdout}",
-        )
-
-    # Uhhggg.. Stupid hack because you can't change the aws path in kubeconfig file
-    # https://stackoverflow.com/a/71222634/21674565
-    with open(KUBECONFIG, "r") as file:
-        content = file.read()
-    content = content.replace("command: aws", f"command: {AWS_CLI_PATH}")
-    with open(KUBECONFIG, "w") as file:
-        file.write(content)
-
-    if result.returncode != 0:
-        add_concerning_issue(
-            message=f"Could not generate KUBECONF file: {result.stdout}",
-        )
-
-    # Read kubeconfig file
-    kubernetes.config.load_kube_config(config_file=KUBECONFIG)
-    return kubernetes.client.CoreV1Api()
+    return sorted(snapshots, key=lambda s: s.start_time)
 
 
-def delete_pvc(
-    claim_user: str, volume_id: str, kube_client: kubernetes.client.CoreV1Api
-) -> None:
+def does_volume_have_an_associated_snapshot(vol) -> bool:
+    return any(
+        s
+        for s in get_all_completed_snapshots_in_lab()
+        if get_claim_name(s) == get_claim_name(vol)
+    )
+
+
+def delete_older_duplicate_snapshots(snapshots: list) -> None:
+    """
+    Delete older duplicate snapshots for each PVC.
+
+    Lifecycle management can leave a duplicate snapshot when the original volume
+    is deleted. Keep the newest snapshot for each PVC and delete the older ones.
+
+    Snapshots tagged `do-not-delete` and snapshots for `hub-db-dir` are ignored.
+
+    """
+    snapshots_by_claim = {}
+
+    for snapshot in snapshots:
+        claim_name: str | None = get_claim_name(snapshot)
+
+        if (
+            claim_name is None
+            or claim_name == "hub-db-dir"
+            or is_delete_protected(snapshot)
+        ):
+            continue
+
+        snapshots_by_claim.setdefault(claim_name, []).append(snapshot)
+
+    for claim_snapshots in snapshots_by_claim.values():
+        claim_snapshots.sort(key=lambda snapshot: snapshot.start_time, reverse=True)
+        for duplicate in claim_snapshots[1:]:
+            logger.warning(f"Duplicate snapshot found. Deleting {duplicate}")
+            duplicate.delete()
+
+
+def get_all_unattached_volumes_in_lab():
+    """Return a list of available EBS Volumes, sorted from oldest to newest"""
+    ec2_resource = get_ec2_resource()
+    unattached_volumes = ec2_resource.volumes.filter(
+        Filters=[
+            {"Name": "status", "Values": ["available"]},
+            {"Name": f"tag:{CLUSTER_TAG}", "Values": [CLUSTER_NAME]},
+        ]
+    )
+    return sorted(unattached_volumes, key=lambda v: v.create_time)
+
+
+def get_volumes_by_user():
+    """Return unattached user volumes for a cluster"""
+    return filter_by_user(get_all_unattached_volumes_in_lab())
+
+
+def get_user_snapshots_without_volumes_by_user():
+    """Return user snapshots for a cluster"""
+    return filter_by_user(
+        filter_out_active_snapshots(get_all_completed_snapshots_in_lab())
+    )
+
+
+def get_unfiltered_snapshots_by_user():
+    """Return user snapshots for a cluster without filtering out duplicates and active volumes"""
+    return filter_by_user(get_all_completed_snapshots_in_lab())
+
+
+def delete_pvc(claim_name: str, volume_id: str, k8s_api: k8s_client.CoreV1Api) -> None:
     """
     Delete a user's volume by removing their PVC in K8s.
     If the PVC doesn't exist, delete volume directly.
     """
-    user_claim_id = f"claim-{claim_user}"
-
     # Attempt to remove PVC
     try:
-        kube_client.delete_namespaced_persistent_volume_claim(
-            name=user_claim_id,
+        k8s_api.delete_namespaced_persistent_volume_claim(
+            name=claim_name,
             namespace="jupyter",
         )
-    except kubernetes.client.rest.ApiException:
+        logger.info(f"Volume claim '{claim_name}' deleted in {CLUSTER_NAME}.")
+    except k8s_client.rest.ApiException:
         logger.warning(
-            f"User claim {user_claim_id} can not be deleted in {CLUSTER_NAME}. Deleting volume '{volume_id}' directly..."
+            f"User claim {claim_name} can not be deleted in {CLUSTER_NAME}. Deleting volume '{volume_id}' directly."
         )
         try:
             ec2_resource = get_ec2_resource()
@@ -238,21 +309,17 @@ def delete_pvc(
             logger.info(f"Volume {volume_id} deleted in {CLUSTER_NAME}")
         except ClientError as e:
             exception_message = f"Error deleting volume {volume_id} in {CLUSTER_NAME}: {e.response['Error']['Message']}"
-            add_concerning_issue(message=exception_message, user=claim_user)
+            add_concerning_issue(message=exception_message, user=claim_name)
             logger.exception(exception_message)
 
 
-def filter_users(all_items):
-    """Filter resources by claim tagged users"""
+def filter_by_user(all_items: list) -> dict:
+    """Filter resources by claim tagged users. Assume one volume/snapshot per person."""
     user_items = {}
     for item in all_items:
         item_tags = tags_to_dict(item.tags)
 
-        claim_user = get_claim_user(item)
-        if not claim_user:
-            # Not a PVC item
-            logger.debug("Skipping non-claim %s: %s", item.id, item_tags.get(CLAIM_TAG))
-            continue
+        claim_name = get_claim_name(item)
 
         if CLUSTER_NAME and item_tags.get(CLUSTER_TAG, "") != CLUSTER_NAME:
             # Wrong Cluster
@@ -262,31 +329,41 @@ def filter_users(all_items):
             continue
 
         # Item from a PVC in the right cluster
-        user_items[claim_user] = item
+        user_items[claim_name] = item
 
     return user_items
 
 
-def expiry_time(expiry):
+def expiry_time(expiry: str | None) -> datetime.datetime:
     """Convert expiry time into a datetime object"""
+    if not expiry:
+        logger.error(
+            "Could not determine expiry time. Check the 'snapshot-delete-time' tag value."
+        )
+        # Return a time in future since the value is garbage
+        return datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+            days=100
+        )
     try:
-        return datetime.datetime.strptime(expiry, DATE_FORMAT)
-    except Exception as E:
-        logger.error("Could not convert %s to datatime: %s", expiry, E)
+        return datetime.datetime.strptime(expiry, DATE_FORMAT).replace(
+            tzinfo=datetime.timezone.utc
+        )
+    except (TypeError, ValueError) as e:
+        logger.error(
+            f"Could not convert {expiry} to datetime: {e}. Check the 'snapshot-delete-time' tag value."
+        )
         # Return a time in future since the value is garbage
         return datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
             days=100
         )
 
 
-def is_delete_protected(item):
+def is_delete_protected(item) -> bool:
     """Does the item have a delete protection tag?"""
-    if tags_to_dict(item.tags).get("do-not-delete", "") == "true":
-        return True
-    return False
+    return tags_to_dict(item.tags).get("do-not-delete", "") == "true"
 
 
-def is_expired(item, grace_period_days=0):
+def is_expired(item, grace_period_days: int = 0):
     """Check if item is expired, with optional grace period"""
     now = datetime.datetime.now(datetime.timezone.utc)
     tags = tags_to_dict(item.tags)
@@ -309,35 +386,36 @@ def is_expired(item, grace_period_days=0):
 
     logger.debug(f" - Now datetime: {now} Expiration datetime: {expire_time}")
 
-    return now > expire_time
+    return now >= expire_time
 
 
-def snapshot_has_required_tags(snapshot):
+def has_required_tags(item):
     """Verify snapshot has tags required for proper management"""
-    tags = tags_to_dict(snapshot.tags)
+    tags = tags_to_dict(item.tags)
 
     for required_tag in REQUIRED_SNAPSHOT_TAGS:
         if not tags.get(required_tag):
-            logger.warning(f"Required tag {required_tag} not found in {snapshot.id}")
+            logger.warning(f"Required tag {required_tag} not found in {item.id}")
             return False
 
     return True
 
 
-def get_unescaped_user(claim_user: str) -> str:
+def get_unescaped_user(claim_name: str) -> str:
     """Unescape claim name to get actual username"""
-    unescaped_username = claim_user.replace("claim-", "")
+    unescaped_username = claim_name.removeprefix("claim-")
     return escapism.unescape(unescaped_username, escape_char="-")
 
 
-def send_snapshot_warning(snapshot, claim_user):
+def send_snapshot_warning(snapshot, claim_name):
     """Email the user warning of snapshot expiration"""
     # Delete Time:
     tags = tags_to_dict(snapshot.tags)
-    expiry = expiry_time(tags.get("snapshot-delete-time"))
+    snapshot_delete_time: str = tags.get("snapshot-delete-time", "")
+    expiry = expiry_time(snapshot_delete_time)
     expiry_string = expiry.strftime("%Y-%m-%d %H:%M:%S UTC")
 
-    unescaped_user = get_unescaped_user(claim_user)
+    unescaped_user = get_unescaped_user(claim_name)
 
     # Create email
     email_template = JINJA_LOADER.get_template("snapshot_warning_email.j2")
@@ -373,7 +451,7 @@ def send_snapshot_warning(snapshot, claim_user):
     return True
 
 
-def send_snapshot_delete(snapshot, claim_user):
+def send_snapshot_delete(snapshot, claim_name):
     """Send email to the owner of a to-be-deleted snapshot"""
     tags = tags_to_dict(snapshot.tags)
 
@@ -382,7 +460,7 @@ def send_snapshot_delete(snapshot, claim_user):
         logger.info(" - Deletion email sent previously")
         return None
 
-    unescaped_user = get_unescaped_user(claim_user)
+    unescaped_user = get_unescaped_user(claim_name)
 
     # Create email
     email_template = JINJA_LOADER.get_template("volume_delete_email.j2")
@@ -434,7 +512,7 @@ def should_send_snapshot_warning_email(snapshot):
             ),
         ),
         DATE_FORMAT,
-    )
+    ).replace(tzinfo=datetime.timezone.utc)
 
     # Get next datetime a warning email should be sent out, None if there are no more emails to send
     next_warning_date = None
@@ -450,44 +528,10 @@ def should_send_snapshot_warning_email(snapshot):
     # Send email if
     # * there is another email to be sent
     # * it is currently after when the next warning should be sent
-    if (
+    return bool(
         next_warning_date
-        and datetime.datetime.now(datetime.timezone.utc) > next_warning_date
-    ):
-        return True
-    return False
-
-
-def get_snapshot_for_volume(volume, user_snapshots):
-    """Check if a specific volume has a snapshot available"""
-    for claim_user, snapshot in user_snapshots.items():
-        if snapshot.volume_id == volume.volume_id:
-            logger.info(
-                "Found Snapshot %s for Volume %s for user %s",
-                snapshot.id,
-                volume.volume_id,
-                claim_user,
-            )
-            return snapshot
-        else:
-            logger.debug(
-                "Snapshot %s is for %s, not %s",
-                snapshot.id,
-                snapshot.volume_id,
-                volume.volume_id,
-            )
-
-    return None
-
-
-def get_user_volumes():
-    """Return unattached user volumes for a cluster"""
-    return filter_users(get_unattached_volumes())
-
-
-def get_user_snapshots():
-    """Return user snapshots for a cluster"""
-    return filter_users(get_all_snapshots())
+        and datetime.datetime.now(datetime.timezone.utc) >= next_warning_date
+    )
 
 
 def send_email_to_portal(email_payload):
@@ -514,52 +558,51 @@ def run_volume_management():
 
     # Loop up resources
     logger.info("Setting up EKS Client for %s", CLUSTER_NAME)
-    kube_client = get_eks_client()
+    k8s_api = get_eks_api()
+
+    delete_older_duplicate_snapshots(get_all_completed_snapshots_in_lab())
 
     logger.info("Querying for Volumes...")
-    user_volumes = get_user_volumes()
+    user_volumes: dict = get_volumes_by_user()
     logger.info("Found %s user volumes", len(user_volumes))
 
-    logger.info("Querying for Snapshots...")
-    user_snapshots = get_user_snapshots()
-    logger.info("Found %s user snapshots", len(user_snapshots))
-
-    for claim_user, volume in user_volumes.items():
+    for claim_name, volume in user_volumes.items():
         logger.info(
-            f"VOLUME: {claim_user} | ID: {volume.id} | Size: {volume.size}GB | State: {volume.state}"
+            f"VOLUME: {claim_name} | ID: {volume.id} | Size: {volume.size}GB | State: {volume.state}"
         )
-
-        # attempt to find a snapshot for the volume
-        snapshot_from_volume = get_snapshot_for_volume(volume, user_snapshots)
 
         if is_delete_protected(volume):
-            logger.info(" - Volume is Delete protected!")
-        elif not snapshot_from_volume:
-            logger.warning(" - Volume has no active snapshot")
-        elif not snapshot_has_required_tags(snapshot_from_volume):
+            logger.info(" - Volume is Delete protected! Will do nothing.")
+        elif not has_required_tags(volume):
             logger.error(" - Ignoring volume with invalid snapshot tags")
+        elif not does_volume_have_an_associated_snapshot(volume):
+            logger.info(" - Volume does not have snapshot! Will do nothing.")
         elif is_expired(volume):
             logger.info(" - Volume is expired!")
-            delete_pvc(claim_user, volume.id, kube_client)
+            delete_pvc(claim_name, volume.id, k8s_api)
 
-    for claim_user, snapshot in user_snapshots.items():
+    logger.info("Querying for Snapshots...")
+    user_snapshots: dict = get_user_snapshots_without_volumes_by_user()
+    logger.info("Found %s user snapshots", len(user_snapshots))
+
+    for claim_name, snapshot in user_snapshots.items():
         logger.info(
-            f"SNAPSHOT: {claim_user} | ID: {snapshot.id} | Size: {snapshot.volume_size}GB | State: {snapshot.state}"
+            f"SNAPSHOT: {claim_name} | ID: {snapshot.id} | Size: {snapshot.volume_size}GB | State: {snapshot.state}"
         )
 
-        if not snapshot_has_required_tags(snapshot):
-            logger.warning(" - Snapshot is missing tags!")
+        if not has_required_tags(snapshot):
+            logger.warning(" - Snapshot is missing tags! Will do nothing.")
         elif is_delete_protected(snapshot):
-            logger.info(" - Snapshot is Delete protected!")
-        elif is_expired(snapshot, grace_period_days=SNAPSHOT_GRACEPERIOD_DAYS):
+            logger.info(" - Snapshot is Delete protected! Will do nothing.")
+        elif is_expired(snapshot, grace_period_days=int(SNAPSHOT_GRACEPERIOD_DAYS)):
             logger.info(" - Deleting Snapshot")
             snapshot.delete()
         elif is_expired(snapshot):
             logger.info(" - Snapshot is in grace period!")
-            send_snapshot_delete(snapshot, claim_user)
+            send_snapshot_delete(snapshot, claim_name)
         elif should_send_snapshot_warning_email(snapshot):
             logger.info(" - Sending a snapshot warning email!")
-            send_snapshot_warning(snapshot, claim_user)
+            send_snapshot_warning(snapshot, claim_name)
 
 
 def alert_fatal_exception(exception_message):
@@ -590,6 +633,8 @@ def lambda_handler(_event, _context):
     except Exception:
         alert_fatal_exception(traceback.format_exc())
         logger.exception("Uncaught Exception:")
+
+    return {"statusCode": 200, "body": "Storage management successful!"}
 
 
 if __name__ == "__main__":
