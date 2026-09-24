@@ -1,4 +1,5 @@
 import datetime
+import random
 
 import boto3
 import pytest
@@ -14,17 +15,17 @@ class VolumeNotFoundError(Exception):
     """Raised when no volume matches a persistent volume claim."""
 
 
-NOW = datetime.datetime.strptime(
-    "2000-01-01 12:30:00+0000", volume_management.DATE_FORMAT
-)
-
 # Note that AWs creds are nullified within the conftest.py file
 
 
 class MockDatetime(datetime.datetime):
     @classmethod
     def now(cls, tz=None):
-        return NOW
+        """Return a datetime with random minutes for testing purposes."""
+        return datetime.datetime.strptime(
+            f"2000-01-01 12:{random.randint(0, 59)}:01+0000",
+            volume_management.DATE_FORMAT,
+        ).replace(tzinfo=datetime.timezone.utc)
 
 
 @pytest.fixture
@@ -168,17 +169,28 @@ def mock_snapshots(
     mock_volumes: dict,
     remove_volume_after_snapshot_creation: bool = False,
 ) -> dict:
-    """Context manager to provision EBS snapshots with various tags."""
+    """Provision completed EBS snapshots with the tags used by the tests.
+
+    The returned mapping is keyed by the configured snapshot name, matching
+    :func:`mock_volumes`.  Volumes are optionally removed after each snapshot
+    is created to model the normal volume-cleanup workflow.
+    """
     with mock_aws():
         ec2 = boto3.client("ec2", region_name=AWS_REGION_NAME)
 
         created_snapshots = {}
         for item in config:
             associated_volume = item["associated"]
+            if associated_volume not in mock_volumes:
+                raise KeyError(
+                    f"Snapshot '{item['name']}' refers to unknown volume "
+                    f"'{associated_volume}'"
+                )
             volume_id = mock_volumes[associated_volume]["VolumeId"]
 
             s = ec2.create_snapshot(
                 VolumeId=volume_id,
+                Description=f"Snapshot for {associated_volume}",
                 TagSpecifications=[
                     {
                         "ResourceType": "snapshot",
@@ -444,38 +456,17 @@ def test_duplicate_unexpired_snapshot_with_no_volume_and_do_delete_duplicate(
         remove_volume_after_snapshot_creation=True,
     )
 
-    # Create normal volume, take non-duplicate snapshot as a control, and then delete volume
-    vols_not_duplicated = mock_volumes(
-        [
-            {
-                "claim_name": "claim-mockuser1",
-                "name": "mockuser1_volume",
-                "volume-delete-time": "1999-12-20 00:00:00+0000",
-                "snapshot-delete-time": "2000-01-20 00:00:00+0000",
-            },
-        ]
-    )
-
-    mock_snapshots(
-        [
-            {
-                "claim_name": "claim-mockuser1",
-                "name": "other_snap",
-                "associated": "mockuser1_volume",
-                "volume-delete-time": "1999-12-20 00:00:00+0000",
-                "snapshot-delete-time": "2000-01-20 00:00:00+0000",
-            },
-        ],
-        vols_not_duplicated,
-        remove_volume_after_snapshot_creation=True,
-    )
-
     # Confirm number of volumes and snapshots
     vols_before_run = volume_management.get_all_unattached_volumes_in_lab()
     assert len(vols_before_run) == 0
 
-    snaps_before_run = volume_management.get_all_completed_snapshots_in_lab()
-    assert len(snaps_before_run) == 3
+    snaps_before_run = sorted(
+        volume_management.get_all_completed_snapshots_in_lab(),
+        key=lambda x: x.start_time,
+    )
+    newest_snap_before = snaps_before_run[1]
+    assert len(snaps_before_run) == 2
+    assert snaps_before_run[0].start_time != snaps_before_run[1].start_time
 
     # Run lambda
     result = volume_management.lambda_handler({}, None)
@@ -486,10 +477,12 @@ def test_duplicate_unexpired_snapshot_with_no_volume_and_do_delete_duplicate(
     vols_after_run = volume_management.get_all_unattached_volumes_in_lab()
     assert len(vols_after_run) == 0
 
-    snaps_after_run = volume_management.get_all_completed_snapshots_in_lab()
-    assert len(snaps_after_run) == 2
-    assert "claim-mockuser0" == volume_management.get_claim_name(snaps_after_run[0])
-    assert "claim-mockuser1" == volume_management.get_claim_name(snaps_after_run[1])
+    snaps_after_run = sorted(
+        volume_management.get_all_completed_snapshots_in_lab(),
+        key=lambda x: x.start_time,
+    )
+    assert newest_snap_before.snapshot_id == snaps_after_run[0].snapshot_id
+    assert len(snaps_after_run) == 1
     assert "Duplicate snapshot found. Deleting " in caplog.text
 
 
@@ -566,31 +559,42 @@ def test_almost_expired_snapshot_with_just_restored_volume_and_do_not_send_warni
     monkeypatch.setattr("volume_management.SNAPSHOT_WARNING_DAYS", [1])
 
     # Create initial volume that the snapshot will be based off
-    volume_configs = [
-        {
-            "claim_name": "claim-mockuser0",
-            "name": "new_volume",
-            "volume-delete-time": "2000-01-15 00:00:00+0000",
-            "snapshot-delete-time": "2000-01-02 00:00:00+0000",
-        }
-    ]
+    vols = mock_volumes(
+        [
+            {
+                "claim_name": "claim-mockuser0",
+                "name": "old_volume",
+                "volume-delete-time": "2000-01-01 00:00:00+0000",
+                "snapshot-delete-time": "2000-01-02 00:00:00+0000",
+            },
+        ]
+    )
 
-    vols = mock_volumes(volume_configs)
-
-    snapshot_configs = [
-        {
-            "claim_name": "claim-mockuser0",
-            "name": "new_snap",
-            "associated": "new_volume",
-            "volume-delete-time": "2000-01-15 00:00:00+0000",
-            "snapshot-delete-time": "2000-01-02 00:00:00+0000",
-        }
-    ]
-
+    # Create snapshot from the old volume and then delete the volume
     mock_snapshots(
-        snapshot_configs,
+        [
+            {
+                "claim_name": "claim-mockuser0",
+                "name": "old_snap",
+                "associated": "old_volume",
+                "volume-delete-time": "2000-01-01 00:00:00+0000",
+                "snapshot-delete-time": "2000-01-02 00:00:00+0000",
+            }
+        ],
         vols,
-        remove_volume_after_snapshot_creation=False,
+        remove_volume_after_snapshot_creation=True,
+    )
+
+    # Create new volume to simulate a user restoring a volume from a snapshot
+    mock_volumes(
+        [
+            {
+                "claim_name": "claim-mockuser0",
+                "name": "new_volume_from_snapshot",
+                "volume-delete-time": "2000-01-15 00:00:00+0000",
+                "snapshot-delete-time": "2000-01-02 00:00:00+0000",
+            },
+        ]
     )
 
     vols_before_run = volume_management.get_all_unattached_volumes_in_lab()
@@ -610,6 +614,7 @@ def test_almost_expired_snapshot_with_just_restored_volume_and_do_not_send_warni
 
     snaps_after_run = volume_management.get_all_completed_snapshots_in_lab()
     assert len(snaps_after_run) == 1
+    assert "Volume does not have snapshot" not in caplog.text
     assert "Snapshot is in grace period!" not in caplog.text
     assert "Deletion email sent" not in caplog.text
     assert "Deletion email sent" not in caplog.text

@@ -7,11 +7,12 @@ import sys
 import traceback
 
 import boto3
+from botocore.exceptions import ClientError
 import escapism
 import jinja2
 from kubernetes import client as k8s_client, config as k8s_config
 import requests
-from botocore.exceptions import ClientError
+
 from opensarlab.auth import encryptedjwt
 
 CLAIM_TAG = "kubernetes.io/created-for/pvc/name"
@@ -23,7 +24,7 @@ LAB_SHORT_NAME = os.getenv("LAB_SHORT_NAME", "UNKNOWN")
 CLUSTER_NAME = os.getenv("CLUSTER_NAME", LAB_SHORT_NAME)
 # Convert SNAPSHOT_WARNING_DAYS string to reverse sorted list of ints
 SNAPSHOT_WARNING_DAYS: list[int] = sorted(
-    list({int(num) for num in os.getenv("SNAPSHOT_WARNING_DAYS", "5").split(",")}),
+    {int(num) for num in os.getenv("SNAPSHOT_WARNING_DAYS", "5").split(",")},
     reverse=True,
 )
 SNAPSHOT_GRACEPERIOD_DAYS = float(os.getenv("SNAPSHOT_GRACEPERIOD_DAYS", "1.0"))
@@ -165,7 +166,7 @@ def email_concerning_issues():
     alert_fatal_exception(exception_message)
 
 
-def get_claim_name(item):
+def get_claim_name(item) -> str | None:
     """Determine the username from a claim tag"""
     item_tags = tags_to_dict(item.tags)
     claim_name = item_tags.get(CLAIM_TAG, "")
@@ -181,7 +182,7 @@ def tags_to_dict(tags):
     return {item["Key"]: item["Value"] for item in tags}
 
 
-def remove_snapshots_associated_with_active_volumes(snapshots: list) -> list:
+def filter_out_active_snapshots(snapshots: list) -> list:
     ec2_resource = get_ec2_resource()
     all_active_claims = [
         get_claim_name(v)
@@ -203,7 +204,7 @@ def remove_snapshots_associated_with_active_volumes(snapshots: list) -> list:
 
 
 def get_all_completed_snapshots_in_lab() -> list:
-    """Return a list of EBS snapshots without active volumes, owned by this AWS account, sorted from oldest to newest"""
+    """Return a list of all completed EBS snapshots, owned by this AWS account, sorted from oldest to newest"""
     this_account = boto3.client("sts").get_caller_identity().get("Account")
     ec2_resource = get_ec2_resource()
     snapshots = ec2_resource.snapshots.filter(
@@ -218,56 +219,42 @@ def get_all_completed_snapshots_in_lab() -> list:
 
 
 def does_volume_have_an_associated_snapshot(vol) -> bool:
-    all_snapshots = get_all_completed_snapshots_in_lab()
-
-    return vol.id in [s.volume_id for s in all_snapshots]
+    return any(
+        s
+        for s in get_all_completed_snapshots_in_lab()
+        if get_claim_name(s) == get_claim_name(vol)
+    )
 
 
 def delete_older_duplicate_snapshots(snapshots: list) -> None:
     """
-    Sometimes there might be an older duplicate of a snapshot. This could occur due to lifecyle managament
-    abandoning a snapshot due to the deletion of it's original volume.
+    Delete older duplicate snapshots for each PVC.
 
-    Sort by pvc name. Delete the older snapshots if there are more than one. There should always be at least one snapshot
-    present. The code will handle the one remaining snapshot as appropriate.
+    Lifecycle management can leave a duplicate snapshot when the original volume
+    is deleted. Keep the newest snapshot for each PVC and delete the older ones.
 
-    Ignore if the `do-not-delete` tag is present. Since the hub db might have a duplicate volume, ignore `hub-db-dir`.
+    Snapshots tagged `do-not-delete` and snapshots for `hub-db-dir` are ignored.
 
     """
-    reduced_snapshots = []
-    hash_table = {}
+    snapshots_by_claim = {}
 
     for snapshot in snapshots:
-        # Create a hash table with the pvc name (which is presumed to be unique) as the key.
-        # If subsequent entries match the hash key, there are duplicates.
-        claim_name = get_claim_name(snapshot)
-        start_time: datetime.datetime = snapshot.start_time
+        claim_name: str | None = get_claim_name(snapshot)
 
         if (
-            claim_name == "hub-db-dir"
-            or not start_time
+            claim_name is None
+            or claim_name == "hub-db-dir"
             or is_delete_protected(snapshot)
         ):
             continue
 
-        hash_key = str(abs(hash(claim_name)))
-        hash_value = {"snapshot": snapshot, "start_time": start_time}
+        snapshots_by_claim.setdefault(claim_name, []).append(snapshot)
 
-        a = hash_table.get(hash_key, [])
-        a.append(hash_value)
-        hash_table[hash_key] = a
-
-    for hash_value in hash_table.values():
-        # Sort by start time, save the latest (or do-not-delete), delete the rest
-        hash_value = sorted(hash_value, key=lambda e: e["start_time"], reverse=True)
-        for i, value in enumerate(hash_value):
-            if i == 0:
-                reduced_snapshots.append(value["snapshot"])
-            else:
-                logger.warning(
-                    f"Duplicate snapshot found. Deleting {value['snapshot']}"
-                )
-                value["snapshot"].delete()
+    for claim_snapshots in snapshots_by_claim.values():
+        claim_snapshots.sort(key=lambda snapshot: snapshot.start_time, reverse=True)
+        for duplicate in claim_snapshots[1:]:
+            logger.warning(f"Duplicate snapshot found. Deleting {duplicate}")
+            duplicate.delete()
 
 
 def get_all_unattached_volumes_in_lab():
@@ -290,9 +277,7 @@ def get_volumes_by_user():
 def get_user_snapshots_without_volumes_by_user():
     """Return user snapshots for a cluster"""
     return filter_by_user(
-        remove_snapshots_associated_with_active_volumes(
-            get_all_completed_snapshots_in_lab()
-        )
+        filter_out_active_snapshots(get_all_completed_snapshots_in_lab())
     )
 
 
@@ -349,8 +334,16 @@ def filter_by_user(all_items: list) -> dict:
     return user_items
 
 
-def expiry_time(expiry: str) -> datetime.datetime:
+def expiry_time(expiry: str | None) -> datetime.datetime:
     """Convert expiry time into a datetime object"""
+    if not expiry:
+        logger.error(
+            "Could not determine expiry time. Check the 'snapshot-delete-time' tag value."
+        )
+        # Return a time in future since the value is garbage
+        return datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+            days=100
+        )
     try:
         return datetime.datetime.strptime(expiry, DATE_FORMAT).replace(
             tzinfo=datetime.timezone.utc
@@ -370,7 +363,7 @@ def is_delete_protected(item) -> bool:
     return tags_to_dict(item.tags).get("do-not-delete", "") == "true"
 
 
-def is_expired(item, grace_period_days=0):
+def is_expired(item, grace_period_days: int = 0):
     """Check if item is expired, with optional grace period"""
     now = datetime.datetime.now(datetime.timezone.utc)
     tags = tags_to_dict(item.tags)
@@ -601,7 +594,7 @@ def run_volume_management():
             logger.warning(" - Snapshot is missing tags! Will do nothing.")
         elif is_delete_protected(snapshot):
             logger.info(" - Snapshot is Delete protected! Will do nothing.")
-        elif is_expired(snapshot, grace_period_days=SNAPSHOT_GRACEPERIOD_DAYS):
+        elif is_expired(snapshot, grace_period_days=int(SNAPSHOT_GRACEPERIOD_DAYS)):
             logger.info(" - Deleting Snapshot")
             snapshot.delete()
         elif is_expired(snapshot):
