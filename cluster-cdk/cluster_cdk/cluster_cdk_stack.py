@@ -55,7 +55,7 @@ class ClusterCdkStack(Stack):
         cluster_name = os.environ["LAB_SHORT_NAME"]
 
         # For version stamping
-        self.BUILD_TAG = os.getenv("BUILD_TAG", "uknown")
+        self.BUILD_TAG = os.getenv("BUILD_TAG", "unknown")
 
         self.HOME_DIR = pathlib.Path(__file__).absolute().parent
 
