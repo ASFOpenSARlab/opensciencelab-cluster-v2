@@ -881,7 +881,7 @@ class ClusterCdkStack(Stack):
                         "/usr/local/etc/jupyterhub/jupyterhub_config.d/post_stop_hook.py",
                     )
                     | self._set_extra_file(
-                        "jupyterhub/version.json.j2",
+                        "jupyterhub/version.json",
                         "json",
                         "/usr/local/share/jupyterhub/static/version.json",
                         extra_args={
