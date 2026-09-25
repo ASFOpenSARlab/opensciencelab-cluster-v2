@@ -883,7 +883,7 @@ class ClusterCdkStack(Stack):
                     | self._set_extra_file(
                         "jupyterhub/version.json.j2",
                         "json",
-                        "/usr/local/etc/jupyterhub/static/version.json",
+                        "/usr/local/share/jupyterhub/static/version.json",
                         extra_args={
                             "version": self.BUILD_TAG,
                             "deploy_date": datetime.now(timezone.utc).strftime(
