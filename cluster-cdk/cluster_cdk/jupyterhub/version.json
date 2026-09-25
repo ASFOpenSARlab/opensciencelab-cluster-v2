@@ -1,5 +1,5 @@
 {
-  "version": "$version",
+  "cluster_version": "$version",
   "deploy_date": "$deploy_date",
   "environment": "$environment"
 }
