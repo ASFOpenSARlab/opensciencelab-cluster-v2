@@ -7,6 +7,8 @@ import re
 
 import requests
 
+from datetime import datetime, timezone
+
 # Import the monitoring library constructs
 import cdk_monitoring_constructs as monitoring  # type: ignore
 
@@ -51,6 +53,9 @@ class ClusterCdkStack(Stack):
 
         self.LAB_SHORT_NAME = os.environ["LAB_SHORT_NAME"]
         cluster_name = os.environ["LAB_SHORT_NAME"]
+
+        # For version stamping
+        self.BUILD_TAG = os.getenv("BUILD_TAG", "unknown")
 
         self.HOME_DIR = pathlib.Path(__file__).absolute().parent
 
@@ -875,6 +880,18 @@ class ClusterCdkStack(Stack):
                         "python",
                         "/usr/local/etc/jupyterhub/jupyterhub_config.d/post_stop_hook.py",
                     )
+                    | self._set_extra_file(
+                        "jupyterhub/version.json",
+                        "json",
+                        "/usr/local/share/jupyterhub/static/version.json",
+                        extra_args={
+                            "version": self.BUILD_TAG,
+                            "deploy_date": datetime.now(timezone.utc).strftime(
+                                "%Y-%m-%d %H:%M:%S UTC"
+                            ),
+                            "environment": self.LAB_SHORT_NAME,
+                        },
+                    )
                 ),
             },
             "proxy": {
@@ -1659,7 +1676,7 @@ class ClusterCdkStack(Stack):
         """
         full_file_path = self.HOME_DIR / file_path
 
-        if file_type in ["python", "html", "shell", "file"]:
+        if file_type in ["python", "html", "shell", "file", "json"]:
             file_category = "stringData"
 
             with open(full_file_path, "r") as f:

@@ -47,6 +47,7 @@ jobs:
       DAYS_TILL_SNAPSHOT_DELETION: ${{ vars.DAYS_TILL_SNAPSHOT_DELETION }}
       DAYS_TILL_VOLUME_DELETION: ${{ vars.DAYS_TILL_VOLUME_DELETION }}
       AZ_LETTER: ${{ vars.AZ_LETTER }}
+      BUILD_TAG: ${{ github.ref_name }}
     steps:
       - name: Log Environment
         run: |
