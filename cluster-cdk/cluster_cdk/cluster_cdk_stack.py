@@ -875,6 +875,11 @@ class ClusterCdkStack(Stack):
                         "python",
                         "/usr/local/etc/jupyterhub/jupyterhub_config.d/post_stop_hook.py",
                     )
+                    | self._set_extra_file(
+                        "jupyterhub/services/version.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/services/version.py",
+                    )
                 ),
             },
             "proxy": {
