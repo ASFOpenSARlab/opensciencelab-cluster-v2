@@ -60,6 +60,11 @@
         "destPath": "notebooks"
       },
       {
+        "repoUrl": "https://github.com/ASFOpenSARlab/NISAR_Cookbook.git",
+        "branch": "main",
+        "destPath": "Data_Recipe_Jupyter_Books/NISAR_Cookbook"
+      },
+      {
         "repoUrl": "https://github.com/ASFOpenSARlab/opensarlab_MintPy_Recipe_Book.git",
         "branch": "main",
         "destPath": "Data_Recipe_Jupyter_Books/opensarlab_MintPy_Recipe_Book"
