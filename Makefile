@@ -51,6 +51,7 @@ IMAGE_NAME ?= ghcr.io/asfopensarlab/osl-utils:main
 AWS_DEFAULT_PROFILE := $(AWS_DEFAULT_PROFILE)
 AWS_REGION ?= us-west-2
 IS_PROD ?= false
+BUILD_TAG ?= "unknown"
 
 UI_IAM_ROLE := $(UI_IAM_ROLE)
 
@@ -119,6 +120,7 @@ cdk-shell:
 		-e AWS_CLI_PATH \
 		-e CLUSTER_NAME \
 		-e SSO_SECRET_ARN \
+		-e BUILD_TAG \
 		-w /code/ \
 		--pull always \
 		${IMAGE_NAME} || \
