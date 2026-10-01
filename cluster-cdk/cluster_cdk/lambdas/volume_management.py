@@ -254,7 +254,12 @@ def delete_older_duplicate_snapshots(snapshots: list) -> None:
         claim_snapshots.sort(key=lambda snapshot: snapshot.start_time, reverse=True)
         for duplicate in claim_snapshots[1:]:
             logger.warning(f"Duplicate snapshot found. Deleting {duplicate}")
-            duplicate.delete()
+            try:
+                duplicate.delete()
+            except ClientError as e:
+                # Do not send an email for this. Just log it. If we can't delete a snapshot, it will be cleaned up next time.
+                exception_message = f"Error deleting snapshot {duplicate.id} in {CLUSTER_NAME}: {e.response['Error']['Message']}"
+                logger.exception(exception_message)
 
 
 def get_all_unattached_volumes_in_lab():
