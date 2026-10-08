@@ -76,6 +76,15 @@ Kube Proxy: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-clust
 
 CSI Driver version: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L594) | [GitHub Releases](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/releases)
 
+### Docker Images
+
+[OSL JupyterLab](https://github.com/ASFOpenSARlab/deployment-opensarlab-container/tree/main/images/sar)
+
+[JupyterHub image](https://github.com/ASFOpenSARlab/opensciencelab-system-containers/tree/main/jupyterhub-image)
+
+Any other custom images that do not inherit from the OSL JupyterLab image may also
+require an update.
+
 ## Pre-Deployment Information
 
 ### AWS Accounts
