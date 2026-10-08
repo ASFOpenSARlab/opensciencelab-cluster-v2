@@ -41,6 +41,12 @@ The following GitHub repos are meant to be used in tandem:
 
 ## Updating Cluster Dependencies
 
+### AWS Resources
+
+EKS Upgrade Guide: [AWS Docs](https://docs.aws.amazon.com/eks/latest/userguide/update-cluster.html))
+
+EKS Changelog Summaries: [AWS Docs](https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions-standard.html)
+
 ### Kubernetes
 
 EKS: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L175) | [AWS Docs](https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks_v2/README.html#provisioning-clusters)
