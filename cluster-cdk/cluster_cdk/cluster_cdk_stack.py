@@ -34,7 +34,7 @@ from aws_cdk import (  # type: ignore
     aws_events_targets as targets,
     aws_sns as sns,
     aws_sns_subscriptions as sns_subs,
-    lambda_layer_kubectl_v34,
+    lambda_layer_kubectl_v35,
     lambda_layer_awscli,
 )
 
@@ -105,7 +105,7 @@ class ClusterCdkStack(Stack):
         # All resources in this specific stack will get this tag
         Tags.of(self).add("osl-billing", self.LAB_SHORT_NAME)  # type: ignore
 
-        self.kubectl_layer = lambda_layer_kubectl_v34.KubectlV34Layer(self, "kubectl")
+        self.kubectl_layer = lambda_layer_kubectl_v35.KubectlV34Layer(self, "kubectl")
 
         ########
         #
