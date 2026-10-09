@@ -185,7 +185,7 @@ class ClusterCdkStack(Stack):
             self,
             "CniAddon",
             addon_name="vpc-cni",
-            addon_version="v1.20.4-eksbuild.2",
+            addon_version="v1.23.1-eksbuild.1",
             cluster=self.cluster,
             # configuration_values={},
         )
