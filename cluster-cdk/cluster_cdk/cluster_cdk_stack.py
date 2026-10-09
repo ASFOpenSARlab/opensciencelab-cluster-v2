@@ -172,7 +172,7 @@ class ClusterCdkStack(Stack):
             "EksCluster",
             vpc=self.vpc,
             cluster_name=cluster_name,
-            version=eks.KubernetesVersion.V1_34,
+            version=eks.KubernetesVersion.V1_35,
             kubectl_provider_options=eks.KubectlProviderOptions(
                 kubectl_layer=self.kubectl_layer,
             ),
