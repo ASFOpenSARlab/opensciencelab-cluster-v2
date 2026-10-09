@@ -1575,7 +1575,7 @@ class ClusterCdkStack(Stack):
         #
         #####################################################################
 
-        self.autoscaler_helm_version = "9.58.0"
+        self.autoscaler_helm_version = "9.59.0"
 
         # Note that other args are added via ASG tags
         autoscaler_helm_chart_values = {
