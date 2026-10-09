@@ -645,7 +645,7 @@ class ClusterCdkStack(Stack):
         #
         #####################################################################
 
-        self.jupyterhub_helm_version = "4.3.2"
+        self.jupyterhub_helm_version = "4.4.2"
 
         # Modify the k8s permissions so the volumes can be modified in place
         # Patching existing clusterroles is difficult. So we are fully replacing the original from jupyterhub.
