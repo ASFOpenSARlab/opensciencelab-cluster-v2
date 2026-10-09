@@ -105,7 +105,7 @@ class ClusterCdkStack(Stack):
         # All resources in this specific stack will get this tag
         Tags.of(self).add("osl-billing", self.LAB_SHORT_NAME)  # type: ignore
 
-        self.kubectl_layer = lambda_layer_kubectl_v35.KubectlV34Layer(self, "kubectl")
+        self.kubectl_layer = lambda_layer_kubectl_v35.KubectlV35Layer(self, "kubectl")
 
         ########
         #
@@ -201,7 +201,7 @@ class ClusterCdkStack(Stack):
         ## Look up latest default version of amazon-cloudwatch-observability:
         # aws eks describe-addon-versions \
         #   --addon-name amazon-cloudwatch-observability \
-        #   --kubernetes-version 1.34 \
+        #   --kubernetes-version 1.35 \
         #   --query "addons[0].addonVersions[?compatibilities[0].defaultVersion]"
         self.cw_observe_addon = eks.Addon(
             self,
