@@ -72,7 +72,7 @@ Core DNS: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster
 
 Amazon Cloudwatch Observability: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L210) | [GitHub Repo](https://github.com/aws-observability/helm-charts) | [AWS Docs](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/install-CloudWatch-Observability-EKS-addon.html)
 
-I cannot find any documentation associating a version of this package with a specific kubernetes version, so it may be reasonable to use the latest version of the package.
+I cannot find any documentation associating a version of this package with a specific kubernetes version, so it may be reasonable to use the latest version of the package. All EKS addon package versions have the form `v<VERSION>-eksbuild.1`.
 
 Kube Proxy: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L220) | [AWS Docs](https://docs.aws.amazon.com/eks/latest/userguide/managing-kube-proxy.html)
 
