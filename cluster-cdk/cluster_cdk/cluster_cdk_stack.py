@@ -928,7 +928,7 @@ class ClusterCdkStack(Stack):
 
         # The default CDK AWS Controller is woefully out of date.
         # Use the helm chart
-        self.load_balancer_controller_version = "3.2.1"
+        self.load_balancer_controller_version = "3.6.0"
 
         alb_sa = self.cluster.add_service_account("alb-sa", namespace="kube-system")
 
