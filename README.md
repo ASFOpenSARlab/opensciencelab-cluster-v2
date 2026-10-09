@@ -57,7 +57,7 @@ Lambda `kubectl`: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab
 
 JupyterHub: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L648) | [Helm Releases](https://hub.jupyter.org/helm-chart/) | [Changelog](https://jupyterhub.readthedocs.io/en/stable/reference/changelog.html)
 
-Load Balancer Controller: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L931) | [Docs](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/)
+Load Balancer Controller: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L931) | [Docs](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/) | [Find supported kubernetes version a tag](https://github.com/kubernetes-sigs/aws-load-balancer-controller/blob/v3.6.0/docs/deploy/installation.md?plain=1)
 
 EC2 Autoscaler: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L1604) | [ArtifactHub Repo](https://artifacthub.io/packages/helm/cluster-autoscaler/cluster-autoscaler) | [k8s Compatability Table](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler#releases)
 
