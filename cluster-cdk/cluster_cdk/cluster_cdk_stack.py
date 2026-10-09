@@ -193,7 +193,7 @@ class ClusterCdkStack(Stack):
             self,
             "CoreDnsAddon",
             addon_name="coredns",
-            addon_version="v1.12.3-eksbuild.1",
+            addon_version="v1.14.7-eksbuild.10",
             cluster=self.cluster,
             # configuration_values={},
         )
