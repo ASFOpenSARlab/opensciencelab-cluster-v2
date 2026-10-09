@@ -63,7 +63,6 @@ EC2 Autoscaler: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-c
 
 Cryptnono: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L1397) | [GitHub Repo](https://github.com/cryptnono/cryptnono)
 
-
 ### EKS Add-Ons
 
 VPC CNI: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L188) | [AWS Docs](https://docs.aws.amazon.com/eks/latest/userguide/managing-vpc-cni.html#vpc-cni-latest-available-version)
