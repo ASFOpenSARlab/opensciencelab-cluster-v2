@@ -87,6 +87,10 @@ CSI Driver version: [cluster code](https://github.com/ASFOpenSARlab/opensciencel
 Any other custom images that do not inherit from the OSL JupyterLab image may also
 require an update.
 
+### Requirements
+
+Package list: [`requirements.txt`](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/main/cluster-cdk/requirements.txt)
+
 ## Pre-Deployment Information
 
 ### AWS Accounts
