@@ -66,7 +66,7 @@ Cryptnono: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluste
 
 ### EKS Add-Ons
 
-VPC CNI: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L188) | [AWS Docs](https://docs.aws.amazon.com/eks/latest/userguide/managing-vpc-cni.html)
+VPC CNI: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L188) | [AWS Docs](https://docs.aws.amazon.com/eks/latest/userguide/managing-vpc-cni.html#vpc-cni-latest-available-version)
 
 Core DNS: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L196) | [AWS Docs](https://docs.aws.amazon.com/eks/latest/userguide/managing-coredns.html#updating-coredns-eks-add-on)
 
