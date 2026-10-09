@@ -207,7 +207,7 @@ class ClusterCdkStack(Stack):
             self,
             "CloudwatchObserv",
             addon_name="amazon-cloudwatch-observability",
-            addon_version="v4.10.2-eksbuild.1",
+            addon_version="v6.7.0-eksbuild.1",
             cluster=self.cluster,
         )
 
