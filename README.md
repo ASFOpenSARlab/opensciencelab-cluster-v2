@@ -10,6 +10,7 @@ For more information or to report a bug, contact [ASF](mailto:uso@asf.alaska.edu
 
 - [Architecture](#architecture)
 - [Cluster Dependencies in Other GitHub repos](#cluster-dependencies-in-other-github-repos)
+- [Updating Cluster Dependencies](#updating-cluster-dependencies)
 - [Pre-Deployment Information](#pre-deployment-information)
 - [Building and Deploying the Cluster (GitHub Actions)](#building-and-deploying-the-cluster-github-actions-approx-60-minutes)
 - [Building and Deploying the Cluster (Locally)](#building-and-deploying-the-cluster-locally-approx-40-minutes)
@@ -37,6 +38,57 @@ The following GitHub repos are meant to be used in tandem:
 - [GitPuller Extension](https://github.com/ASFOpenSARlab/nbgitpuller-jl-interface)
 - [JupyterLab Tours Extensions](https://github.com/ASFOpenSARlab/opensciencelab-tours)
 - [Addtional JupyterLab Extensions](https://github.com/ASFOpenSARlab/opensarlab-extensions)
+
+## Updating Cluster Dependencies
+
+### AWS Resources
+
+EKS Upgrade Guide: [AWS Docs](https://docs.aws.amazon.com/eks/latest/userguide/update-cluster.html))
+
+EKS Changelog Summaries: [AWS Docs](https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions-standard.html)
+
+### Kubernetes
+
+EKS: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L175) | [AWS Docs](https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks_v2/README.html#provisioning-clusters)
+
+Lambda `kubectl`: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L108) | [PyPI Registry](https://pypi.org/search/?q=aws-cdk.lambda-layer-kubectl-v)
+
+### Helm Charts
+
+JupyterHub: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L648) | [Helm Releases](https://hub.jupyter.org/helm-chart/) | [Changelog](https://jupyterhub.readthedocs.io/en/stable/reference/changelog.html)
+
+Load Balancer Controller: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L931) | [Docs](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/) | [Find supported kubernetes version a tag](https://github.com/kubernetes-sigs/aws-load-balancer-controller/blob/v3.6.0/docs/deploy/installation.md?plain=1)
+
+EC2 Autoscaler: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L1604) | [ArtifactHub Repo](https://artifacthub.io/packages/helm/cluster-autoscaler/cluster-autoscaler) | [k8s Compatability Table](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler#releases)
+
+Cryptnono: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L1397) | [GitHub Repo](https://github.com/cryptnono/cryptnono)
+
+### EKS Add-Ons
+
+VPC CNI: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L188) | [AWS Docs](https://docs.aws.amazon.com/eks/latest/userguide/managing-vpc-cni.html#vpc-cni-latest-available-version)
+
+Core DNS: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L196) | [AWS Docs](https://docs.aws.amazon.com/eks/latest/userguide/managing-coredns.html#updating-coredns-eks-add-on)
+
+Amazon Cloudwatch Observability: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L210) | [GitHub Repo](https://github.com/aws-observability/helm-charts) | [AWS Docs](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/install-CloudWatch-Observability-EKS-addon.html)
+
+I cannot find any documentation associating a version of this package with a specific kubernetes version, so it may be reasonable to use the latest version of the package. All EKS addon package versions have the form `v<VERSION>-eksbuild.1`.
+
+Kube Proxy: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L220) | [AWS Docs](https://docs.aws.amazon.com/eks/latest/userguide/managing-kube-proxy.html)
+
+CSI Driver version: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L594) | [GitHub Releases](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/releases)
+
+### Docker Images
+
+[OSL JupyterLab](https://github.com/ASFOpenSARlab/deployment-opensarlab-container/tree/main/images/sar)
+
+[JupyterHub image](https://github.com/ASFOpenSARlab/opensciencelab-system-containers/tree/main/jupyterhub-image)
+
+Any other custom images that do not inherit from the OSL JupyterLab image may also
+require an update.
+
+### Requirements
+
+Package list: [`requirements.txt`](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/main/cluster-cdk/requirements.txt)
 
 ## Pre-Deployment Information
 
