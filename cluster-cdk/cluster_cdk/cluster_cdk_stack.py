@@ -208,81 +208,25 @@ class ClusterCdkStack(Stack):
             # configuration_values={},
         )
 
-        # Prometheus config for scraping JupyterHub and Kubelet metrics. This is used by the CloudWatch Observability addon.
-        prometheus_yaml = textwrap.dedent("""
-            global:
-              scrape_interval: 60s
-              scrape_timeout: 10s
-        
-            scrape_configs:
-              # --- JOB 1: JUPYTERHUB APPLICATION METRICS ---
-              - job_name: 'jupyterhub-metrics'
-                metrics_path: '/hub/metrics'
-                kubernetes_sd_configs:
-                  - role: service
-                relabel_configs:
-                  - source_labels: [__meta_kubernetes_service_label_app]
-                    action: keep
-                    regex: jupyterhub
-                  - source_labels: [__meta_kubernetes_service_port_name]
-                    action: keep
-                    regex: http
-        
-              # --- JOB 2: POD-LEVEL STORAGE/PVC METRICS (VIA KUBELET PROXY) ---
-              - job_name: 'kubernetes-pods-pvc-metrics'
-                scheme: https
-                tls_config:
-                  ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-                  insecure_skip_verify: true
-                bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-                kubernetes_sd_configs:
-                  - role: node
-                relabel_configs:
-                  - action: labelmap
-                    regex: __meta_kubernetes_node_label_(.+)
-                  - target_label: __address__
-                    replacement: kubernetes.default.svc:443
-                  - source_labels: [__meta_kubernetes_node_name]
-                    regex: (.+)
-                    target_label: __metrics_path__
-                    replacement: /api/v1/nodes/${1}/proxy/metrics
-                metric_relabel_configs:
-                  - source_labels: [__name__]
-                    action: keep
-                    regex: kubelet_volume_stats_(used_bytes|capacity_bytes|available_bytes)
-        """)
+        pod_identity_agent_addon = eks.Addon(
+            self,
+            "EksPodIdentityAgentAddon",
+            addon_name="eks-pod-identity-agent",
+            cluster=self.cluster,
+        )
+        pod_identity_agent_addon.node.add_dependency(self.cluster)
+
+        #####################################################################
+        #
+        #    Setup Proemtheus and CloudWatch Observability
+        #
+        #####################################################################
 
         ## Look up latest default version of amazon-cloudwatch-observability:
         # aws eks describe-addon-versions \
         #   --addon-name amazon-cloudwatch-observability \
         #   --kubernetes-version 1.35 \
         #   --query "addons[0].addonVersions[?compatibilities[0].defaultVersion]"
-
-        # https://docs.aws.amazon.com/eks/latest/userguide/cluster-logging.html
-        # https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Container-Insights-setup-logs.html
-        # https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Container-Insights-setup-metrics.html
-        cloudwatch_observability_role = iam.Role(
-            self,
-            "CloudWatchObservabilityPodIdentityRole",
-            assumed_by=iam.ServicePrincipal("pods.eks.amazonaws.com").with_conditions(
-                {"StringEquals": {"aws:SourceAccount": self.account}}
-            ),
-            managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "CloudWatchAgentServerPolicy"
-                )
-            ],
-        )
-
-        cloudwatch_pod_identity = eks.CfnPodIdentityAssociation(
-            self,
-            "CloudWatchObservabilityPodIdentityAssociation",
-            cluster_name=self.cluster.cluster_name,
-            namespace="amazon-cloudwatch",
-            role_arn=cloudwatch_observability_role.role_arn,
-            service_account="cloudwatch-agent",
-        )
-
         self.cw_observe_addon = eks.Addon(
             self,
             "CloudwatchObserv",
@@ -314,7 +258,83 @@ class ClusterCdkStack(Stack):
         )
 
         self.cw_observe_addon.node.add_dependency(self.cluster)
+
+        # For cloudwatch to scrape k8s metrics, we need to create a pod identity role in the
+        # amazon-cloudwatch namespace and associate it with the cloudwatch-agent service account.
+        # The service account is then associated with the rbac role that give permissions to scrape metrics from the cluster.
+        # This chain of trust allows the cloudwatch-agent to scrape metrics from the cluster and send them to CloudWatch.
+        # See https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Container-Insights-Permissions-EKS.html
+        cloudwatch_observability_role = iam.Role(
+            self,
+            "CloudWatchObservabilityPodIdentityRole",
+            assumed_by=iam.ServicePrincipal("pods.eks.amazonaws.com").with_conditions(
+                {
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                        "aws:SourceArn": self.cluster.cluster_arn,
+                    }
+                }
+            ),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name(
+                    "CloudWatchAgentServerPolicy"
+                )
+            ],
+        )
+
+        # EKS Pod Identity trust policies must allow both AssumeRole and TagSession.
+        cloudwatch_observability_role.assume_role_policy.add_statements(
+            iam.PolicyStatement(
+                principals=[iam.ServicePrincipal("pods.eks.amazonaws.com")],
+                actions=["sts:AssumeRole", "sts:TagSession"],
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                        "aws:SourceArn": self.cluster.cluster_arn,
+                    }
+                },
+            )
+        )
+
+        cloudwatch_pod_identity = eks.CfnPodIdentityAssociation(
+            self,
+            "CloudWatchObservabilityPodIdentityAssociation",
+            cluster_name=self.cluster.cluster_name,
+            namespace="amazon-cloudwatch",
+            role_arn=cloudwatch_observability_role.role_arn,
+            service_account="cloudwatch-agent",
+        )
+
+        cloudwatch_custom_pod_identity = eks.CfnPodIdentityAssociation(
+            self,
+            "CloudWatchObservabilityCustomPodIdentityAssociation",
+            cluster_name=self.cluster.cluster_name,
+            namespace="amazon-cloudwatch",
+            role_arn=cloudwatch_observability_role.role_arn,
+            service_account="cloudwatch-agent-custom",
+        )
+
         cloudwatch_pod_identity.node.add_dependency(self.cw_observe_addon)
+        cloudwatch_custom_pod_identity.node.add_dependency(self.cw_observe_addon)
+        cloudwatch_pod_identity.node.add_dependency(pod_identity_agent_addon)
+        cloudwatch_custom_pod_identity.node.add_dependency(pod_identity_agent_addon)
+
+        cloudwatch_service_account = eks.KubernetesManifest(
+            self,
+            "CloudWatchCustomServiceAccount",
+            cluster=self.cluster,
+            manifest=[
+                {
+                    "apiVersion": "v1",
+                    "kind": "ServiceAccount",
+                    "metadata": {
+                        "name": "cloudwatch-agent-custom",
+                        "namespace": "amazon-cloudwatch",
+                    },
+                }
+            ],
+        )
+        cloudwatch_service_account.node.add_dependency(self.cw_observe_addon)
 
         # Permit Prometheus service discovery and kubelet proxy requests for node metrics.
         cloudwatch_rbac_manifest = eks.KubernetesManifest(
@@ -343,7 +363,12 @@ class ClusterCdkStack(Stack):
                             "kind": "ServiceAccount",
                             "name": "cloudwatch-agent",
                             "namespace": "amazon-cloudwatch",
-                        }
+                        },
+                        {
+                            "kind": "ServiceAccount",
+                            "name": "cloudwatch-agent-custom",
+                            "namespace": "amazon-cloudwatch",
+                        },
                     ],
                     "roleRef": {
                         "apiGroup": "rbac.authorization.k8s.io",
@@ -356,38 +381,240 @@ class ClusterCdkStack(Stack):
 
         cloudwatch_rbac_manifest.node.add_dependency(self.cw_observe_addon)
 
+        # Prometheus config for scraping JupyterHub and kubelet volume metrics. This is used by the CloudWatch Observability addon.
+        prometheus_yaml = textwrap.dedent("""
+            global:
+              scrape_interval: 60s
+              scrape_timeout: 10s
+
+            scrape_configs:
+              # --- JOB 1: JUPYTERHUB APPLICATION METRICS ---
+              - job_name: "jupyterhub-metrics"
+                metrics_path: "/hub/metrics"
+                kubernetes_sd_configs:
+                  - role: service
+                relabel_configs:
+                  - source_labels: [__meta_kubernetes_service_label_app]
+                    action: keep
+                    regex: jupyterhub
+                  - source_labels: [__meta_kubernetes_service_port_name]
+                    action: keep
+                    regex: http
+
+              # --- JOB 2: KUBELET VOLUME METRICS (node proxy) ---
+              - job_name: "kubelet-volume-stats"
+                scheme: https
+                tls_config:
+                  ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                  insecure_skip_verify: true
+                bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+                kubernetes_sd_configs:
+                  - role: node
+                relabel_configs:
+                  - source_labels: [__meta_kubernetes_node_name]
+                    target_label: __address__
+                    replacement: kubernetes.default.svc:443
+                  - source_labels: [__meta_kubernetes_node_name]
+                    regex: (.+)
+                    target_label: __metrics_path__
+                    replacement: /api/v1/nodes/$1/proxy/metrics
+                  - source_labels: [__meta_kubernetes_node_name]
+                    target_label: node
+                    replacement: $1
+                metric_relabel_configs:
+                  - source_labels: [__name__]
+                    regex: kubelet_volume_stats_(used_bytes|capacity_bytes|available_bytes)
+                    action: keep
+        """)
+
+        # Create a dedicated CloudWatch agent DaemonSet with an explicit custom Prometheus config.
+        # The addon-managed cloudwatch-agent pod continues to use the default config, so we need a
+        # separate agent instance that mounts the kubelet scrape config for JupyterHub and PVC volume metrics.
         prometheus_manifest = eks.KubernetesManifest(
             self,
             "CloudWatchPrometheusScraperConfig",
-            cluster=self.cluster,  # Direct attachment
+            cluster=self.cluster,
             manifest=[
                 {
                     "apiVersion": "v1",
                     "kind": "ConfigMap",
                     "metadata": {
-                        "name": "prometheus-cwagentconfig",
+                        "name": "cloudwatch-agent-custom",
                         "namespace": "amazon-cloudwatch",
                     },
                     "data": {
                         "cwagentconfig.json": json.dumps(
                             {
+                                "agent": {
+                                    "debug": True,
+                                },
                                 "logs": {
                                     "metrics_collected": {
                                         "prometheus": {
-                                            "prometheus_config_path": "env:prometheus_config_path",
-                                            "embed_metric_metadata": True,
+                                            "cluster_name": self.LAB_SHORT_NAME,
+                                            "log_group_name": f"/aws/containerinsights/{self.LAB_SHORT_NAME}/prometheus",
+                                            "prometheus_config_path": "/etc/prometheus/prometheus.yaml",
+                                            "emf_processor": {
+                                                "metric_declaration_dedup": True,
+                                                "metric_namespace": "ContainerInsights/Prometheus",
+                                                "metric_unit": {
+                                                    "kubelet_volume_stats_used_bytes": "Bytes",
+                                                    "kubelet_volume_stats_capacity_bytes": "Bytes",
+                                                    "kubelet_volume_stats_available_bytes": "Bytes",
+                                                },
+                                                "metric_declaration": [
+                                                    {
+                                                        "source_labels": ["job"],
+                                                        "label_matcher": "^kubelet-volume-stats$",
+                                                        "dimensions": [
+                                                            [
+                                                                "ClusterName",
+                                                                "node",
+                                                                "namespace",
+                                                                "persistentvolumeclaim",
+                                                            ]
+                                                        ],
+                                                        "metric_selectors": [
+                                                            "^kubelet_volume_stats_used_bytes$",
+                                                            "^kubelet_volume_stats_capacity_bytes$",
+                                                            "^kubelet_volume_stats_available_bytes$",
+                                                        ],
+                                                    },
+                                                    {
+                                                        "source_labels": ["job"],
+                                                        "label_matcher": "^kubelet-volume-stats$",
+                                                        "dimensions": [
+                                                            ["ClusterName", "node"]
+                                                        ],
+                                                        "metric_selectors": ["^up$"],
+                                                    },
+                                                    {
+                                                        "source_labels": ["job"],
+                                                        "label_matcher": "^jupyterhub-metrics$",
+                                                        "dimensions": [
+                                                            ["ClusterName", "job"]
+                                                        ],
+                                                        "metric_selectors": [".+"],
+                                                    },
+                                                ],
+                                            },
                                         }
                                     }
-                                }
+                                },
                             }
                         ),
-                        "prometheus.yaml": prometheus_yaml,
                     },
-                }
+                },
+                {
+                    "apiVersion": "v1",
+                    "kind": "ConfigMap",
+                    "metadata": {
+                        "name": "cloudwatch-prometheus-config",
+                        "namespace": "amazon-cloudwatch",
+                    },
+                    "data": {"prometheus.yaml": prometheus_yaml},
+                },
+                {
+                    "apiVersion": "apps/v1",
+                    "kind": "DaemonSet",
+                    "metadata": {
+                        "name": "cloudwatch-agent-custom",
+                        "namespace": "amazon-cloudwatch",
+                    },
+                    "spec": {
+                        "selector": {"matchLabels": {"app": "cloudwatch-agent-custom"}},
+                        "template": {
+                            "metadata": {"labels": {"app": "cloudwatch-agent-custom"}},
+                            "spec": {
+                                "serviceAccountName": "cloudwatch-agent-custom",
+                                "containers": [
+                                    {
+                                        "name": "cloudwatch-agent",
+                                        "image": "amazon/cloudwatch-agent:latest",
+                                        "imagePullPolicy": "IfNotPresent",
+                                        "volumeMounts": [
+                                            {
+                                                "name": "cwagentconfig",
+                                                "mountPath": "/etc/cwagentconfig",
+                                                "readOnly": True,
+                                            },
+                                            {
+                                                "name": "prometheusconfig",
+                                                "mountPath": "/etc/prometheus",
+                                                "readOnly": True,
+                                            },
+                                            {
+                                                "name": "rootfs",
+                                                "mountPath": "/rootfs",
+                                                "readOnly": True,
+                                            },
+                                            {
+                                                "name": "dockersock",
+                                                "mountPath": "/var/run/docker.sock",
+                                                "readOnly": True,
+                                            },
+                                            {
+                                                "name": "containerdsock",
+                                                "mountPath": "/run/containerd/containerd.sock",
+                                                "readOnly": True,
+                                            },
+                                            {
+                                                "name": "criologs",
+                                                "mountPath": "/var/log/pods",
+                                                "readOnly": True,
+                                            },
+                                            {
+                                                "name": "kubeletpodresources",
+                                                "mountPath": "/var/lib/kubelet/pod-resources",
+                                                "readOnly": True,
+                                            },
+                                        ],
+                                    }
+                                ],
+                                "volumes": [
+                                    {
+                                        "name": "cwagentconfig",
+                                        "configMap": {
+                                            "name": "cloudwatch-agent-custom"
+                                        },
+                                    },
+                                    {
+                                        "name": "prometheusconfig",
+                                        "configMap": {
+                                            "name": "cloudwatch-prometheus-config"
+                                        },
+                                    },
+                                    {"name": "rootfs", "hostPath": {"path": "/"}},
+                                    {
+                                        "name": "dockersock",
+                                        "hostPath": {"path": "/var/run/docker.sock"},
+                                    },
+                                    {
+                                        "name": "containerdsock",
+                                        "hostPath": {
+                                            "path": "/run/containerd/containerd.sock"
+                                        },
+                                    },
+                                    {
+                                        "name": "criologs",
+                                        "hostPath": {"path": "/var/log/pods"},
+                                    },
+                                    {
+                                        "name": "kubeletpodresources",
+                                        "hostPath": {
+                                            "path": "/var/lib/kubelet/pod-resources"
+                                        },
+                                    },
+                                ],
+                            },
+                        },
+                    },
+                },
             ],
         )
 
         prometheus_manifest.node.add_dependency(self.cw_observe_addon)
+        # prometheus_manifest.node.add_dependency(cloudwatch_pod_identity)
 
         #####################################################################
         #
