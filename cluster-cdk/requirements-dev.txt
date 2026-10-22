@@ -1,5 +1,5 @@
-aws-cdk-lib==2.273.0
-boto3==1.43.111
+aws-cdk-lib==2.274.0
+boto3==1.43.117
 kubernetes==35.0.0
 pytest>=9.1.1
 requests==2.34.2
