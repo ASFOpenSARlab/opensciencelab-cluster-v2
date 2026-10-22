@@ -48,6 +48,7 @@ jobs:
       DAYS_TILL_VOLUME_DELETION: ${{ vars.DAYS_TILL_VOLUME_DELETION }}
       AZ_LETTER: ${{ vars.AZ_LETTER }}
       BUILD_TAG: ${{ github.ref_name }}
+      JSII_RUNTIME_PACKAGE_CACHE: disabled
     steps:
       - name: Log Environment
         run: |
