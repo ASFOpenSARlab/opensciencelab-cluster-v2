@@ -15,8 +15,6 @@ LAB_SHORT_NAME = os.environ["LAB_SHORT_NAME"]
 CLUSTER_NAME = os.environ["CLUSTER_NAME"]
 REGION_NAME = os.environ["AWS_REGION"]
 AZ_NAME = os.environ["AZ_NAME"]
-COST_TAG_KEY = os.environ["COST_TAG_KEY"]
-COST_TAG_VALUE = os.environ["COST_TAG_VALUE"]
 NAMESPACE = os.environ["K8s_NAMESPACE"]
 
 
@@ -278,6 +276,8 @@ def get_user_volume(
                         # Volumes need to tagged for the CSI driver to properly manage them
                         {"Key": "ebs.csi.aws.com/cluster", "Value": "true"},
                         {"Key": "ebs.csi.aws.com/cluster-name", "Value": CLUSTER_NAME},
+                        {"Key": "osl-lab-name", "Value": LAB_SHORT_NAME},
+                        {"Key": "osl-username", "Value": username},
                     ],
                 },
             ],
@@ -331,12 +331,13 @@ def get_user_volume(
                             "Key": "kubernetes.io/created-for/pvc/name",
                             "Value": pvc_name,
                         },
-                        {"Key": COST_TAG_KEY, "Value": COST_TAG_VALUE},
                         {"Key": "RestoredFromSnapshot", "Value": "false"},
                         {"Key": "is-jupyterhub-user", "Value": "true"},
                         # Volumes need to tagged for the CSI driver to properly manage them
                         {"Key": "ebs.csi.aws.com/cluster", "Value": "true"},
                         {"Key": "ebs.csi.aws.com/cluster-name", "Value": CLUSTER_NAME},
+                        {"Key": "osl-lab-name", "Value": LAB_SHORT_NAME},
+                        {"Key": "osl-username", "Value": username},
                     ],
                 },
             ],

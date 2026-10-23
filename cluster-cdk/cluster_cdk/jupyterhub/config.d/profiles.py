@@ -179,7 +179,9 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
                 "kubespawner_override": {
                     "extra_labels": {
                         "opensciencelab.local/node-type": f"user-{node_name_escaped}",
-                        "opensciencelab.local/user-profile-name": escaped_lab_profile_name,
+                        "opensciencelab.local/osl-lab-name": LAB_SHORT_NAME,
+                        "opensciencelab.local/osl-lab-profile": escaped_lab_profile_name,
+                        "opensciencelab.local/osl-username": username,
                         "sidecar.istio.io/inject": "false",
                         "opensciencelab.local/egress-profile": "none",
                     },
