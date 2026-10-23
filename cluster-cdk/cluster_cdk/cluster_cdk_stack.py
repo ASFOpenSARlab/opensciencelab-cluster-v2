@@ -217,7 +217,7 @@ class ClusterCdkStack(Stack):
             self,
             "KubeProxyAddon",
             addon_name="kube-proxy",
-            addon_version="v1.35.3-eksbuild.25",
+            addon_version="v1.36.0-eksbuild.21",
             cluster=self.cluster,
             # configuration_values={},
         )
