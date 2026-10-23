@@ -103,7 +103,7 @@ class ClusterCdkStack(Stack):
         self.lab_nodes = [{"name": name} | body for name, body in nodes.items()]
 
         # All resources in this specific stack will get this tag
-        Tags.of(self).add("osl-lab-name", self.LAB_SHORT_NAME)  # type: ignore
+        Tags.of(self).add("opensciencelab.local/lab-name", self.LAB_SHORT_NAME)  # type: ignore
 
         self.kubectl_layer = lambda_layer_kubectl_v35.KubectlV35Layer(self, "kubectl")
 
@@ -337,7 +337,10 @@ class ClusterCdkStack(Stack):
                         ec2.CfnLaunchTemplate.TagSpecificationProperty(
                             resource_type="instance",
                             tags=[
-                                CfnTag(key="osl-lab-name", value=self.LAB_SHORT_NAME),
+                                CfnTag(
+                                    key="opensciencelab.local/lab-name",
+                                    value=self.LAB_SHORT_NAME,
+                                ),
                                 CfnTag(
                                     key="Name",
                                     value=f"{node['name']}--{self.LAB_SHORT_NAME}",
@@ -347,7 +350,10 @@ class ClusterCdkStack(Stack):
                         ec2.CfnLaunchTemplate.TagSpecificationProperty(
                             resource_type="volume",
                             tags=[
-                                CfnTag(key="osl-lab-name", value=self.LAB_SHORT_NAME),
+                                CfnTag(
+                                    key="opensciencelab.local/lab-name",
+                                    value=self.LAB_SHORT_NAME,
+                                ),
                                 CfnTag(
                                     key="Name",
                                     value=f"{node['name']}-root--{self.LAB_SHORT_NAME}",
@@ -558,7 +564,7 @@ class ClusterCdkStack(Stack):
                 "parameters": {
                     "type": "gp3",
                     "fsType": "ext4",
-                    "tagSpecification_1": f"osl-lab-name={self.LAB_SHORT_NAME}",
+                    "tagSpecification_1": f"opensciencelab.local/lab-name={self.LAB_SHORT_NAME}",
                     "tagSpecification_2": f"Name=hub-db-dir--{self.LAB_SHORT_NAME}",
                     "tagSpecification_3": "is-jupyterhub-db=true",
                     # The CSI driver is expecting volumes to be tagged a certain way
@@ -609,7 +615,7 @@ class ClusterCdkStack(Stack):
                     "extraCreateMetadata": True,
                     "k8sTagClusterId": cluster_name,
                     "extraVolumeTags": {
-                        "osl-lab-name": self.LAB_SHORT_NAME,
+                        "opensciencelab.local/lab-name": self.LAB_SHORT_NAME,
                     },
                     "serviceAccount": {
                         "create": False,

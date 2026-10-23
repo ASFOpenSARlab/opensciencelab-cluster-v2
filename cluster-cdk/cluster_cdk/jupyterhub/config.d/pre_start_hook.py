@@ -276,8 +276,14 @@ def get_user_volume(
                         # Volumes need to tagged for the CSI driver to properly manage them
                         {"Key": "ebs.csi.aws.com/cluster", "Value": "true"},
                         {"Key": "ebs.csi.aws.com/cluster-name", "Value": CLUSTER_NAME},
-                        {"Key": "osl-lab-name", "Value": LAB_SHORT_NAME},
-                        {"Key": "osl-username", "Value": username},
+                        {
+                            "Key": "opensciencelab.local/lab-name",
+                            "Value": LAB_SHORT_NAME,
+                        },
+                        {
+                            "Key": "opensciencelab.local/username",
+                            "Value": username,
+                        },
                     ],
                 },
             ],
@@ -336,8 +342,11 @@ def get_user_volume(
                         # Volumes need to tagged for the CSI driver to properly manage them
                         {"Key": "ebs.csi.aws.com/cluster", "Value": "true"},
                         {"Key": "ebs.csi.aws.com/cluster-name", "Value": CLUSTER_NAME},
-                        {"Key": "osl-lab-name", "Value": LAB_SHORT_NAME},
-                        {"Key": "osl-username", "Value": username},
+                        {
+                            "Key": "opensciencelab.local/lab-name",
+                            "Value": LAB_SHORT_NAME,
+                        },
+                        {"Key": "opensciencelab.local/username", "Value": username},
                     ],
                 },
             ],
