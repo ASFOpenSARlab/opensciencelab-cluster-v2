@@ -1,7 +1,7 @@
-aws-cdk-cli==2.1145.0
-aws-cdk-lib==2.273.0
-aws-cdk.lambda_layer_kubectl_v35==2.2.2
-boto3==1.43.111
+aws-cdk-cli==2.1146.0
+aws-cdk-lib==2.274.0
+aws-cdk.lambda_layer_kubectl_v36==2.0.1
+boto3==1.43.117
 constructs>=10.8.1,<11.0.0
 requests>=2.34.2
-cdk-monitoring-constructs>=10.3.1
+cdk-monitoring-constructs>=10.3.2
