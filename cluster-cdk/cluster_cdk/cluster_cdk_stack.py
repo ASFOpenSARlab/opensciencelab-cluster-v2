@@ -93,6 +93,10 @@ class ClusterCdkStack(Stack):
 
         self.K8s_NAMESPACE = "jupyter"
 
+        self.PREFIX_NAMESPACE = os.getenv(
+            "PREFIX_NAMESPACE", "opensciencelab.asf.alaska.edu"
+        )
+
         # Get nodes and profiles
         profiles = tomllib.loads(os.environ["PROFILE_DEFINITIONS"])
         nodes = tomllib.loads(os.environ["NODE_DEFINITIONS"])
@@ -103,7 +107,7 @@ class ClusterCdkStack(Stack):
         self.lab_nodes = [{"name": name} | body for name, body in nodes.items()]
 
         # All resources in this specific stack will get this tag
-        Tags.of(self).add("osl-billing", self.LAB_SHORT_NAME)  # type: ignore
+        Tags.of(self).add(f"{self.PREFIX_NAMESPACE}/lab-name", self.LAB_SHORT_NAME)  # type: ignore
 
         self.kubectl_layer = lambda_layer_kubectl_v36.KubectlV36Layer(self, "kubectl")
 
@@ -286,14 +290,14 @@ class ClusterCdkStack(Stack):
             node_labels = node.get("labels", {})
             if node_type == "core":
                 node_labels["hub.jupyter.org/node-purpose"] = "core"
-                node_labels["opensciencelab.local/node-type"] = "core"
+                node_labels[f"{self.PREFIX_NAMESPACE}/node-type"] = "core"
 
             elif node_type == "user":
                 node_labels["hub.jupyter.org/node-purpose"] = "user"
-                node_labels["opensciencelab.local/node-type"] = (
+                node_labels[f"{self.PREFIX_NAMESPACE}/node-type"] = (
                     f"user-{node_name_escaped}"
                 )
-                node_labels["opensciencelab.local/cryptnono-enabled"] = str(
+                node_labels[f"{self.PREFIX_NAMESPACE}/cryptnono-enabled"] = str(
                     self.IS_CRYPTNONO_ENABLED
                 ).lower()
 
@@ -337,7 +341,10 @@ class ClusterCdkStack(Stack):
                         ec2.CfnLaunchTemplate.TagSpecificationProperty(
                             resource_type="instance",
                             tags=[
-                                CfnTag(key="osl-billing", value=self.LAB_SHORT_NAME),
+                                CfnTag(
+                                    key=f"{self.PREFIX_NAMESPACE}/lab-name",
+                                    value=self.LAB_SHORT_NAME,
+                                ),
                                 CfnTag(
                                     key="Name",
                                     value=f"{node['name']}--{self.LAB_SHORT_NAME}",
@@ -347,7 +354,10 @@ class ClusterCdkStack(Stack):
                         ec2.CfnLaunchTemplate.TagSpecificationProperty(
                             resource_type="volume",
                             tags=[
-                                CfnTag(key="osl-billing", value=self.LAB_SHORT_NAME),
+                                CfnTag(
+                                    key=f"{self.PREFIX_NAMESPACE}/lab-name",
+                                    value=self.LAB_SHORT_NAME,
+                                ),
                                 CfnTag(
                                     key="Name",
                                     value=f"{node['name']}-root--{self.LAB_SHORT_NAME}",
@@ -558,7 +568,7 @@ class ClusterCdkStack(Stack):
                 "parameters": {
                     "type": "gp3",
                     "fsType": "ext4",
-                    "tagSpecification_1": f"osl-billing={self.LAB_SHORT_NAME}",
+                    "tagSpecification_1": f"{self.PREFIX_NAMESPACE}/lab-name={self.LAB_SHORT_NAME}",
                     "tagSpecification_2": f"Name=hub-db-dir--{self.LAB_SHORT_NAME}",
                     "tagSpecification_3": "is-jupyterhub-db=true",
                     # The CSI driver is expecting volumes to be tagged a certain way
@@ -609,13 +619,13 @@ class ClusterCdkStack(Stack):
                     "extraCreateMetadata": True,
                     "k8sTagClusterId": cluster_name,
                     "extraVolumeTags": {
-                        "osl-billing": self.LAB_SHORT_NAME,
+                        f"{self.PREFIX_NAMESPACE}/lab-name": self.LAB_SHORT_NAME,
                     },
                     "serviceAccount": {
                         "create": False,
                         "name": csi_service_account.service_account_name,
                     },
-                    "nodeSelector": {"opensciencelab.local/node-type": "core"},
+                    "nodeSelector": {f"{self.PREFIX_NAMESPACE}/node-type": "core"},
                 },
             },
         )
@@ -839,9 +849,8 @@ class ClusterCdkStack(Stack):
                     "DAYS_TILL_SNAPSHOT_DELETION": self.DAYS_TILL_SNAPSHOT_DELETION,
                     "CLUSTER_NAME": cluster_name,
                     "AZ_NAME": f"{self.region}{self.AZ_LETTER}",
-                    "COST_TAG_KEY": "osl-billing",
-                    "COST_TAG_VALUE": self.LAB_SHORT_NAME,
                     "K8s_NAMESPACE": self.K8s_NAMESPACE,
+                    "PREFIX_NAMESPACE": self.PREFIX_NAMESPACE,
                 },
                 "extraFiles": (
                     {}
@@ -954,7 +963,7 @@ class ClusterCdkStack(Stack):
                 },
                 "region": self.region,
                 "vpcId": self.cluster.vpc.vpc_id,
-                "nodeSelector": {"opensciencelab.local/node-type": "core"},
+                "nodeSelector": {f"{self.PREFIX_NAMESPACE}/node-type": "core"},
                 "enableWaf": False,
                 "enableWafv2": False,
                 "defaultTags": {"AlbControllerManaged": True},
@@ -976,7 +985,7 @@ class ClusterCdkStack(Stack):
                     "namespace": self.K8s_NAMESPACE,
                     "labels": {
                         "app": "jupyterhub",
-                        "opensciencelab.local/node-type": "core",
+                        f"{self.PREFIX_NAMESPACE}/node-type": "core",
                     },
                     "annotations": {
                         "service.beta.kubernetes.io/aws-load-balancer-name": f"eks-cluster-{self.LAB_SHORT_NAME}",
@@ -1351,7 +1360,7 @@ class ClusterCdkStack(Stack):
                                     "spec": {
                                         "restartPolicy": "OnFailure",
                                         "nodeSelector": {
-                                            "opensciencelab.local/node-type": "core"
+                                            f"{self.PREFIX_NAMESPACE}/node-type": "core"
                                         },
                                         "containers": [
                                             {
@@ -1374,7 +1383,7 @@ class ClusterCdkStack(Stack):
 
             # Install crytnono helm chart with values
             cryptnono_helm_values = {
-                "nodeSelector": {"opensciencelab.local/cryptnono-enabled": "true"},
+                "nodeSelector": {f"{self.PREFIX_NAMESPACE}/cryptnono-enabled": "true"},
                 "detectors": {
                     "execwhacker": {
                         "configs": {
