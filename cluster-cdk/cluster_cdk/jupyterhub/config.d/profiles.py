@@ -14,6 +14,7 @@ from opensarlab.auth import encryptedjwt
 LAB_PROFILES: list = json.loads(os.environ.get("LAB_PROFILES", "[]"))
 LAB_SHORT_NAME: str | None = os.environ.get("LAB_SHORT_NAME", None)
 PORTAL_DOMAINS: str = os.environ.get("PORTAL_DOMAINS", "")
+PREFIX_NAMESPACE: str = os.environ["PREFIX_NAMESPACE"]
 
 
 class My401Exception(Exception):
@@ -96,7 +97,7 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
                 "description": "You don't have access to any lab profiles. If you feel this is in error, please contact OSL Admin.",
                 "default": False,  # Setting to False will ensure that the profile option is shown and not automatically started
                 "kubespawner_override": {
-                    "node_selector": {"opensciencelab.local/node-type": "no_profiles"},
+                    "node_selector": {f"{PREFIX_NAMESPACE}/node-type": "no_profiles"},
                 },
             }
         ]
@@ -178,15 +179,15 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
                 "default": lab_profile.get("default", None),
                 "kubespawner_override": {
                     "extra_labels": {
-                        "opensciencelab.local/node-type": f"user-{node_name_escaped}",
-                        "opensciencelab.local/lab-name": LAB_SHORT_NAME,
-                        "opensciencelab.local/lab-profile": escaped_lab_profile_name,
-                        "opensciencelab.local/username": username,
+                        f"{PREFIX_NAMESPACE}/node-type": f"user-{node_name_escaped}",
+                        f"{PREFIX_NAMESPACE}/lab-name": LAB_SHORT_NAME,
+                        f"{PREFIX_NAMESPACE}/lab-profile": escaped_lab_profile_name,
+                        f"{PREFIX_NAMESPACE}/username": username,
                         "sidecar.istio.io/inject": "false",
-                        "opensciencelab.local/egress-profile": "none",
+                        f"{PREFIX_NAMESPACE}/egress-profile": "none",
                     },
                     "node_selector": {
-                        "opensciencelab.local/node-type": f"user-{node_name_escaped}"
+                        f"{PREFIX_NAMESPACE}/node-type": f"user-{node_name_escaped}"
                     },
                     "image": lab_profile["image_url"],
                     "lifecycle_hooks": {

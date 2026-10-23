@@ -16,6 +16,7 @@ CLUSTER_NAME = os.environ["CLUSTER_NAME"]
 REGION_NAME = os.environ["AWS_REGION"]
 AZ_NAME = os.environ["AZ_NAME"]
 NAMESPACE = os.environ["K8s_NAMESPACE"]
+PREFIX_NAMESPACE = os.environ["PREFIX_NAMESPACE"]
 
 
 logging.basicConfig(
@@ -277,11 +278,11 @@ def get_user_volume(
                         {"Key": "ebs.csi.aws.com/cluster", "Value": "true"},
                         {"Key": "ebs.csi.aws.com/cluster-name", "Value": CLUSTER_NAME},
                         {
-                            "Key": "opensciencelab.local/lab-name",
+                            "Key": f"{PREFIX_NAMESPACE}/lab-name",
                             "Value": LAB_SHORT_NAME,
                         },
                         {
-                            "Key": "opensciencelab.local/username",
+                            "Key": f"{PREFIX_NAMESPACE}/username",
                             "Value": username,
                         },
                     ],
@@ -343,10 +344,13 @@ def get_user_volume(
                         {"Key": "ebs.csi.aws.com/cluster", "Value": "true"},
                         {"Key": "ebs.csi.aws.com/cluster-name", "Value": CLUSTER_NAME},
                         {
-                            "Key": "opensciencelab.local/lab-name",
+                            "Key": f"{PREFIX_NAMESPACE}/lab-name",
                             "Value": LAB_SHORT_NAME,
                         },
-                        {"Key": "opensciencelab.local/username", "Value": username},
+                        {
+                            "Key": f"{PREFIX_NAMESPACE}/username",
+                            "Value": username,
+                        },
                     ],
                 },
             ],
