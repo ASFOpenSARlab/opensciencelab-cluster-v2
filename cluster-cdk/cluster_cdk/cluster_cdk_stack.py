@@ -34,7 +34,7 @@ from aws_cdk import (  # type: ignore
     aws_events_targets as targets,
     aws_sns as sns,
     aws_sns_subscriptions as sns_subs,
-    lambda_layer_kubectl_v35,
+    lambda_layer_kubectl_v36,
     lambda_layer_awscli,
 )
 
@@ -105,7 +105,7 @@ class ClusterCdkStack(Stack):
         # All resources in this specific stack will get this tag
         Tags.of(self).add("osl-billing", self.LAB_SHORT_NAME)  # type: ignore
 
-        self.kubectl_layer = lambda_layer_kubectl_v35.KubectlV35Layer(self, "kubectl")
+        self.kubectl_layer = lambda_layer_kubectl_v36.KubectlV36Layer(self, "kubectl")
 
         ########
         #
@@ -172,7 +172,7 @@ class ClusterCdkStack(Stack):
             "EksCluster",
             vpc=self.vpc,
             cluster_name=cluster_name,
-            version=eks.KubernetesVersion.V1_35,
+            version=eks.KubernetesVersion.V1_36,
             kubectl_provider_options=eks.KubectlProviderOptions(
                 kubectl_layer=self.kubectl_layer,
             ),
@@ -217,7 +217,7 @@ class ClusterCdkStack(Stack):
             self,
             "KubeProxyAddon",
             addon_name="kube-proxy",
-            addon_version="v1.35.3-eksbuild.25",
+            addon_version="v1.36.0-eksbuild.21",
             cluster=self.cluster,
             # configuration_values={},
         )
@@ -591,7 +591,7 @@ class ClusterCdkStack(Stack):
             )
         )
 
-        self.csi_driver_version = "2.66.1"
+        self.csi_driver_version = "2.67.1"
 
         # https://artifacthub.io/packages/helm/aws-ebs-csi-driver/aws-ebs-csi-driver
         self.ebs_csi_driver_helm_chart = self.cluster.add_helm_chart(
@@ -928,7 +928,7 @@ class ClusterCdkStack(Stack):
 
         # The default CDK AWS Controller is woefully out of date.
         # Use the helm chart
-        self.load_balancer_controller_version = "3.6.0"
+        self.load_balancer_controller_version = "3.6.1"
 
         alb_sa = self.cluster.add_service_account("alb-sa", namespace="kube-system")
 
