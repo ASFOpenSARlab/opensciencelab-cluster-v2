@@ -43,7 +43,7 @@ The following GitHub repos are meant to be used in tandem:
 
 ### AWS Resources
 
-EKS Upgrade Guide: [AWS Docs](https://docs.aws.amazon.com/eks/latest/userguide/update-cluster.html))
+EKS Upgrade Guide: [AWS Docs](https://docs.aws.amazon.com/eks/latest/userguide/update-cluster.html)
 
 EKS Changelog Summaries: [AWS Docs](https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions-standard.html)
 
