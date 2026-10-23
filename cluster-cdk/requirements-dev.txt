@@ -1,6 +1,6 @@
 aws-cdk-lib==2.274.0
 boto3==1.43.117
-kubernetes==35.0.0
+kubernetes==36.0.0
 pytest>=9.1.1
 requests==2.34.2
 moto>=5.2.3
