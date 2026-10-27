@@ -281,6 +281,8 @@ class ClusterCdkStack(Stack):
         #
         #####################################################################
 
+        self.core_nodegroup = None
+
         # https://github.com/aws/aws-cdk/issues/37012eks.Cluster
         for node in self.lab_nodes:
             node_type = node.get("node_type", "user")
@@ -517,6 +519,11 @@ class ClusterCdkStack(Stack):
                 # Needed so we can make a dependency later
                 self.core_nodegroup = node_group
 
+        if self.core_nodegroup is None:
+            raise ValueError(
+                "A core nodegroup is required for JupyterHub and other dependencies."
+            )
+
         #####################################################################
         #
         #    Setup EBS CSI Storage for volume creation
@@ -533,7 +540,7 @@ class ClusterCdkStack(Stack):
         #####################################################################
 
         # Storage class for user volumes
-        self.cluster.add_manifest(
+        self.user_storage_class_manifest = self.cluster.add_manifest(
             "CsiStorageClass",
             {
                 "apiVersion": "storage.k8s.io/v1",
@@ -556,7 +563,7 @@ class ClusterCdkStack(Stack):
         )
 
         # Storage class for JupyterHub DB. Ensures that it is nicely named in the EC2 console
-        self.cluster.add_manifest(
+        self.db_storage_class_manifest = self.cluster.add_manifest(
             "JhDbStorageClass",
             {
                 "apiVersion": "storage.k8s.io/v1",
@@ -928,6 +935,9 @@ class ClusterCdkStack(Stack):
         )
 
         self.jupyerhub_helm_chart.node.add_dependency(self.ebs_csi_driver_helm_chart)
+        self.jupyerhub_helm_chart.node.add_dependency(self.user_storage_class_manifest)
+        self.jupyerhub_helm_chart.node.add_dependency(self.db_storage_class_manifest)
+        self.jupyerhub_helm_chart.node.add_dependency(self.core_nodegroup)
 
         #####################################################################
         #
