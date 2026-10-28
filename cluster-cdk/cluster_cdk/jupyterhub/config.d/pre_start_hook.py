@@ -4,6 +4,7 @@ import datetime
 import logging
 import traceback
 import re
+import urllib.request
 
 import boto3
 
@@ -462,7 +463,6 @@ def get_user_volume(
             {"Key": "kubernetes.io/created-for/pv/name", "Value": vol_id},
             {"Key": "CSIVolumeName", "Value": vol_id},
             {"Key": "KubernetesCluster", "Value": CLUSTER_NAME},
-            {"Key": "ebs.csi.aws.com/cluster", "Value": "true"},
         ],
     )
 
@@ -485,6 +485,37 @@ def server_starting_tag(pvc_name: str, **kwargs) -> None:
         )
     else:
         log.info(f"No volumes found for '{pvc_name}'. Nothing to tag.")
+
+
+def ec2_username_tag(username: str, **kwargs) -> None:
+    """Tag the EC2 instance with the username of the user starting the server."""
+    session = boto3.Session(region_name=REGION_NAME)
+    ec2 = session.client("ec2")
+
+    log.info(
+        f"Updating ec2 tags to '{PREFIX_NAMESPACE}/username={username}' in cluster '{CLUSTER_NAME}'..."
+    )
+
+    # Resolve this machine's instance ID through the EC2 metadata service (IMDSv2).
+    token_request = urllib.request.Request(
+        "http://169.254.169.254/latest/api/token",
+        method="PUT",
+        headers={"X-aws-ec2-metadata-token-ttl-seconds": "60"},
+    )
+    with urllib.request.urlopen(token_request, timeout=2) as response:
+        token = response.read().decode("utf-8")
+
+    instance_request = urllib.request.Request(
+        "http://169.254.169.254/latest/meta-data/instance-id",
+        headers={"X-aws-ec2-metadata-token": token},
+    )
+    with urllib.request.urlopen(instance_request, timeout=2) as response:
+        instance_id = response.read().decode("utf-8")
+
+    ec2.create_tags(
+        Resources=[instance_id],
+        Tags=[{"Key": f"{PREFIX_NAMESPACE}/username", "Value": username}],
+    )
 
 
 async def my_pre_hook(spawner: c.Spawner) -> None:  # noqa: F821
@@ -520,6 +551,7 @@ async def my_pre_hook(spawner: c.Spawner) -> None:  # noqa: F821
 
         get_user_volume(**args)
         server_starting_tag(**args)
+        ec2_username_tag(**args)
 
     except Exception as e:
         log.error(e)
