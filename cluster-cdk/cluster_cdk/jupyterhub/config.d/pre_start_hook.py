@@ -4,7 +4,6 @@ import datetime
 import logging
 import traceback
 import re
-import urllib.request
 
 import boto3
 
