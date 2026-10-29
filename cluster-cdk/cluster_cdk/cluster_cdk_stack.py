@@ -440,6 +440,23 @@ class ClusterCdkStack(Stack):
                         },
                     },
                     {
+                        "Sid": "HubUpdateTagsOnEC2",
+                        "Effect": "Allow",
+                        "Action": [
+                            "ec2:CreateTags",
+                            "ec2:DescribeInstances",
+                        ],
+                        "Resource": [
+                            f"arn:aws:ec2:{self.region}:{self.account}:instance/*",
+                        ],
+                        "Condition": {
+                            "StringEquals": {
+                                # If updating an existing EC2, it MUST already belong to this cluster
+                                "ec2:ResourceTag/eks:cluster-name": cluster_name
+                            },
+                        },
+                    },
+                    {
                         "Sid": "HubUpdateTags",
                         "Effect": "Allow",
                         "Action": ["ec2:CreateTags"],
@@ -736,6 +753,51 @@ class ClusterCdkStack(Stack):
             },
         )
 
+        # Add extra permssions to the hub account so it can get node information for the hook scripts.
+        eks.KubernetesManifest(
+            self,
+            "NodeReaderClusterRole",
+            cluster=self.cluster,
+            overwrite=True,
+            manifest=[
+                {
+                    "apiVersion": "rbac.authorization.k8s.io/v1",
+                    "kind": "ClusterRole",
+                    "metadata": {
+                        "name": "custom:jupyterhub-hooks",
+                    },
+                    "rules": [
+                        {
+                            "apiGroups": [""],
+                            "resources": ["nodes"],
+                            "verbs": ["get", "list", "watch"],
+                        }
+                    ],
+                }
+            ],
+        )
+
+        self.cluster.add_manifest(
+            "HooksClusterRoleBinding",
+            {
+                "kind": "ClusterRoleBinding",
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "metadata": {"name": "jupyterhub-hooks"},
+                "subjects": [
+                    {
+                        "kind": "ServiceAccount",
+                        "name": "hub",
+                        "namespace": self.K8s_NAMESPACE,
+                    }
+                ],
+                "roleRef": {
+                    "apiGroup": "rbac.authorization.k8s.io",
+                    "kind": "ClusterRole",
+                    "name": "custom:jupyterhub-hooks",
+                },
+            },
+        )
+
         # For deeper configuration explanation, refer to ARCHITECTURE.md
         jupyterhub_helm_values = {
             "cull": {
@@ -888,6 +950,11 @@ class ClusterCdkStack(Stack):
                         "jupyterhub/config.d/pre_start_hook.py",
                         "python",
                         "/usr/local/etc/jupyterhub/jupyterhub_config.d/pre_start_hook.py",
+                    )
+                    | self._set_extra_file(
+                        "jupyterhub/config.d/after_pod_created_hook.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/after_pod_created_hook.py",
                     )
                     | self._set_extra_file(
                         "jupyterhub/config.d/post_stop_hook.py",
