@@ -1,90 +1,119 @@
 #!/usr/bin/env python3
 import asyncio
-import os
+import inspect
 import logging
+import os
+import datetime
 
 import boto3
-
-from kubernetes import client as k8s_client
-from kubernetes import config as k8s_config
+from kubernetes_asyncio import client as k8s_client
+from kubernetes_asyncio import config as k8s_config
 
 REGION_NAME = os.environ["AWS_REGION"]
 NAMESPACE = os.environ["K8s_NAMESPACE"]
 PREFIX_NAMESPACE = os.environ["PREFIX_NAMESPACE"]
 
-
 logging.basicConfig(
-    format="%(asctime)s %(levelname)s (%(lineno)d) - %(message)s", level=logging.INFO
+    format="%(asctime)s %(levelname)s (%(lineno)d) - %(message)s",
+    level=logging.INFO,
 )
 log = logging.getLogger(__name__)
 
 
+async def _call_kubernetes(method, **kwargs):
+    """Call a sync or async Kubernetes method without blocking the event loop."""
+    result = await asyncio.to_thread(method, **kwargs)
+    if inspect.isawaitable(result):
+        return await result
+    return result
+
+
+async def _close_api_client(api_client) -> None:
+    """Close the client whether its close method is sync or async."""
+    result = await asyncio.to_thread(api_client.close)
+    if inspect.isawaitable(result):
+        await result
+
+
+def _tag_ec2_instance(instance_id: str, username: str) -> None:
+    ec2_client = boto3.client("ec2", region_name=REGION_NAME)
+    ec2_client.create_tags(
+        Resources=[instance_id],
+        Tags=[{"Key": f"{PREFIX_NAMESPACE}/username", "Value": username}],
+    )
+
+
+# WARNING: This function assumes that only one pod is running per user.
+# If multiple user pods are running, the EC2 instance will be tagged with the last pod that started.
 async def ec2_username_tag(username: str, pod_name: str, **kwargs) -> None:
-    """
-    Executes AFTER the user's pod starts. Resolves the K8s Node to its
-    actual AWS EC2 Instance ID and applies tags.
-
-    WARNING: This function assumes that only one pod is running per user. If multiple pods are running for a single user,
-    the EC2 instance will be tagged with the last pod that started.
-
-    """
-
-    # 1. Initialize Kubernetes API Client using the Hub's in-cluster credentials
-    k8s_config.load_incluster_config()
-    api = k8s_client.CoreV1Api()
+    api_client = None
+    start_time = datetime.datetime.now()
 
     try:
-        # 2. Query the K8s API to find out which node the user's pod was placed on
+        # This configuration loader is synchronous.
+        k8s_config.load_incluster_config()
+        api_client = k8s_client.ApiClient()
+        api = k8s_client.CoreV1Api(api_client)
+
         node_name = None
-        # Poll up to 30 seconds for the scheduler to assign a node
-        for _ in range(30):
-            live_pod = api.read_namespaced_pod(name=pod_name, namespace=NAMESPACE)
-            if live_pod.spec.node_name:
-                node_name = live_pod.spec.node_name
+        timeout_seconds = 3600
+        # get_running_loop() returns the event loop that is currently running in this thread.
+        # If no event loop is running, it raises a RuntimeError. This is useful for checking if we are in an async context.
+        deadline = asyncio.get_running_loop().time() + timeout_seconds
+
+        # Get the pod's node name, retrying until we get it or timeout.
+        while asyncio.get_running_loop().time() < deadline:
+            live_pod = await _call_kubernetes(
+                api.read_namespaced_pod,
+                name=pod_name,
+                namespace=NAMESPACE,
+            )
+            node_name = live_pod.spec.node_name
+            if node_name:
                 break
-            await asyncio.sleep(1)
+            await asyncio.sleep(3)
 
         if not node_name:
-            raise ValueError(f"Pod {pod_name} does not have a node assigned yet.")
+            raise TimeoutError(
+                f"Pod {pod_name} was not assigned to a node within {timeout_seconds} seconds."
+            )
 
-        # 3. Read the Node specs to get the cloud provider data
-        node = api.read_node(name=node_name)
-        provider_id = node.spec.provider_id  # Format: aws:///<az>/i-0123456789abcdef0
+        # Get the node's provider ID and extract the EC2 instance ID.
+        node = await _call_kubernetes(api.read_node, name=node_name)
+        provider_id = node.spec.provider_id
 
-        if not provider_id or "aws://" not in provider_id:
-            raise ValueError(f"Node {node_name} does not have a valid AWS provider ID.")
+        if not provider_id or not provider_id.startswith("aws:///"):
+            raise ValueError(f"Node {node_name} has an invalid AWS provider ID.")
 
-        # 4. Parse out the exact EC2 Instance ID from the trailing path segment
-        ec2_instance_id = provider_id.split("/")[-1]
-        log.info(f"Mapping user {username} to EC2 instance: {ec2_instance_id}")
+        # The provider ID is in the format "aws:///REGION/INSTANCE_ID". We want to extract the INSTANCE_ID.
+        instance_id = provider_id.rsplit("/", 1)[-1]
+        if not instance_id.startswith("i-"):
+            raise ValueError(
+                f"Could not parse an EC2 instance ID from {provider_id!r}."
+            )
 
-        # 5. Connect to AWS and Tag the EC2 Instance directly
-        # Ensure your JupyterHub Hub Pod role has the 'ec2:CreateTags' IAM permission
-        ec2_client = boto3.client("ec2", region_name=REGION_NAME)
+        # Tag the EC2 instance with the username.
+        log.info(f"Mapping user {username} to EC2 instance {instance_id}")
+        await asyncio.to_thread(_tag_ec2_instance, instance_id, username)
+        log.info(f"Successfully tagged EC2 instance {instance_id} for user {username}")
 
-        ec2_client.create_tags(
-            Resources=[ec2_instance_id],
-            Tags=[
-                {"Key": f"{PREFIX_NAMESPACE}/username", "Value": username},
-            ],
-        )
-        log.info(f"Successfully tagged EC2 instance {ec2_instance_id} for {username}")
+    except Exception:
+        log.exception(f"Failed to tag EC2 instance for user {username}")
 
-    except Exception as e:  # noqa: BLE001
-        log.error(f"Failed to tag EC2 instance for user {username}: {str(e)}")
+    finally:
+        if api_client is not None:
+            await _close_api_client(api_client)
+
+        elapsed = (datetime.datetime.now() - start_time).total_seconds()
+        log.info(f"EC2 tagging process for user {username} took {elapsed:.1f} seconds.")
 
 
-async def my_after_pod_created_hook(spawner: c.Spawner, pod: dict):  # noqa: F821
-    try:
-        args = {
-            "username": spawner.user.name,
-            "pod_name": pod["metadata"]["name"],
-        }
+async def my_after_pod_created_hook(spawner: c.Spawner, pod: dict) -> None:  # noqa: F821
+    pod_name = pod.get("metadata", {}).get("name")
+    if not pod_name:
+        raise ValueError("Pod dictionary is missing 'metadata.name'")
 
-        await ec2_username_tag(**args)
-
-    except Exception as e:  # noqa: BLE001
-        log.error(f"An error occurred in the post-spawn hook: {str(e)}")
+    await ec2_username_tag(username=spawner.user.name, pod_name=pod_name)
 
 
 # The variable "c" is a global variable representing the Config instance.
