@@ -462,7 +462,6 @@ def get_user_volume(
             {"Key": "kubernetes.io/created-for/pv/name", "Value": vol_id},
             {"Key": "CSIVolumeName", "Value": vol_id},
             {"Key": "KubernetesCluster", "Value": CLUSTER_NAME},
-            {"Key": "ebs.csi.aws.com/cluster", "Value": "true"},
         ],
     )
 

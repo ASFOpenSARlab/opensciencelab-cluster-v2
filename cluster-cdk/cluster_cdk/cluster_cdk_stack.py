@@ -571,9 +571,6 @@ class ClusterCdkStack(Stack):
                     "tagSpecification_1": f"{self.PREFIX_NAMESPACE}/lab-name={self.LAB_SHORT_NAME}",
                     "tagSpecification_2": f"Name=hub-db-dir--{self.LAB_SHORT_NAME}",
                     "tagSpecification_3": "is-jupyterhub-db=true",
-                    # The CSI driver is expecting volumes to be tagged a certain way
-                    "tagSpecification_4": "ebs.csi.aws.com/cluster=true",
-                    "tagSpecification_5": f"ebs.csi.aws.com/cluster-name={cluster_name}",
                 },
                 "allowVolumeExpansion": False,
                 "volumeBindingMode": "Immediate",
@@ -591,6 +588,7 @@ class ClusterCdkStack(Stack):
 
         # EC2s need to be tagged "eks:cluster-name=CLUSTER_NAME". EKS manged nodegroup automatically does this.
         # Volumes need to tagged "ebs.csi.aws.com/cluster=true" and "ebs.csi.aws.com/cluster-name=CLUSTER_NAME". These tags are injected from the CSI driver or the custom storage classes.
+        # Do not manually add these tags to the EC2s or volumes. The CSI driver will automatically add the correct tags to the volumes when they are created.
         # The AmazonEBSCSIDriverEKSClusterScopedPolicy strictly enforces that the value of the resource tag ebs.csi.aws.com/cluster-name on your EBS volumes must match an eks-cluster-name tag on the IAM principal (the role).
         Tags.of(csi_service_account.role).add("eks-cluster-name", cluster_name)
 
