@@ -220,7 +220,7 @@ synth-cluster: validate-env install-reqs bundle-lambda-deps
 .PHONY := deploy-cluster
 deploy-cluster: validate-env install-reqs bundle-lambda-deps
 	@echo "Deploying ${LAB_SHORT_NAME}/cluster-cdk"
-	cd ./cluster-cdk && cdk --require-approval never deploy --no-rollback
+	cd ./cluster-cdk && cdk --require-approval never deploy
 
 .PHONY := destroy-cluster
 destroy-cluster:
