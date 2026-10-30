@@ -93,9 +93,7 @@ class ClusterCdkStack(Stack):
 
         self.K8s_NAMESPACE = "jupyter"
 
-        self.PREFIX_NAMESPACE = os.getenv(
-            "PREFIX_NAMESPACE", "opensciencelab.asf.alaska.edu"
-        )
+        self.PREFIX_NAMESPACE = os.getenv("PREFIX_NAMESPACE", "osl.asf")
 
         # Get nodes and profiles
         profiles = tomllib.loads(os.environ["PROFILE_DEFINITIONS"])
