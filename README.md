@@ -199,6 +199,7 @@ In the _Environment variables_ section, add any of the following overrides as ne
 
 ```bash
 # Infrastructure Configuration
+PREFIX_NAMESPACE="osl.asf"              # Namespace of some EC2 tags (for costs) and k8s labels
 JUPYTER_HUB_IMAGE_PATH="ghcr.io/asfopensarlab/opensciencelab-jupyterhub"  # Needs to exist for opensciencelab-jupyterhub image
 JUPYTER_HUB_IMAGE_TAG="test"            # Needs to exist for opensciencelab-jupyterhub image
 EXECWHACKER_CRON_IMAGE_PATH="ghcr.io/asfopensarlab/opensciencelab-update-execwhacker"  # Needs to exist for opensciencelab-update-execwhacker image
@@ -410,6 +411,36 @@ This possible blockage would also affect other OSL services and will need to be 
    2. Select the $LAB_SHORT_NAME cluster.
    3. Click on the Connect button in the upper right. This will take you to CloudShell with the proper kubectl credentials.
    4. Within CloudShell, run the command `kubectl -n jupyter delete pod -l component=hub`
+
+
+## Cost Allocation Tags
+
+To help keep track of costs per user:
+
+- All taggable cluster resources are tagged `{PREFIX_NAMESPACE}/lab-name`
+- All user volumes are also tagged `{PREFIX_NAMESPACE}/username`
+- All user EC2s are also tagged `{PREFIX_NAMESPACE}/username`
+
+To see and filter these tags in Cost Explorer and Billing, the tags needs to be activated. There are two stages to do this.
+For more information, see the [AWS docs](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/activating-tags.html).
+
+> [!IMPORTANT]
+> At least one user EC2 or volume needs to be initalized for AWS to recognize the username tags.
+
+### Stage 1: Wait to Activate the Tags
+
+Timeframe: Up to 24 hours
+
+What happens: After you apply a new tag key to a resource in a member account, AWS must index it. It takes up to 24 hours for that tag key to appear as an option on the AWS Cost Allocation Tags page in the payer account.
+
+Note: You cannot activate the tag for billing until this window passes and the key physically appears in the console list.
+
+
+### Stage 2: Wait Until the Tags Show Up in Reports
+
+Timeframe: Up to another 24 hours
+
+What happens: Once you locate the tag key in the payer account and click Activate, AWS begins processing your cost data. It takes up to 24 additional hours for that tag to become a usable filter or grouping option inside AWS Cost Explorer or your Cost and Usage Reports (CUR).
 
 ## Deleting Cluster
 
