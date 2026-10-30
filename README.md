@@ -412,7 +412,6 @@ This possible blockage would also affect other OSL services and will need to be 
    3. Click on the Connect button in the upper right. This will take you to CloudShell with the proper kubectl credentials.
    4. Within CloudShell, run the command `kubectl -n jupyter delete pod -l component=hub`
 
-
 ## Cost Allocation Tags
 
 To help keep track of costs per user:
@@ -434,7 +433,6 @@ Timeframe: Up to 24 hours
 What happens: After you apply a new tag key to a resource in a member account, AWS must index it. It takes up to 24 hours for that tag key to appear as an option on the AWS Cost Allocation Tags page in the payer account.
 
 Note: You cannot activate the tag for billing until this window passes and the key physically appears in the console list.
-
 
 ### Stage 2: Wait Until the Tags Show Up in Reports
 
