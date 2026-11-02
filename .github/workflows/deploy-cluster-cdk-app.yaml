@@ -29,6 +29,7 @@ jobs:
       contents: read
     env:
       LAB_SHORT_NAME: ${{ inputs.envOverride || 'test' }}
+      PREFIX_NAMESPACE: ${{ vars.PREFIX_NAMESPACE }}
       PROFILE_DEFINITIONS: ${{ vars.PROFILE_DEFINITIONS }}
       NODE_DEFINITIONS: ${{ vars.NODE_DEFINITIONS }}
       JUPYTER_HUB_IMAGE_PATH: ${{ vars.JUPYTER_HUB_IMAGE_PATH }}
