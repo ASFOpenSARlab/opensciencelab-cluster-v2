@@ -77,7 +77,7 @@ def is_valid_docker_ref_safe(ref: str) -> bool:
 
 def is_valid_aws_tag_key(value: str) -> bool:
     # Validates that the key is 1 to 128 characters, uses only allowed Unicode/special characters, and does not begin with aws: (case-insensitive).
-    pattern = r"^(?!(?i)aws:)[ \p{L}\p{Z}\p{N}_.:/=+\-@]{1,128}$"
+    pattern = r"^(?!(?i)aws:)[a-zA-Z0-9 _.:/=+\-@]{1,128}$"
     return bool(re.match(pattern, value))
 
 
