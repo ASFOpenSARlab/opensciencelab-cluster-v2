@@ -467,6 +467,7 @@ Did you
 - Change your SSO secret?
 - Respawn the hub pod after changing SSO secret, or any other variables?
 - Double check your portal lab card has the correct cluster deployment url?
+- Does your cluster have your portals domain in its PORTAL_DOMAINS variable?
 
 ### I Can't Connect to my Cluster in EKS
 
