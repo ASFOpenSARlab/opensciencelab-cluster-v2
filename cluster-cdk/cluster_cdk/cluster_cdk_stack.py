@@ -105,7 +105,7 @@ class ClusterCdkStack(Stack):
         self.lab_nodes = [{"name": name} | body for name, body in nodes.items()]
 
         # All resources in this specific stack will get this tag
-        Tags.of(self).add(f"{self.PREFIX_NAMESPACE}/lab-name", self.LAB_SHORT_NAME)  # type: ignore
+        Tags.of(self).add("osl-billing", self.LAB_SHORT_NAME)  # type: ignore
 
         self.kubectl_layer = lambda_layer_kubectl_v36.KubectlV36Layer(self, "kubectl")
 
@@ -342,7 +342,7 @@ class ClusterCdkStack(Stack):
                             resource_type="instance",
                             tags=[
                                 CfnTag(
-                                    key=f"{self.PREFIX_NAMESPACE}/lab-name",
+                                    key="osl-billing"",
                                     value=self.LAB_SHORT_NAME,
                                 ),
                                 CfnTag(
@@ -355,7 +355,7 @@ class ClusterCdkStack(Stack):
                             resource_type="volume",
                             tags=[
                                 CfnTag(
-                                    key=f"{self.PREFIX_NAMESPACE}/lab-name",
+                                    key="osl-billing",
                                     value=self.LAB_SHORT_NAME,
                                 ),
                                 CfnTag(
@@ -590,7 +590,7 @@ class ClusterCdkStack(Stack):
                 "parameters": {
                     "type": "gp3",
                     "fsType": "ext4",
-                    "tagSpecification_1": f"{self.PREFIX_NAMESPACE}/lab-name={self.LAB_SHORT_NAME}",
+                    "tagSpecification_1": f"osl-billing={self.LAB_SHORT_NAME}",
                     "tagSpecification_2": f"Name=hub-db-dir--{self.LAB_SHORT_NAME}",
                     "tagSpecification_3": "is-jupyterhub-db=true",
                 },
@@ -639,7 +639,7 @@ class ClusterCdkStack(Stack):
                     "extraCreateMetadata": True,
                     "k8sTagClusterId": cluster_name,
                     "extraVolumeTags": {
-                        f"{self.PREFIX_NAMESPACE}/lab-name": self.LAB_SHORT_NAME,
+                        "osl-billing": self.LAB_SHORT_NAME,
                     },
                     "serviceAccount": {
                         "create": False,
