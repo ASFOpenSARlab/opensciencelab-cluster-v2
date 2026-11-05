@@ -103,7 +103,7 @@ class ClusterCdkStack(Stack):
         self.lab_nodes = [{"name": name} | body for name, body in nodes.items()]
 
         # All resources in this specific stack will get this tag
-        Tags.of(self).add("osl-billing", self.LAB_SHORT_NAME)  # type: ignore
+        Tags.of(self).add("osl-billing2", self.LAB_SHORT_NAME)  # type: ignore
 
         self.kubectl_layer = lambda_layer_kubectl_v36.KubectlV36Layer(self, "kubectl")
 
