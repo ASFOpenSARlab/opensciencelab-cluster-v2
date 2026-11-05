@@ -584,7 +584,7 @@ class ClusterCdkStack(Stack):
                 "apiVersion": "storage.k8s.io/v1",
                 "kind": "StorageClass",
                 "metadata": {
-                    "name": "gp3-jh-db",
+                    "name": "gp3-jh-ps",
                 },
                 "provisioner": "ebs.csi.aws.com",
                 "parameters": {
@@ -593,8 +593,6 @@ class ClusterCdkStack(Stack):
                     "tagSpecification_1": f"osl-billing={self.LAB_SHORT_NAME}",
                     "tagSpecification_2": f"Name=hub-db-dir--{self.LAB_SHORT_NAME}",
                     "tagSpecification_3": "is-jupyterhub-db=true",
-                    "tagSpecification_4": "ebs.csi.aws.com/cluster=true",
-                    "tagSpecification_5": f"ebs.csi.aws.com/cluster-name={cluster_name}",
                 },
                 "allowVolumeExpansion": False,
                 "volumeBindingMode": "Immediate",
@@ -871,7 +869,7 @@ class ClusterCdkStack(Stack):
                 },
                 "db": {
                     "pvc": {
-                        "storageClassName": "gp3-jh-db",
+                        "storageClassName": "gp3-jh-ps",
                     }
                 },
                 "baseUrl": f"/lab/{self.LAB_SHORT_NAME}",
