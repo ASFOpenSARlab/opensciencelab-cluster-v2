@@ -342,7 +342,7 @@ class ClusterCdkStack(Stack):
                             resource_type="instance",
                             tags=[
                                 CfnTag(
-                                    key="osl-billing"",
+                                    key="osl-billing",
                                     value=self.LAB_SHORT_NAME,
                                 ),
                                 CfnTag(
