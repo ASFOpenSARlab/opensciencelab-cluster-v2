@@ -371,6 +371,7 @@ class ClusterCdkStack(Stack):
             # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/NodegroupOptions.html
             node_group = self.cluster.add_nodegroup_capacity(
                 f"{node['name']}{self.LAB_SHORT_NAME}",
+                version=eks.KubernetesVersion.V1_36,
                 ami_type=eks.NodegroupAmiType.AL2023_X86_64_STANDARD,
                 capacity_type=eks.CapacityType.ON_DEMAND,
                 max_size=node.get("group_max_size"),
