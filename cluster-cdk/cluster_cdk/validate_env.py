@@ -75,12 +75,6 @@ def is_valid_docker_ref_safe(ref: str) -> bool:
 #####
 
 
-def is_valid_aws_tag_key(value: str) -> bool:
-    # Validates that the key is 1 to 128 characters, uses only allowed Unicode/special characters, and does not begin with aws: (case-insensitive).
-    pattern = r"^(?!(?i)aws:)[a-zA-Z0-9 _.:/=+\-@]{1,128}$"
-    return bool(re.match(pattern, value))
-
-
 def is_url_friendly(value: str) -> bool:
     # Matches strings containing only lowercase letters, numbers, and hyphens
     # Adjust regex pattern if you allow uppercase or underscores
@@ -476,9 +470,7 @@ def validate_other_environment_variables() -> None:
     prefix_namespace = os.getenv("PREFIX_NAMESPACE", None)
     if not prefix_namespace:
         raise Exception("PREFIX_NAMESPACE is not defined")
-    assert is_valid_aws_tag_key(prefix_namespace), (
-        "PREFIX_NAMESPACE must be a valid AWS tag key"
-    )
+    assert is_url_friendly(prefix_namespace), "PREFIX_NAMESPACE must be url-friendly"
 
     print("Checking SNAPSHOT_WARNING_DAYS ....")
     snapshot_warning_days = os.getenv("SNAPSHOT_WARNING_DAYS", None)
