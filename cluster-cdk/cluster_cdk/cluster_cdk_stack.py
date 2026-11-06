@@ -177,7 +177,6 @@ class ClusterCdkStack(Stack):
             kubectl_provider_options=eks.KubectlProviderOptions(
                 kubectl_layer=self.kubectl_layer,
             ),
-            default_capacity_type=eks.DefaultCapacityType.NODEGROUP,
             default_capacity=0,
         )
 
@@ -318,7 +317,6 @@ class ClusterCdkStack(Stack):
             launch_template = ec2.LaunchTemplate(
                 self,
                 f"{node['name']}-LaunchTemplate-{self.LAB_SHORT_NAME}",
-                # The mixed-instances overrides below select the actual type.
                 instance_type=instance_types[0],
                 machine_image=eks.EksOptimizedImage(
                     kubernetes_version="1.36",
@@ -336,25 +334,43 @@ class ClusterCdkStack(Stack):
                     )
                 ],
                 require_imdsv2=True,
-                tag_specifications=[
-                    ec2.LaunchTemplateTagSpecification(
-                        resource_type=ec2.LaunchTemplateResourceType.INSTANCE,
-                        tags={
-                            "Name": f"{node['name']}--{self.LAB_SHORT_NAME}",
-                        },
+            )
+
+            # Keep the low-level CFN template for metadata and tag-spec behavior
+            # that is not available on the higher-level CDK LaunchTemplate API
+            # in this environment.
+            launch_template.node.default_child = ec2.CfnLaunchTemplate(
+                self,
+                f"{node['name']}-CfnLaunchTemplate-{self.LAB_SHORT_NAME}",
+                launch_template_data=ec2.CfnLaunchTemplate.LaunchTemplateDataProperty(
+                    metadata_options=ec2.CfnLaunchTemplate.MetadataOptionsProperty(
+                        http_put_response_hop_limit=2,
+                        http_tokens="required",
                     ),
-                    ec2.LaunchTemplateTagSpecification(
-                        resource_type=ec2.LaunchTemplateResourceType.VOLUME,
-                        tags={
-                            "osl-billing": self.LAB_SHORT_NAME,
-                            "Name": f"{node['name']}-root--{self.LAB_SHORT_NAME}",
-                            "KubernetesCluster": cluster_name,
-                        },
-                    ),
-                ],
-                metadata_options=ec2.CfnLaunchTemplate.MetadataOptionsProperty(
-                    http_put_response_hop_limit=2,
-                    http_tokens="required",
+                    tag_specifications=[
+                        ec2.CfnLaunchTemplate.TagSpecificationProperty(
+                            resource_type="instance",
+                            tags=[
+                                {
+                                    "key": "Name",
+                                    "value": f"{node['name']}--{self.LAB_SHORT_NAME}",
+                                },
+                                {"key": "osl-billing", "value": self.LAB_SHORT_NAME},
+                                {"key": "KubernetesCluster", "value": cluster_name},
+                            ],
+                        ),
+                        ec2.CfnLaunchTemplate.TagSpecificationProperty(
+                            resource_type="volume",
+                            tags=[
+                                {
+                                    "key": "Name",
+                                    "value": f"{node['name']}-root--{self.LAB_SHORT_NAME}",
+                                },
+                                {"key": "osl-billing", "value": self.LAB_SHORT_NAME},
+                                {"key": "KubernetesCluster", "value": cluster_name},
+                            ],
+                        ),
+                    ],
                 ),
             )
 
