@@ -36,6 +36,7 @@ from aws_cdk import (  # type: ignore
     aws_sns_subscriptions as sns_subs,
     lambda_layer_kubectl_v36,
     lambda_layer_awscli,
+    aws_autoscaling as autoscaling,
 )
 
 from constructs import Construct  # type: ignore
@@ -308,84 +309,91 @@ class ClusterCdkStack(Stack):
                     f"root_volume_size has value of {root_volume_size} and is greater than 16345 GiB"
                 )
 
-            # Define the Launch Template with the desired EC2 instance tags
-            # These tags will be applied to the EC2 instances when they are launched by the Auto Scaling Group
-            launch_template = ec2.CfnLaunchTemplate(
+            instance_types = [
+                ec2.InstanceType(instance) for instance in node["instance"]
+            ]
+            if not instance_types:
+                raise ValueError(f"Node group {node['name']!r} has no instance types")
+
+            launch_template = ec2.LaunchTemplate(
                 self,
                 f"{node['name']}-LaunchTemplate-{self.LAB_SHORT_NAME}",
-                launch_template_data=ec2.CfnLaunchTemplate.LaunchTemplateDataProperty(
-                    # Configure Block Device Mappings (Storage)
-                    # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/block-device-mapping-concepts.html
-                    # Note that the volume size here must be equal or bigger than the node's AMI's root volume snapshot
-                    # Otherwise you will get an error like "Volume of size 10GB is smaller than snapshot 'snap-013c0e96ad509b9e2', expect size >= 20GB"
-                    block_device_mappings=[
-                        ec2.CfnLaunchTemplate.BlockDeviceMappingProperty(
-                            device_name="/dev/xvda",
-                            ebs=ec2.CfnLaunchTemplate.EbsProperty(
-                                volume_size=root_volume_size,
-                                volume_type="gp3",
-                                encrypted=False,
-                                delete_on_termination=True,
-                            ),
-                        )
-                    ],
-                    metadata_options=ec2.CfnLaunchTemplate.MetadataOptionsProperty(
-                        http_put_response_hop_limit=2,  # Set hop limit here
-                        http_tokens="required",  # Recommended for IMDSv2
-                    ),
-                    tag_specifications=[
-                        ec2.CfnLaunchTemplate.TagSpecificationProperty(
-                            resource_type="instance",
-                            tags=[
-                                CfnTag(key="osl-billing", value=self.LAB_SHORT_NAME),
-                                CfnTag(
-                                    key="Name",
-                                    value=f"{node['name']}--{self.LAB_SHORT_NAME}",
-                                ),
-                            ],
-                        ),
-                        ec2.CfnLaunchTemplate.TagSpecificationProperty(
-                            resource_type="volume",
-                            tags=[
-                                CfnTag(key="osl-billing", value=self.LAB_SHORT_NAME),
-                                CfnTag(
-                                    key="Name",
-                                    value=f"{node['name']}-root--{self.LAB_SHORT_NAME}",
-                                ),
-                            ],
-                        ),
-                    ],
+                # The mixed-instances overrides below select the actual type.
+                instance_type=instance_types[0],
+                machine_image=eks.EksOptimizedImage(
+                    kubernetes_version="1.36",
+                    node_type=eks.NodeType.STANDARD,
                 ),
-            )
-
-            # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_eks/NodegroupOptions.html
-            node_group = self.cluster.add_nodegroup_capacity(
-                f"{node['name']}{self.LAB_SHORT_NAME}",
-                ami_type=eks.NodegroupAmiType.AL2023_X86_64_STANDARD,
-                capacity_type=eks.CapacityType.ON_DEMAND,
-                max_size=node.get("group_max_size"),
-                min_size=node.get("group_min_size"),
-                # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_ec2/InstanceClass.html
-                instance_types=[
-                    ec2.InstanceType(instance) for instance in node["instance"]
+                block_devices=[
+                    ec2.BlockDevice(
+                        device_name="/dev/xvda",
+                        volume=ec2.BlockDeviceVolume.ebs(
+                            root_volume_size,
+                            volume_type=ec2.EbsDeviceVolumeType.GP3,
+                            encrypted=False,
+                            delete_on_termination=True,
+                        ),
+                    )
                 ],
-                launch_template_spec=eks.LaunchTemplateSpec(
-                    id=launch_template.ref,
-                    version=launch_template.attr_latest_version_number,
+                require_imdsv2=True,
+                tag_specifications=[
+                    ec2.LaunchTemplateTagSpecification(
+                        resource_type=ec2.LaunchTemplateResourceType.INSTANCE,
+                        tags={
+                            "Name": f"{node['name']}--{self.LAB_SHORT_NAME}",
+                        },
+                    ),
+                    ec2.LaunchTemplateTagSpecification(
+                        resource_type=ec2.LaunchTemplateResourceType.VOLUME,
+                        tags={
+                            "osl-billing": self.LAB_SHORT_NAME,
+                            "Name": f"{node['name']}-root--{self.LAB_SHORT_NAME}",
+                            "KubernetesCluster": cluster_name,
+                        },
+                    ),
+                ],
+                metadata_options=ec2.CfnLaunchTemplate.MetadataOptionsProperty(
+                    http_put_response_hop_limit=2,
+                    http_tokens="required",
                 ),
-                # Force the compute in the public subnet, in a single AZ
-                # This also automagically adds the "k8s.io/cluster-autoscaler/CLUSTER_NAME: owned" tag to the ASG and thus EC2s
-                subnets=ec2.SubnetSelection(
-                    subnet_type=ec2.SubnetType.PUBLIC,
-                    availability_zones=[
-                        f"{self.region}{self.AZ_LETTER}"
-                    ],  # Force compute into one AZ
-                ),
-                labels=node_labels,
             )
 
-            # SMCE required observability policies for all nodes
+            node_group = autoscaling.AutoScalingGroup(
+                self,
+                f"{node['name']}-ASG-{self.LAB_SHORT_NAME}",
+                vpc=self.vpc,
+                mixed_instances_policy=autoscaling.MixedInstancesPolicy(
+                    launch_template=launch_template,
+                    launch_template_overrides=[
+                        autoscaling.LaunchTemplateOverrides(instance_type=instance)
+                        for instance in instance_types
+                    ],
+                ),
+                min_capacity=node.get("group_min_size"),
+                max_capacity=node.get("group_max_size"),
+                vpc_subnets=ec2.SubnetSelection(
+                    subnet_type=ec2.SubnetType.PUBLIC,
+                    availability_zones=[f"{self.region}{self.AZ_LETTER}"],
+                ),
+            )
+
+            # ASG tags support EKS discovery, Cluster Autoscaler discovery,
+            # and the existing IAM policy condition on eks:cluster-name.
+            for key, value in {
+                f"kubernetes.io/cluster/{cluster_name}": "owned",
+                "eks:cluster-name": cluster_name,
+                "k8s.io/cluster-autoscaler/enabled": "true",
+                f"k8s.io/cluster-autoscaler/{cluster_name}": "owned",
+                "osl-billing": self.LAB_SHORT_NAME,
+            }.items():
+                node_group.tag(key, value, propagate_at_launch=True)
+
+            # Attach the baseline permissions normally supplied by an EKS
+            # managed node group, plus the existing monitoring permissions.
             for managed_policy in [
+                "AmazonEKSWorkerNodePolicy",
+                "AmazonEC2ContainerRegistryReadOnly",
+                "AmazonEKS_CNI_Policy",
                 "AmazonSSMManagedInstanceCore",
                 "CloudWatchAgentAdminPolicy",
                 "CloudWatchAgentServerPolicy",
@@ -394,8 +402,18 @@ class ClusterCdkStack(Stack):
                     iam.ManagedPolicy.from_aws_managed_policy_name(managed_policy)
                 )
 
-            # The ec2 ROLE must have the tag "eks-cluster-name=CLUSTER_NAME" for the CSI IAM condtions
-            Tags.of(node_group.role).add("eks-cluster-name", cluster_name)
+            node_labels_arg = ",".join(
+                f"{key}={value}" for key, value in node_labels.items()
+            )
+            self.cluster.connect_auto_scaling_group_capacity(
+                node_group,
+                map_role=True,
+                bootstrap_enabled=True,
+                machine_image_type=eks.MachineImageType.AMAZON_LINUX_2023,
+                bootstrap_options=eks.BootstrapOptions(
+                    kubelet_extra_args=f"--node-labels={node_labels_arg}"
+                ),
+            )
 
             if node_type == "core":
                 policies = [
@@ -1040,7 +1058,6 @@ class ClusterCdkStack(Stack):
             self,
             description=f"{self.LAB_SHORT_NAME} Volume Management Lambda",
             id=f"{self.LAB_SHORT_NAME}_volume_management",
-            runtime=lambda_.Runtime.PYTHON_3_13,
             memory_size=1769,
             timeout=Duration.minutes(15),
             handler="volume_management.lambda_handler",
