@@ -177,6 +177,7 @@ class ClusterCdkStack(Stack):
             kubectl_provider_options=eks.KubectlProviderOptions(
                 kubectl_layer=self.kubectl_layer,
             ),
+            default_capacity_type=eks.DefaultCapacityType.NODEGROUP,  # Disables Auto Mode
             default_capacity=0,
         )
 
@@ -297,6 +298,37 @@ class ClusterCdkStack(Stack):
                     self.IS_CRYPTNONO_ENABLED
                 ).lower()
 
+            node_labels_arg = ",".join(
+                f"{key}={value}" for key, value in node_labels.items()
+            )
+            node_config = "\n".join(
+                [
+                    "---",
+                    "apiVersion: node.eks.aws/v1alpha1",
+                    "kind: NodeConfig",
+                    "spec:",
+                    "  cluster:",
+                    f"    name: {json.dumps(cluster_name)}",
+                    f"    apiServerEndpoint: {json.dumps(self.cluster.cluster_endpoint)}",
+                    (
+                        "    certificateAuthority: "
+                        f"{json.dumps(self.cluster.cluster_certificate_authority_data)}"
+                    ),
+                    # The cluster uses EKS's default service CIDR for this VPC.
+                    "    cidr: 172.20.0.0/16",
+                    "  kubelet:",
+                    "    flags:",
+                    f"      - {json.dumps(f'--node-labels={node_labels_arg}')}",
+                ]
+            )
+            node_user_data = ec2.MultipartUserData()
+            node_user_data.add_part(
+                ec2.MultipartBody.from_raw_body(
+                    body=node_config,
+                    content_type="application/node.eks.aws",
+                )
+            )
+
             # Root volume of EC2 defaults to 20GiB. If defined as something else, it must be within EBS's storage range.
             root_volume_size = int(node.get("root_volume_size", "20"))
             if root_volume_size < 1:
@@ -314,14 +346,74 @@ class ClusterCdkStack(Stack):
             if not instance_types:
                 raise ValueError(f"Node group {node['name']!r} has no instance types")
 
+            node_role = iam.Role(
+                self,
+                f"{node['name']}-NodeRole-{self.LAB_SHORT_NAME}",
+                assumed_by=iam.ServicePrincipal("ec2.amazonaws.com"),
+            )
+
+            node_access_entry = eks.CfnAccessEntry(
+                self,
+                f"{node['name']}-NodeAccessEntry-{self.LAB_SHORT_NAME}",
+                cluster_name=self.cluster.cluster_name,
+                principal_arn=node_role.role_arn,
+                type="EC2_LINUX",
+            )
+
+            # Attach the permissions once, on the instance role.
+            for managed_policy in [
+                "AmazonEKSWorkerNodePolicy",
+                "AmazonEC2ContainerRegistryReadOnly",
+                "AmazonEKS_CNI_Policy",
+                "AmazonSSMManagedInstanceCore",
+                "CloudWatchAgentAdminPolicy",
+                "CloudWatchAgentServerPolicy",
+            ]:
+                node_role.add_managed_policy(
+                    iam.ManagedPolicy.from_aws_managed_policy_name(managed_policy)
+                )
+
+            node_instance_profile = iam.CfnInstanceProfile(
+                self,
+                f"{node['name']}-InstanceProfile-{self.LAB_SHORT_NAME}",
+                roles=[node_role.role_name],
+            )
+            node_instance_profile_ref = (
+                iam.InstanceProfile.from_instance_profile_attributes(
+                    self,
+                    f"{node['name']}-InstanceProfileRef-{self.LAB_SHORT_NAME}",
+                    instance_profile_arn=node_instance_profile.attr_arn,
+                    role=node_role,
+                )
+            )
+
+            eks_al2023_image = ec2.MachineImage.from_ssm_parameter(
+                "/aws/service/eks/optimized-ami/1.36/amazon-linux-2023/x86_64/standard/recommended/image_id"
+            )
+
+            node_sg = ec2.SecurityGroup(
+                self,
+                f"{node['name']}-NodeSecurityGroup-{self.LAB_SHORT_NAME}",
+                vpc=self.vpc,
+                allow_all_outbound=True,
+                description=f"Security group for {node['name']} nodes",
+            )
+
+            # Allow the nodes to talk to each other if needed.
+            node_sg.connections.allow_from(
+                node_sg,
+                ec2.Port.all_traffic(),
+                "Allow all traffic between node instances",
+            )
+
             launch_template = ec2.LaunchTemplate(
                 self,
                 f"{node['name']}-LaunchTemplate-{self.LAB_SHORT_NAME}",
+                security_group=node_sg,
                 instance_type=instance_types[0],
-                machine_image=eks.EksOptimizedImage(
-                    kubernetes_version="1.36",
-                    node_type=eks.NodeType.STANDARD,
-                ),
+                machine_image=eks_al2023_image,
+                instance_profile=node_instance_profile_ref,
+                user_data=node_user_data,
                 block_devices=[
                     ec2.BlockDevice(
                         device_name="/dev/xvda",
@@ -336,42 +428,39 @@ class ClusterCdkStack(Stack):
                 require_imdsv2=True,
             )
 
-            # Keep the low-level CFN template for metadata and tag-spec behavior
-            # that is not available on the higher-level CDK LaunchTemplate API
-            # in this environment.
-            launch_template.node.default_child = ec2.CfnLaunchTemplate(
-                self,
-                f"{node['name']}-CfnLaunchTemplate-{self.LAB_SHORT_NAME}",
-                launch_template_data=ec2.CfnLaunchTemplate.LaunchTemplateDataProperty(
-                    metadata_options=ec2.CfnLaunchTemplate.MetadataOptionsProperty(
-                        http_put_response_hop_limit=2,
-                        http_tokens="required",
-                    ),
-                    tag_specifications=[
-                        ec2.CfnLaunchTemplate.TagSpecificationProperty(
-                            resource_type="instance",
-                            tags=[
-                                {
-                                    "key": "Name",
-                                    "value": f"{node['name']}--{self.LAB_SHORT_NAME}",
-                                },
-                                {"key": "osl-billing", "value": self.LAB_SHORT_NAME},
-                                {"key": "KubernetesCluster", "value": cluster_name},
-                            ],
-                        ),
-                        ec2.CfnLaunchTemplate.TagSpecificationProperty(
-                            resource_type="volume",
-                            tags=[
-                                {
-                                    "key": "Name",
-                                    "value": f"{node['name']}-root--{self.LAB_SHORT_NAME}",
-                                },
-                                {"key": "osl-billing", "value": self.LAB_SHORT_NAME},
-                                {"key": "KubernetesCluster", "value": cluster_name},
-                            ],
-                        ),
-                    ],
-                ),
+            cfn_launch_template = launch_template.node.default_child
+
+            cfn_launch_template.add_property_override(
+                "LaunchTemplateData.MetadataOptions",
+                {"HttpPutResponseHopLimit": 2, "HttpTokens": "required"},
+            )
+
+            cfn_launch_template.add_property_override(
+                "LaunchTemplateData.TagSpecifications",
+                [
+                    {
+                        "ResourceType": "instance",
+                        "Tags": [
+                            {
+                                "Key": "Name",
+                                "Value": f"{node['name']}--{self.LAB_SHORT_NAME}",
+                            },
+                            {"Key": "osl-billing", "Value": self.LAB_SHORT_NAME},
+                            {"Key": "KubernetesCluster", "Value": cluster_name},
+                        ],
+                    },
+                    {
+                        "ResourceType": "volume",
+                        "Tags": [
+                            {
+                                "Key": "Name",
+                                "Value": f"{node['name']}-root--{self.LAB_SHORT_NAME}",
+                            },
+                            {"Key": "osl-billing", "Value": self.LAB_SHORT_NAME},
+                            {"Key": "KubernetesCluster", "Value": cluster_name},
+                        ],
+                    },
+                ],
             )
 
             node_group = autoscaling.AutoScalingGroup(
@@ -393,8 +482,10 @@ class ClusterCdkStack(Stack):
                 ),
             )
 
-            # ASG tags support EKS discovery, Cluster Autoscaler discovery,
-            # and the existing IAM policy condition on eks:cluster-name.
+            # Make sure the ASG doesn't override any Name tagging that we set in the launch template
+            Tags.of(node_group).remove("Name")
+
+            # Only tag once here; no ASG role is set.
             for key, value in {
                 f"kubernetes.io/cluster/{cluster_name}": "owned",
                 "eks:cluster-name": cluster_name,
@@ -402,34 +493,17 @@ class ClusterCdkStack(Stack):
                 f"k8s.io/cluster-autoscaler/{cluster_name}": "owned",
                 "osl-billing": self.LAB_SHORT_NAME,
             }.items():
-                node_group.tag(key, value, propagate_at_launch=True)
-
-            # Attach the baseline permissions normally supplied by an EKS
-            # managed node group, plus the existing monitoring permissions.
-            for managed_policy in [
-                "AmazonEKSWorkerNodePolicy",
-                "AmazonEC2ContainerRegistryReadOnly",
-                "AmazonEKS_CNI_Policy",
-                "AmazonSSMManagedInstanceCore",
-                "CloudWatchAgentAdminPolicy",
-                "CloudWatchAgentServerPolicy",
-            ]:
-                node_group.role.add_managed_policy(
-                    iam.ManagedPolicy.from_aws_managed_policy_name(managed_policy)
+                Tags.of(node_group).add(
+                    key,
+                    value,
+                    apply_to_launched_instances=True,
                 )
 
-            node_labels_arg = ",".join(
-                f"{key}={value}" for key, value in node_labels.items()
-            )
             self.cluster.connect_auto_scaling_group_capacity(
                 node_group,
-                map_role=True,
-                bootstrap_enabled=True,
-                machine_image_type=eks.MachineImageType.AMAZON_LINUX_2023,
-                bootstrap_options=eks.BootstrapOptions(
-                    kubelet_extra_args=f"--node-labels={node_labels_arg}"
-                ),
+                bootstrap_enabled=False,
             )
+            node_group.node.add_dependency(node_access_entry)
 
             if node_type == "core":
                 policies = [
@@ -536,7 +610,7 @@ class ClusterCdkStack(Stack):
                     },
                 ]
                 for policy in policies:
-                    node_group.role.add_to_policy(iam.PolicyStatement.from_json(policy))
+                    node_role.add_to_policy(iam.PolicyStatement.from_json(policy))
 
                 # Needed so we can make a dependency later
                 self.core_nodegroup = node_group
@@ -1077,6 +1151,7 @@ class ClusterCdkStack(Stack):
             memory_size=1769,
             timeout=Duration.minutes(15),
             handler="volume_management.lambda_handler",
+            runtime=lambda_.Runtime.PYTHON_3_13,
             code=lambda_.Code.from_asset(
                 path="cluster_cdk/lambdas/",
             ),
