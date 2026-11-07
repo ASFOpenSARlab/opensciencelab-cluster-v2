@@ -508,7 +508,7 @@ class ClusterCdkStack(Stack):
             # Make sure the ASG doesn't override any Name tagging that we set in the launch template
             Tags.of(node_group).remove("Name")
 
-            # Add tags to the node group for EKS and cluster autoscaler integration, as well as billing information.
+            # Add discovery, billing, and node-template tags for Cluster Autoscaler.
             for key, value in {
                 f"kubernetes.io/cluster/{cluster_name}": "owned",
                 "eks:cluster-name": cluster_name,
@@ -520,6 +520,16 @@ class ClusterCdkStack(Stack):
                     key,
                     value,
                     apply_to_launched_instances=True,
+                )
+
+            # Add node-template labels for Cluster Autoscaler.
+            # These labels are used by the Cluster Autoscaler to identify the nodes that belong to this node group and to apply scaling policies based on the labels.
+            # This is especially important for scaling from zero nodes, as the Cluster Autoscaler needs to know which node group to scale up when there are no nodes currently running.
+            for key, value in node_labels.items():
+                Tags.of(node_group).add(
+                    f"k8s.io/cluster-autoscaler/node-template/label/{key}",
+                    str(value),
+                    apply_to_launched_instances=False,
                 )
 
             # Connect the auto scaling group to the EKS cluster, allowing the cluster to manage the nodes and their lifecycle.
