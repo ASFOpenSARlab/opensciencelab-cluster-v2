@@ -1,6 +1,7 @@
 import os
 import tomllib  # type: ignore
 import pathlib
+import textwrap
 from string import Template
 import json
 import re
@@ -298,29 +299,33 @@ class ClusterCdkStack(Stack):
                     self.IS_CRYPTNONO_ENABLED
                 ).lower()
 
+            # The node labels are passed to the kubelet via the --node-labels flag.
+            # The kubelet is responsible for registering the node with the cluster and applying the labels to the node object in Kubernetes.
             node_labels_arg = ",".join(
                 f"{key}={value}" for key, value in node_labels.items()
             )
-            node_config = "\n".join(
-                [
-                    "---",
-                    "apiVersion: node.eks.aws/v1alpha1",
-                    "kind: NodeConfig",
-                    "spec:",
-                    "  cluster:",
-                    f"    name: {json.dumps(cluster_name)}",
-                    f"    apiServerEndpoint: {json.dumps(self.cluster.cluster_endpoint)}",
-                    (
-                        "    certificateAuthority: "
-                        f"{json.dumps(self.cluster.cluster_certificate_authority_data)}"
-                    ),
-                    # The cluster uses EKS's default service CIDR for this VPC.
-                    "    cidr: 172.20.0.0/16",
-                    "  kubelet:",
-                    "    flags:",
-                    f"      - {json.dumps(f'--node-labels={node_labels_arg}')}",
-                ]
+
+            # The node config is passed to the kubelet via a custom user data script.
+            # The kubelet reads the node config and applies the specified labels to the node object in Kubernetes.
+            # The apiserverEndpoint and certificateAuthority are used by the kubelet to authenticate with the Kubernetes API server.
+            # The cluster uses EKS's default service CIDR for this VPC.
+            node_config = textwrap.dedent(
+                f"""\
+                ---
+                apiVersion: node.eks.aws/v1alpha1
+                kind: NodeConfig
+                spec:
+                  cluster:
+                    name: {json.dumps(cluster_name)}
+                    apiServerEndpoint: {json.dumps(self.cluster.cluster_endpoint)}
+                    certificateAuthority: {json.dumps(self.cluster.cluster_certificate_authority_data)}
+                    cidr: 172.20.0.0/16
+                  kubelet:
+                    flags:
+                      - {json.dumps(f"--node-labels={node_labels_arg}")}
+                """
             )
+
             node_user_data = ec2.MultipartUserData()
             node_user_data.add_part(
                 ec2.MultipartBody.from_raw_body(
@@ -346,12 +351,15 @@ class ClusterCdkStack(Stack):
             if not instance_types:
                 raise ValueError(f"Node group {node['name']!r} has no instance types")
 
+            # The node role is used by the kubelet to authenticate with the Kubernetes API server
+            # and to access AWS resources (e.g., S3, EBS, etc.) on behalf of the node.
             node_role = iam.Role(
                 self,
                 f"{node['name']}-NodeRole-{self.LAB_SHORT_NAME}",
                 assumed_by=iam.ServicePrincipal("ec2.amazonaws.com"),
             )
 
+            # The node access entry is used to allow the node role to access the EKS cluster.
             node_access_entry = eks.CfnAccessEntry(
                 self,
                 f"{node['name']}-NodeAccessEntry-{self.LAB_SHORT_NAME}",
@@ -373,6 +381,7 @@ class ClusterCdkStack(Stack):
                     iam.ManagedPolicy.from_aws_managed_policy_name(managed_policy)
                 )
 
+            # The node instance profile is used by the EC2 instances to assume the node role and access AWS resources on behalf of the node.
             node_instance_profile = iam.CfnInstanceProfile(
                 self,
                 f"{node['name']}-InstanceProfile-{self.LAB_SHORT_NAME}",
@@ -387,10 +396,15 @@ class ClusterCdkStack(Stack):
                 )
             )
 
+            # The EKS optimized Amazon Linux 2023 AMI is used for the node group instances.
+            # The AMI is retrieved from the SSM parameter store, which is updated by AWS to point to the latest recommended AMI for EKS.
+            EKS_AL2023_K8s_VERSION = "1.36"
+
             eks_al2023_image = ec2.MachineImage.from_ssm_parameter(
-                "/aws/service/eks/optimized-ami/1.36/amazon-linux-2023/x86_64/standard/recommended/image_id"
+                f"/aws/service/eks/optimized-ami/{EKS_AL2023_K8s_VERSION}/amazon-linux-2023/x86_64/standard/recommended/image_id"
             )
 
+            # The node security group is used to allow traffic between the node instances and the EKS cluster.
             node_sg = ec2.SecurityGroup(
                 self,
                 f"{node['name']}-NodeSecurityGroup-{self.LAB_SHORT_NAME}",
@@ -399,13 +413,15 @@ class ClusterCdkStack(Stack):
                 description=f"Security group for {node['name']} nodes",
             )
 
-            # Allow the nodes to talk to each other if needed.
+            # Allow all traffic between node instances in the same security group
+            # To lock down the security group, you can specify specific ports and protocols instead of allowing all traffic.
             node_sg.connections.allow_from(
                 node_sg,
                 ec2.Port.all_traffic(),
                 "Allow all traffic between node instances",
             )
 
+            # The launch template is used to define the configuration of the EC2 instances in the node group.
             launch_template = ec2.LaunchTemplate(
                 self,
                 f"{node['name']}-LaunchTemplate-{self.LAB_SHORT_NAME}",
@@ -416,6 +432,7 @@ class ClusterCdkStack(Stack):
                 user_data=node_user_data,
                 block_devices=[
                     ec2.BlockDevice(
+                        # This is the name of the root volume device. It is used by the EC2 instance to identify the root volume.
                         device_name="/dev/xvda",
                         volume=ec2.BlockDeviceVolume.ebs(
                             root_volume_size,
@@ -428,13 +445,17 @@ class ClusterCdkStack(Stack):
                 require_imdsv2=True,
             )
 
+            # default_child is the underlying CfnLaunchTemplate resource that is created by the LaunchTemplate construct.
+            # It is needed here to add property overrides to the launch template, such as metadata options and tag specifications.
             cfn_launch_template = launch_template.node.default_child
 
+            # The hop limit for the IMDSv2 requests is set to 2, which means that the instance metadata service will only allow requests from the instance itself and not from any other instances in the same VPC.
             cfn_launch_template.add_property_override(
                 "LaunchTemplateData.MetadataOptions",
                 {"HttpPutResponseHopLimit": 2, "HttpTokens": "required"},
             )
 
+            # The tag specifications are used to tag the EC2 instances and EBS volumes created by the launch template.
             cfn_launch_template.add_property_override(
                 "LaunchTemplateData.TagSpecifications",
                 [
@@ -463,6 +484,8 @@ class ClusterCdkStack(Stack):
                 ],
             )
 
+            # AutoScalingGroup is used to create an auto scaling group for the node group.
+            # EKS nodes are managed by the auto scaling group, which allows for automatic scaling of the number of nodes based on demand.
             node_group = autoscaling.AutoScalingGroup(
                 self,
                 f"{node['name']}-ASG-{self.LAB_SHORT_NAME}",
@@ -485,7 +508,7 @@ class ClusterCdkStack(Stack):
             # Make sure the ASG doesn't override any Name tagging that we set in the launch template
             Tags.of(node_group).remove("Name")
 
-            # Only tag once here; no ASG role is set.
+            # Add tags to the node group for EKS and cluster autoscaler integration, as well as billing information.
             for key, value in {
                 f"kubernetes.io/cluster/{cluster_name}": "owned",
                 "eks:cluster-name": cluster_name,
@@ -499,13 +522,17 @@ class ClusterCdkStack(Stack):
                     apply_to_launched_instances=True,
                 )
 
+            # Connect the auto scaling group to the EKS cluster, allowing the cluster to manage the nodes and their lifecycle.
             self.cluster.connect_auto_scaling_group_capacity(
                 node_group,
                 bootstrap_enabled=False,
             )
+
+            # Make sure the node group is created after the access entry is created, so that the node role can access the EKS cluster.
             node_group.node.add_dependency(node_access_entry)
 
             if node_type == "core":
+                # Add additional permissions to the core node group for EBS CSI driver and autoscaler functionality.
                 policies = [
                     {
                         "Sid": "HubDescribe",
