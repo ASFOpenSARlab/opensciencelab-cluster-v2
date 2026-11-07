@@ -1650,32 +1650,31 @@ class ClusterCdkStack(Stack):
 
         #####################################################################
         #
-        #   A cloudwatch insights SQL query that will match a cryptnono event with an username.
-        #
-        #   There is an assumption that any user nodes have one jupyter user pod and one cryptnono sidecar pod.
+        #   Show Cryptnono kill events in CloudWatch Logs Insights.
         #
         #####################################################################
 
-        cw_log_group = "/aws/containerinsights/eml/application"
+        cw_log_group = f"/aws/containerinsights/{cluster_name}/application"
 
-        crytnono_query = f"""
-            SELECT DISTINCT
-                sidecar.`@timestamp`,
-                sidecar.`log_processed.cmdline` as command,
-                sidecar.`log_processed.matched` as matched,
-                sidecar.`kubernetes.pod_name` as pod_name_sidecar,
-                user_.`kubernetes.pod_name` as pod_name_user,
-                sidecar.`kubernetes.host` as host,
-                sidecar.`@message`
-            FROM `{cw_log_group}` as sidecar
-            INNER JOIN `{cw_log_group}` as user_
-                ON sidecar.`kubernetes.host` = user_.`kubernetes.host`
-            WHERE sidecar.`@message` like '%killed%'
-                AND user_.`kubernetes.pod_name` like 'jupyter-%'
-                AND CAST(sidecar.`@timestamp` as int) BETWEEN CAST(user_.`@timestamp` as int)-10 AND CAST(user_.`@timestamp` as int)+10
-            ORDER BY sidecar.`@timestamp` DESC
-            LIMIT 1000;
-        """
+        crytnono_query = textwrap.dedent(
+            f"""\
+            filter @message like /killed/
+            | join type=inner left=sidecar right=user
+                where sidecar.kubernetes.host = user.kubernetes.host
+                (SOURCE '{cw_log_group}')
+            | filter user.kubernetes.pod_name like /^jupyter-/
+                and abs(toMillis(sidecar.`@timestamp`) - toMillis(user.`@timestamp`)) <= 10000
+            | fields sidecar.`@timestamp` as timestamp,
+                     sidecar.log_processed.cmdline as command,
+                     sidecar.log_processed.matched as matched,
+                     sidecar.kubernetes.pod_name as pod_name_sidecar,
+                     user.kubernetes.pod_name as pod_name_user,
+                     sidecar.kubernetes.host as host,
+                     sidecar.`@message` as message
+            | sort timestamp desc
+            | limit 1000
+            """
+        )
 
         # Create a CloudWatch Dashboard
         sql_dashboard = cloudwatch.Dashboard(
@@ -1686,14 +1685,12 @@ class ClusterCdkStack(Stack):
 
         self.sql_dashboard_url = f"https://{self.region}.console.aws.amazon.com/cloudwatch/home?region={self.region}#dashboards:name={sql_dashboard.dashboard_name}"
 
-        # Define your SQL-based Log Insights Widget
+        # Define a CloudWatch Logs Insights QL widget.
         sql_widget = cloudwatch.LogQueryWidget(
-            title="Cryptnono Kill Event SQL Query",
+            title="Cryptnono Kill Events",
             log_group_names=[cw_log_group],
             view=cloudwatch.LogQueryVisualizationType.TABLE,
-            # Set the query language mode to SQL
-            query_language=cloudwatch.LogQueryLanguage.SQL,
-            # Pass your raw SQL query string
+            query_language=cloudwatch.LogQueryLanguage.LOGS_INSIGHTS,
             query_string=crytnono_query,
             width=24,
             height=6,
