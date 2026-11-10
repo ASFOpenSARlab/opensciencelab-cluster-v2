@@ -93,6 +93,8 @@ class ClusterCdkStack(Stack):
 
         self.K8s_NAMESPACE = "jupyter"
 
+        self.PREFIX_NAMESPACE = os.getenv("PREFIX_NAMESPACE", "osl.asf")
+
         # Get nodes and profiles
         profiles = tomllib.loads(os.environ["PROFILE_DEFINITIONS"])
         nodes = tomllib.loads(os.environ["NODE_DEFINITIONS"])
@@ -103,7 +105,7 @@ class ClusterCdkStack(Stack):
         self.lab_nodes = [{"name": name} | body for name, body in nodes.items()]
 
         # All resources in this specific stack will get this tag
-        Tags.of(self).add("osl-billing", self.LAB_SHORT_NAME)  # type: ignore
+        Tags.of(self).add(f"{self.PREFIX_NAMESPACE}/lab-name", self.LAB_SHORT_NAME)  # type: ignore
 
         self.kubectl_layer = lambda_layer_kubectl_v36.KubectlV36Layer(self, "kubectl")
 
@@ -277,6 +279,8 @@ class ClusterCdkStack(Stack):
         #
         #####################################################################
 
+        self.core_nodegroup = None
+
         # https://github.com/aws/aws-cdk/issues/37012eks.Cluster
         for node in self.lab_nodes:
             node_type = node.get("node_type", "user")
@@ -286,14 +290,14 @@ class ClusterCdkStack(Stack):
             node_labels = node.get("labels", {})
             if node_type == "core":
                 node_labels["hub.jupyter.org/node-purpose"] = "core"
-                node_labels["opensciencelab.local/node-type"] = "core"
+                node_labels[f"{self.PREFIX_NAMESPACE}/node-type"] = "core"
 
             elif node_type == "user":
                 node_labels["hub.jupyter.org/node-purpose"] = "user"
-                node_labels["opensciencelab.local/node-type"] = (
+                node_labels[f"{self.PREFIX_NAMESPACE}/node-type"] = (
                     f"user-{node_name_escaped}"
                 )
-                node_labels["opensciencelab.local/cryptnono-enabled"] = str(
+                node_labels[f"{self.PREFIX_NAMESPACE}/cryptnono-enabled"] = str(
                     self.IS_CRYPTNONO_ENABLED
                 ).lower()
 
@@ -337,7 +341,10 @@ class ClusterCdkStack(Stack):
                         ec2.CfnLaunchTemplate.TagSpecificationProperty(
                             resource_type="instance",
                             tags=[
-                                CfnTag(key="osl-billing", value=self.LAB_SHORT_NAME),
+                                CfnTag(
+                                    key=f"{self.PREFIX_NAMESPACE}/lab-name",
+                                    value=self.LAB_SHORT_NAME,
+                                ),
                                 CfnTag(
                                     key="Name",
                                     value=f"{node['name']}--{self.LAB_SHORT_NAME}",
@@ -347,7 +354,10 @@ class ClusterCdkStack(Stack):
                         ec2.CfnLaunchTemplate.TagSpecificationProperty(
                             resource_type="volume",
                             tags=[
-                                CfnTag(key="osl-billing", value=self.LAB_SHORT_NAME),
+                                CfnTag(
+                                    key=f"{self.PREFIX_NAMESPACE}/lab-name",
+                                    value=self.LAB_SHORT_NAME,
+                                ),
                                 CfnTag(
                                     key="Name",
                                     value=f"{node['name']}-root--{self.LAB_SHORT_NAME}",
@@ -424,6 +434,23 @@ class ClusterCdkStack(Stack):
                                 # If the cluster tag is passed in the request payload, it MUST match this cluster
                                 "aws:RequestTag/ebs.csi.aws.com/cluster-name": cluster_name,
                                 "ec2:CreateAction": "CreateVolume",
+                            },
+                        },
+                    },
+                    {
+                        "Sid": "HubUpdateTagsOnEC2",
+                        "Effect": "Allow",
+                        "Action": [
+                            "ec2:CreateTags",
+                            "ec2:DescribeInstances",
+                        ],
+                        "Resource": [
+                            f"arn:aws:ec2:{self.region}:{self.account}:instance/*",
+                        ],
+                        "Condition": {
+                            "StringEquals": {
+                                # If updating an existing EC2, it MUST already belong to this cluster
+                                "ec2:ResourceTag/eks:cluster-name": cluster_name
                             },
                         },
                     },
@@ -507,6 +534,11 @@ class ClusterCdkStack(Stack):
                 # Needed so we can make a dependency later
                 self.core_nodegroup = node_group
 
+        if self.core_nodegroup is None:
+            raise ValueError(
+                "A core nodegroup is required for JupyterHub and other dependencies."
+            )
+
         #####################################################################
         #
         #    Setup EBS CSI Storage for volume creation
@@ -523,7 +555,7 @@ class ClusterCdkStack(Stack):
         #####################################################################
 
         # Storage class for user volumes
-        self.cluster.add_manifest(
+        self.user_storage_class_manifest = self.cluster.add_manifest(
             "CsiStorageClass",
             {
                 "apiVersion": "storage.k8s.io/v1",
@@ -546,7 +578,7 @@ class ClusterCdkStack(Stack):
         )
 
         # Storage class for JupyterHub DB. Ensures that it is nicely named in the EC2 console
-        self.cluster.add_manifest(
+        self.db_storage_class_manifest = self.cluster.add_manifest(
             "JhDbStorageClass",
             {
                 "apiVersion": "storage.k8s.io/v1",
@@ -558,12 +590,9 @@ class ClusterCdkStack(Stack):
                 "parameters": {
                     "type": "gp3",
                     "fsType": "ext4",
-                    "tagSpecification_1": f"osl-billing={self.LAB_SHORT_NAME}",
+                    "tagSpecification_1": f"{self.PREFIX_NAMESPACE}/lab-name={self.LAB_SHORT_NAME}",
                     "tagSpecification_2": f"Name=hub-db-dir--{self.LAB_SHORT_NAME}",
                     "tagSpecification_3": "is-jupyterhub-db=true",
-                    # The CSI driver is expecting volumes to be tagged a certain way
-                    "tagSpecification_4": "ebs.csi.aws.com/cluster=true",
-                    "tagSpecification_5": f"ebs.csi.aws.com/cluster-name={cluster_name}",
                 },
                 "allowVolumeExpansion": False,
                 "volumeBindingMode": "Immediate",
@@ -581,6 +610,7 @@ class ClusterCdkStack(Stack):
 
         # EC2s need to be tagged "eks:cluster-name=CLUSTER_NAME". EKS manged nodegroup automatically does this.
         # Volumes need to tagged "ebs.csi.aws.com/cluster=true" and "ebs.csi.aws.com/cluster-name=CLUSTER_NAME". These tags are injected from the CSI driver or the custom storage classes.
+        # Do not manually add these tags to the EC2s or volumes. The CSI driver will automatically add the correct tags to the volumes when they are created.
         # The AmazonEBSCSIDriverEKSClusterScopedPolicy strictly enforces that the value of the resource tag ebs.csi.aws.com/cluster-name on your EBS volumes must match an eks-cluster-name tag on the IAM principal (the role).
         Tags.of(csi_service_account.role).add("eks-cluster-name", cluster_name)
 
@@ -609,13 +639,13 @@ class ClusterCdkStack(Stack):
                     "extraCreateMetadata": True,
                     "k8sTagClusterId": cluster_name,
                     "extraVolumeTags": {
-                        "osl-billing": self.LAB_SHORT_NAME,
+                        f"{self.PREFIX_NAMESPACE}/lab-name": self.LAB_SHORT_NAME,
                     },
                     "serviceAccount": {
                         "create": False,
                         "name": csi_service_account.service_account_name,
                     },
-                    "nodeSelector": {"opensciencelab.local/node-type": "core"},
+                    "nodeSelector": {f"{self.PREFIX_NAMESPACE}/node-type": "core"},
                 },
             },
         )
@@ -717,6 +747,51 @@ class ClusterCdkStack(Stack):
                     "apiGroup": "rbac.authorization.k8s.io",
                     "kind": "ClusterRole",
                     "name": "system:persistent-volume-provisioner",
+                },
+            },
+        )
+
+        # Add extra permssions to the hub account so it can get node information for the hook scripts.
+        eks.KubernetesManifest(
+            self,
+            "NodeReaderClusterRole",
+            cluster=self.cluster,
+            overwrite=True,
+            manifest=[
+                {
+                    "apiVersion": "rbac.authorization.k8s.io/v1",
+                    "kind": "ClusterRole",
+                    "metadata": {
+                        "name": "custom:jupyterhub-hooks",
+                    },
+                    "rules": [
+                        {
+                            "apiGroups": [""],
+                            "resources": ["nodes"],
+                            "verbs": ["get", "list", "watch"],
+                        }
+                    ],
+                }
+            ],
+        )
+
+        self.cluster.add_manifest(
+            "HooksClusterRoleBinding",
+            {
+                "kind": "ClusterRoleBinding",
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "metadata": {"name": "jupyterhub-hooks"},
+                "subjects": [
+                    {
+                        "kind": "ServiceAccount",
+                        "name": "hub",
+                        "namespace": self.K8s_NAMESPACE,
+                    }
+                ],
+                "roleRef": {
+                    "apiGroup": "rbac.authorization.k8s.io",
+                    "kind": "ClusterRole",
+                    "name": "custom:jupyterhub-hooks",
                 },
             },
         )
@@ -839,9 +914,8 @@ class ClusterCdkStack(Stack):
                     "DAYS_TILL_SNAPSHOT_DELETION": self.DAYS_TILL_SNAPSHOT_DELETION,
                     "CLUSTER_NAME": cluster_name,
                     "AZ_NAME": f"{self.region}{self.AZ_LETTER}",
-                    "COST_TAG_KEY": "osl-billing",
-                    "COST_TAG_VALUE": self.LAB_SHORT_NAME,
                     "K8s_NAMESPACE": self.K8s_NAMESPACE,
+                    "PREFIX_NAMESPACE": self.PREFIX_NAMESPACE,
                 },
                 "extraFiles": (
                     {}
@@ -874,6 +948,11 @@ class ClusterCdkStack(Stack):
                         "jupyterhub/config.d/pre_start_hook.py",
                         "python",
                         "/usr/local/etc/jupyterhub/jupyterhub_config.d/pre_start_hook.py",
+                    )
+                    | self._set_extra_file(
+                        "jupyterhub/config.d/after_pod_created_hook.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/after_pod_created_hook.py",
                     )
                     | self._set_extra_file(
                         "jupyterhub/config.d/post_stop_hook.py",
@@ -919,6 +998,9 @@ class ClusterCdkStack(Stack):
         )
 
         self.jupyerhub_helm_chart.node.add_dependency(self.ebs_csi_driver_helm_chart)
+        self.jupyerhub_helm_chart.node.add_dependency(self.user_storage_class_manifest)
+        self.jupyerhub_helm_chart.node.add_dependency(self.db_storage_class_manifest)
+        self.jupyerhub_helm_chart.node.add_dependency(self.core_nodegroup)
 
         #####################################################################
         #
@@ -954,7 +1036,7 @@ class ClusterCdkStack(Stack):
                 },
                 "region": self.region,
                 "vpcId": self.cluster.vpc.vpc_id,
-                "nodeSelector": {"opensciencelab.local/node-type": "core"},
+                "nodeSelector": {f"{self.PREFIX_NAMESPACE}/node-type": "core"},
                 "enableWaf": False,
                 "enableWafv2": False,
                 "defaultTags": {"AlbControllerManaged": True},
@@ -976,7 +1058,7 @@ class ClusterCdkStack(Stack):
                     "namespace": self.K8s_NAMESPACE,
                     "labels": {
                         "app": "jupyterhub",
-                        "opensciencelab.local/node-type": "core",
+                        f"{self.PREFIX_NAMESPACE}/node-type": "core",
                     },
                     "annotations": {
                         "service.beta.kubernetes.io/aws-load-balancer-name": f"eks-cluster-{self.LAB_SHORT_NAME}",
@@ -1351,7 +1433,7 @@ class ClusterCdkStack(Stack):
                                     "spec": {
                                         "restartPolicy": "OnFailure",
                                         "nodeSelector": {
-                                            "opensciencelab.local/node-type": "core"
+                                            f"{self.PREFIX_NAMESPACE}/node-type": "core"
                                         },
                                         "containers": [
                                             {
@@ -1374,7 +1456,7 @@ class ClusterCdkStack(Stack):
 
             # Install crytnono helm chart with values
             cryptnono_helm_values = {
-                "nodeSelector": {"opensciencelab.local/cryptnono-enabled": "true"},
+                "nodeSelector": {f"{self.PREFIX_NAMESPACE}/cryptnono-enabled": "true"},
                 "detectors": {
                     "execwhacker": {
                         "configs": {
