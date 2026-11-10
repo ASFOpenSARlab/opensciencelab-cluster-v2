@@ -75,12 +75,6 @@ def is_valid_docker_ref_safe(ref: str) -> bool:
 #####
 
 
-def is_valid_aws_tag_key_prefix(value: str) -> bool:
-    """Validate the syntax of a prefix used to construct AWS tag keys."""
-    pattern = r"^(?!aws:)[a-zA-Z0-9_.:/=+\-@]+$"
-    return bool(value and re.fullmatch(pattern, value, flags=re.IGNORECASE))
-
-
 def is_url_friendly(value: str) -> bool:
     # Matches strings containing only lowercase letters, numbers, and hyphens
     # Adjust regex pattern if you allow uppercase or underscores
@@ -356,7 +350,6 @@ def validate_other_environment_variables() -> None:
         "JUPYTER_HUB_IMAGE_TAG",
         "LAB_SHORT_NAME",
         "PORTAL_DOMAINS",
-        "PREFIX_NAMESPACE",
         "SNAPSHOT_WARNING_DAYS",
         "SNAPSHOT_GRACEPERIOD_DAYS",
         "UI_IAM_ROLE",
@@ -471,14 +464,6 @@ def validate_other_environment_variables() -> None:
         assert is_valid_fqdn_with_path(domain), (
             "Domains within PORTAL_DOMAINS must be in a valid format"
         )
-
-    print("Checking PREFIX_NAMESPACE ....")
-    prefix_namespace = os.getenv("PREFIX_NAMESPACE", None)
-    if not prefix_namespace:
-        raise Exception("PREFIX_NAMESPACE is not defined")
-    assert is_valid_aws_tag_key_prefix(prefix_namespace), (
-        "PREFIX_NAMESPACE must be a valid AWS tag key"
-    )
 
     print("Checking SNAPSHOT_WARNING_DAYS ....")
     snapshot_warning_days = os.getenv("SNAPSHOT_WARNING_DAYS", None)
