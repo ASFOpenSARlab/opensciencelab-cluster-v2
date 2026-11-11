@@ -547,7 +547,7 @@ class ClusterCdkStack(Stack):
         )
 
         # Storage class for JupyterHub DB. Ensures that it is nicely named in the EC2 console
-        self.cluster.add_manifest(
+        old_jh_db_manifest = self.cluster.add_manifest(
             "JhDbStorageClass",
             {
                 "apiVersion": "storage.k8s.io/v1",
@@ -571,6 +571,36 @@ class ClusterCdkStack(Stack):
                 "reclaimPolicy": "Delete",
             },
         )
+
+        # Storage class for JupyterHub DB. Ensures that it is nicely named in the EC2 console
+        new_jh_db_manifest = self.cluster.add_manifest(
+            "JhDbStorageClass",
+            {
+                "apiVersion": "storage.k8s.io/v1",
+                "kind": "StorageClass",
+                "metadata": {
+                    "name": "gp3-jh-db-new",
+                },
+                "provisioner": "ebs.csi.aws.com",
+                "parameters": {
+                    "type": "gp3",
+                    "fsType": "ext4",
+                    "tagSpecification_1": f"osl-billing={self.LAB_SHORT_NAME}",
+                    "tagSpecification_2": f"Name=hub-db-dir--{self.LAB_SHORT_NAME}",
+                    "tagSpecification_3": "is-jupyterhub-db=true",
+                    # The CSI driver is expecting volumes to be tagged a certain way
+                    "tagSpecification_4": "ebs.csi.aws.com/cluster=true",
+                    "tagSpecification_5": f"ebs.csi.aws.com/cluster-name={cluster_name}",
+                },
+                "allowVolumeExpansion": False,
+                "volumeBindingMode": "Immediate",
+                "reclaimPolicy": "Delete",
+            },
+        )
+
+        # Force manifests to be removed when deleted
+        old_jh_db_manifest.node.default_child.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+        new_jh_db_manifest.node.default_child.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
 
         # CSI storage
         csi_service_account = self.cluster.add_service_account(
