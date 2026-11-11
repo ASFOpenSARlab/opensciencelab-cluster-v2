@@ -574,7 +574,7 @@ class ClusterCdkStack(Stack):
 
         # Storage class for JupyterHub DB. Ensures that it is nicely named in the EC2 console
         new_jh_db_manifest = self.cluster.add_manifest(
-            "JhDbStorageClass",
+            "JhDbNewStorageClass",
             {
                 "apiVersion": "storage.k8s.io/v1",
                 "kind": "StorageClass",
