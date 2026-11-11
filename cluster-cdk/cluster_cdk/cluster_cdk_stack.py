@@ -592,7 +592,7 @@ class ClusterCdkStack(Stack):
             )
         )
 
-        self.csi_driver_version = "2.67.1"
+        self.csi_driver_version = "2.68.0"
 
         # https://artifacthub.io/packages/helm/aws-ebs-csi-driver/aws-ebs-csi-driver
         self.ebs_csi_driver_helm_chart = self.cluster.add_helm_chart(
