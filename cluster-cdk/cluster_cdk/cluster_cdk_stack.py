@@ -599,8 +599,8 @@ class ClusterCdkStack(Stack):
         )
 
         # Force manifests to be removed when deleted
-        old_jh_db_manifest.node.default_child.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
-        new_jh_db_manifest.node.default_child.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+        old_jh_db_manifest.node.default_child.apply_removal_policy(RemovalPolicy.DESTROY)
+        new_jh_db_manifest.node.default_child.apply_removal_policy(RemovalPolicy.DESTROY)
 
         # CSI storage
         csi_service_account = self.cluster.add_service_account(
@@ -825,7 +825,7 @@ class ClusterCdkStack(Stack):
                 },
                 "db": {
                     "pvc": {
-                        "storageClassName": "gp3-jh-db",
+                        "storageClassName": "gp3-jh-db-new",
                     }
                 },
                 "baseUrl": f"/lab/{self.LAB_SHORT_NAME}",
