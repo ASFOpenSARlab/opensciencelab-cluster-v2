@@ -562,9 +562,6 @@ class ClusterCdkStack(Stack):
                     "tagSpecification_1": f"osl-billing={self.LAB_SHORT_NAME}",
                     "tagSpecification_2": f"Name=hub-db-dir--{self.LAB_SHORT_NAME}",
                     "tagSpecification_3": "is-jupyterhub-db=true",
-                    # The CSI driver is expecting volumes to be tagged a certain way
-                    "tagSpecification_4": "ebs.csi.aws.com/cluster=true",
-                    "tagSpecification_5": f"ebs.csi.aws.com/cluster-name={cluster_name}",
                 },
                 "allowVolumeExpansion": False,
                 "volumeBindingMode": "Immediate",
