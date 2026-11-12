@@ -365,6 +365,7 @@ class ClusterCdkStack(Stack):
                 capacity_type=eks.CapacityType.ON_DEMAND,
                 max_size=node.get("group_max_size"),
                 min_size=node.get("group_min_size"),
+                release_version="1.36.5-20261107",
                 # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_ec2/InstanceClass.html
                 instance_types=[
                     ec2.InstanceType(instance) for instance in node["instance"]
@@ -588,7 +589,7 @@ class ClusterCdkStack(Stack):
             )
         )
 
-        self.csi_driver_version = "2.67.1"
+        self.csi_driver_version = "2.68.0"
 
         # https://artifacthub.io/packages/helm/aws-ebs-csi-driver/aws-ebs-csi-driver
         self.ebs_csi_driver_helm_chart = self.cluster.add_helm_chart(
