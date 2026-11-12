@@ -365,7 +365,6 @@ class ClusterCdkStack(Stack):
                 capacity_type=eks.CapacityType.ON_DEMAND,
                 max_size=node.get("group_max_size"),
                 min_size=node.get("group_min_size"),
-                release_version="1.34.10-20260827",
                 # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_ec2/InstanceClass.html
                 instance_types=[
                     ec2.InstanceType(instance) for instance in node["instance"]
