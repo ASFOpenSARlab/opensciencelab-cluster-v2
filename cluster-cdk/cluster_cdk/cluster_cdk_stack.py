@@ -844,11 +844,6 @@ class ClusterCdkStack(Stack):
                         "file",
                         "/etc/user_server_includes/overrides/default.json",
                     )
-                    | self._set_extra_file(
-                        "jupyterhub/config.d/after_pod_created_hook.py",
-                        "python",
-                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/after_pod_created_hook.py",
-                    )
                 ),
             },
             "hub": {
@@ -942,6 +937,11 @@ class ClusterCdkStack(Stack):
                         "jupyterhub/config.d/post_stop_hook.py",
                         "python",
                         "/usr/local/etc/jupyterhub/jupyterhub_config.d/post_stop_hook.py",
+                    )
+                    | self._set_extra_file(
+                        "jupyterhub/config.d/after_pod_created_hook.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/after_pod_created_hook.py",
                     )
                     | self._set_extra_file(
                         "jupyterhub/version.json",
