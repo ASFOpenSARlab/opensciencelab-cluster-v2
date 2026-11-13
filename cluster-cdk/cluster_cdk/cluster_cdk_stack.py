@@ -429,6 +429,23 @@ class ClusterCdkStack(Stack):
                         },
                     },
                     {
+                        "Sid": "HubUpdateTagsOnEC2",
+                        "Effect": "Allow",
+                        "Action": [
+                            "ec2:CreateTags",
+                            "ec2:DescribeInstances",
+                        ],
+                        "Resource": [
+                            f"arn:aws:ec2:{self.region}:{self.account}:instance/*",
+                        ],
+                        "Condition": {
+                            "StringEquals": {
+                                # If updating an existing EC2, it MUST already belong to this cluster
+                                "ec2:ResourceTag/eks:cluster-name": cluster_name
+                            },
+                        },
+                    },
+                    {
                         "Sid": "HubUpdateTags",
                         "Effect": "Allow",
                         "Action": ["ec2:CreateTags"],
@@ -524,7 +541,7 @@ class ClusterCdkStack(Stack):
         #####################################################################
 
         # Storage class for user volumes
-        self.cluster.add_manifest(
+        self.user_storage_class_manifest = self.cluster.add_manifest(
             "CsiStorageClass",
             {
                 "apiVersion": "storage.k8s.io/v1",
@@ -547,7 +564,7 @@ class ClusterCdkStack(Stack):
         )
 
         # Storage class for JupyterHub DB. Ensures that it is nicely named in the EC2 console
-        self.cluster.add_manifest(
+        self.db_storage_class_manifest = self.cluster.add_manifest(
             "JhDbStorageClass",
             {
                 "apiVersion": "storage.k8s.io/v1",
@@ -719,6 +736,51 @@ class ClusterCdkStack(Stack):
             },
         )
 
+        # Add extra permssions to the hub account so it can get node information for the hook scripts.
+        eks.KubernetesManifest(
+            self,
+            "NodeReaderClusterRole",
+            cluster=self.cluster,
+            overwrite=True,
+            manifest=[
+                {
+                    "apiVersion": "rbac.authorization.k8s.io/v1",
+                    "kind": "ClusterRole",
+                    "metadata": {
+                        "name": "custom:jupyterhub-hooks",
+                    },
+                    "rules": [
+                        {
+                            "apiGroups": [""],
+                            "resources": ["nodes"],
+                            "verbs": ["get", "list", "watch"],
+                        }
+                    ],
+                }
+            ],
+        )
+
+        self.cluster.add_manifest(
+            "HooksClusterRoleBinding",
+            {
+                "kind": "ClusterRoleBinding",
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "metadata": {"name": "jupyterhub-hooks"},
+                "subjects": [
+                    {
+                        "kind": "ServiceAccount",
+                        "name": "hub",
+                        "namespace": self.K8s_NAMESPACE,
+                    }
+                ],
+                "roleRef": {
+                    "apiGroup": "rbac.authorization.k8s.io",
+                    "kind": "ClusterRole",
+                    "name": "custom:jupyterhub-hooks",
+                },
+            },
+        )
+
         # For deeper configuration explanation, refer to ARCHITECTURE.md
         jupyterhub_helm_values = {
             "cull": {
@@ -782,6 +844,11 @@ class ClusterCdkStack(Stack):
                         "file",
                         "/etc/user_server_includes/overrides/default.json",
                     )
+                    | self._set_extra_file(
+                        "jupyterhub/config.d/after_pod_created_hook.py",
+                        "python",
+                        "/usr/local/etc/jupyterhub/jupyterhub_config.d/after_pod_created_hook.py",
+                    )
                 ),
             },
             "hub": {
@@ -837,8 +904,6 @@ class ClusterCdkStack(Stack):
                     "DAYS_TILL_SNAPSHOT_DELETION": self.DAYS_TILL_SNAPSHOT_DELETION,
                     "CLUSTER_NAME": cluster_name,
                     "AZ_NAME": f"{self.region}{self.AZ_LETTER}",
-                    "COST_TAG_KEY": "osl-billing",
-                    "COST_TAG_VALUE": self.LAB_SHORT_NAME,
                     "K8s_NAMESPACE": self.K8s_NAMESPACE,
                 },
                 "extraFiles": (
@@ -917,6 +982,9 @@ class ClusterCdkStack(Stack):
         )
 
         self.jupyerhub_helm_chart.node.add_dependency(self.ebs_csi_driver_helm_chart)
+        self.jupyerhub_helm_chart.node.add_dependency(self.user_storage_class_manifest)
+        self.jupyerhub_helm_chart.node.add_dependency(self.db_storage_class_manifest)
+        self.jupyerhub_helm_chart.node.add_dependency(self.core_nodegroup)
 
         #####################################################################
         #
