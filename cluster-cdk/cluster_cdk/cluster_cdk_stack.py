@@ -342,6 +342,10 @@ class ClusterCdkStack(Stack):
                                     key="Name",
                                     value=f"{node['name']}--{self.LAB_SHORT_NAME}",
                                 ),
+                                CfnTag(
+                                    key="node-name",
+                                    value=node["name"],
+                                ),
                             ],
                         ),
                         ec2.CfnLaunchTemplate.TagSpecificationProperty(

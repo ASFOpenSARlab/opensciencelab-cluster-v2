@@ -36,11 +36,29 @@ async def _close_api_client(api_client) -> None:
 
 
 def _tag_ec2_instance(instance_id: str, username: str) -> None:
+    # Tag the EC2 instance with the username and lab short name for billing purposes
     ec2_client = boto3.client("ec2", region_name=REGION_NAME)
     ec2_client.create_tags(
         Resources=[instance_id],
         Tags=[{"Key": "osl-billing", "Value": f"{LAB_SHORT_NAME}--{username}"}],
     )
+
+    # Update the "Name" tag to include the node name, lab short name, and username
+    response = ec2_client.describe_tags(
+        Filters=[
+            {"Name": "resource-id", "Values": [instance_id]},
+            {"Name": "key", "Values": ["node-name"]},
+        ]
+    )
+    if response["Tags"]:
+        node_name = response["Tags"][0]["Value"]
+
+        ec2_client.create_tags(
+            Resources=[instance_id],
+            Tags=[
+                {"Key": "Name", "Value": f"{username}--{node_name}--{LAB_SHORT_NAME}"}
+            ],
+        )
 
 
 # WARNING: This function assumes that only one pod is running per user.
