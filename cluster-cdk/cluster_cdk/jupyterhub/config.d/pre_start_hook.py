@@ -275,7 +275,7 @@ def get_user_volume(
                         {"Key": "is-jupyterhub-user", "Value": "true"},
                         {
                             "Key": "osl-billing",
-                            "Value": f"{LAB_SHORT_NAME}--{username}",
+                            "Value": f"{LAB_SHORT_NAME}/{username}",
                         },
                         # Volumes need to tagged for the CSI driver to properly manage them
                         # These values are allowed here since the volume is being created from a snapshot directly and not throught the CSI driver.
@@ -338,7 +338,7 @@ def get_user_volume(
                         {"Key": "is-jupyterhub-user", "Value": "true"},
                         {
                             "Key": "osl-billing",
-                            "Value": f"{LAB_SHORT_NAME}--{username}",
+                            "Value": f"{LAB_SHORT_NAME}/{username}",
                         },
                         # Volumes need to tagged for the CSI driver to properly manage them
                         # These values are allowed here since the volume is being created from a snapshot directly and not throught the CSI driver.

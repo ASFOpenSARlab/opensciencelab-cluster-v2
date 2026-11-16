@@ -40,7 +40,7 @@ def _tag_ec2_instance(instance_id: str, username: str) -> None:
     ec2_client = boto3.client("ec2", region_name=REGION_NAME)
     ec2_client.create_tags(
         Resources=[instance_id],
-        Tags=[{"Key": "osl-billing", "Value": f"{LAB_SHORT_NAME}--{username}"}],
+        Tags=[{"Key": "osl-billing", "Value": f"{LAB_SHORT_NAME}/{username}"}],
     )
 
     # Update the "Name" tag to include the node name, lab short name, and username

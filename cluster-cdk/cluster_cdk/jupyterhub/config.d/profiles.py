@@ -182,7 +182,7 @@ async def lab_profile_list_hook(spawner: c.Spawner) -> List[Dict]:  # noqa: F821
                         "opensciencelab.local/user-profile-name": escaped_lab_profile_name,
                         "sidecar.istio.io/inject": "false",
                         "opensciencelab.local/egress-profile": "none",
-                        "osl-billing": f"{LAB_SHORT_NAME}--{username}",
+                        "opensciencelab.local/username": username,
                     },
                     "node_selector": {
                         "opensciencelab.local/node-type": f"user-{node_name_escaped}"
