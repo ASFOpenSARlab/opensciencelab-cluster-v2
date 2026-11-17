@@ -7,7 +7,7 @@ from tornado.httpclient import AsyncHTTPClient
 from jupyterhub.auth import Authenticator
 from jupyterhub.handlers import BaseHandler
 
-from opensarlab.auth import encryptedjwt
+from opensarlab_backend.auth import encryptedjwt
 
 
 class My403Exception(Exception):

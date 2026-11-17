@@ -13,7 +13,7 @@ import jinja2
 from kubernetes import client as k8s_client, config as k8s_config
 import requests
 
-from opensarlab.auth import encryptedjwt
+from opensarlab_backend.auth import encryptedjwt
 
 CLAIM_TAG = "kubernetes.io/created-for/pvc/name"
 CLUSTER_TAG = "KubernetesCluster"
