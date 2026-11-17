@@ -34,7 +34,7 @@ from aws_cdk import (  # type: ignore
     aws_events_targets as targets,
     aws_sns as sns,
     aws_sns_subscriptions as sns_subs,
-    lambda_layer_kubectl_v36,
+    lambda_layer_kubectl_v37,
     lambda_layer_awscli,
 )
 
@@ -105,7 +105,7 @@ class ClusterCdkStack(Stack):
         # All resources in this specific stack will get this tag
         Tags.of(self).add("osl-billing", self.LAB_SHORT_NAME)  # type: ignore
 
-        self.kubectl_layer = lambda_layer_kubectl_v36.KubectlV36Layer(self, "kubectl")
+        self.kubectl_layer = lambda_layer_kubectl_v37.KubectlV36Layer(self, "kubectl")
 
         ########
         #
@@ -172,7 +172,7 @@ class ClusterCdkStack(Stack):
             "EksCluster",
             vpc=self.vpc,
             cluster_name=cluster_name,
-            version=eks.KubernetesVersion.V1_36,
+            version=eks.KubernetesVersion.V1_37,
             kubectl_provider_options=eks.KubectlProviderOptions(
                 kubectl_layer=self.kubectl_layer,
             ),
@@ -185,7 +185,7 @@ class ClusterCdkStack(Stack):
             self,
             "CniAddon",
             addon_name="vpc-cni",
-            addon_version="v1.23.1-eksbuild.1",
+            addon_version="v1.23.2-eksbuild.12",
             cluster=self.cluster,
             # configuration_values={},
         )
@@ -193,7 +193,7 @@ class ClusterCdkStack(Stack):
             self,
             "CoreDnsAddon",
             addon_name="coredns",
-            addon_version="v1.14.7-eksbuild.10",
+            addon_version="v1.14.7-eksbuild.35",
             cluster=self.cluster,
             # configuration_values={},
         )
@@ -207,7 +207,7 @@ class ClusterCdkStack(Stack):
             self,
             "CloudwatchObserv",
             addon_name="amazon-cloudwatch-observability",
-            addon_version="v6.7.0-eksbuild.1",
+            addon_version="v7.0.1-eksbuild.1",
             cluster=self.cluster,
         )
 
@@ -217,7 +217,7 @@ class ClusterCdkStack(Stack):
             self,
             "KubeProxyAddon",
             addon_name="kube-proxy",
-            addon_version="v1.36.0-eksbuild.21",
+            addon_version="v1.37.0-eksbuild.39",
             cluster=self.cluster,
             # configuration_values={},
         )
@@ -664,7 +664,7 @@ class ClusterCdkStack(Stack):
         #
         #####################################################################
 
-        self.jupyterhub_helm_version = "4.4.2"
+        self.jupyterhub_helm_version = "4.4.5"
 
         # Modify the k8s permissions so the volumes can be modified in place
         # Patching existing clusterroles is difficult. So we are fully replacing the original from jupyterhub.
@@ -998,7 +998,7 @@ class ClusterCdkStack(Stack):
 
         # The default CDK AWS Controller is woefully out of date.
         # Use the helm chart
-        self.load_balancer_controller_version = "3.6.1"
+        self.load_balancer_controller_version = "3.6.3"
 
         alb_sa = self.cluster.add_service_account("alb-sa", namespace="kube-system")
 
@@ -1645,7 +1645,7 @@ class ClusterCdkStack(Stack):
         #
         #####################################################################
 
-        self.autoscaler_helm_version = "9.59.0"
+        self.autoscaler_helm_version = "9.60.0"
 
         # Note that other args are added via ASG tags
         autoscaler_helm_chart_values = {
