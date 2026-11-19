@@ -8,7 +8,7 @@ import urllib
 
 from tornado.httpclient import AsyncHTTPClient, HTTPResponse
 
-from opensarlab.auth import encryptedjwt
+from opensarlab_backend.auth import encryptedjwt
 
 # What is happening here
 LAB_PROFILES: list = json.loads(os.environ.get("LAB_PROFILES", "[]"))
