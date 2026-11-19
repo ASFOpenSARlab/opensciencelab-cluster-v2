@@ -1,5 +1,5 @@
 aws-cdk-cli==2.1146.1
-aws-cdk-lib==2.274.0
+aws-cdk-lib==2.277.0
 aws-cdk.lambda_layer_kubectl_v37==2.0.0
 boto3==1.43.118
 constructs>=10.8.1,<11.0.0
