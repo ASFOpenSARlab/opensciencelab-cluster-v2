@@ -55,7 +55,6 @@ Lambda `kubectl`: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab
 
 Node Groups: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L372) | [Supported Versions](https://github.com/awslabs/amazon-eks-ami/releases)
 
-
 ### Helm Charts
 
 JupyterHub: [cluster code](https://github.com/ASFOpenSARlab/opensciencelab-cluster-v2/blob/9e3f590eb27183cc91ded2a0392088bb3828f40a/cluster-cdk/cluster_cdk/cluster_cdk_stack.py#L667) | [Helm Releases](https://hub.jupyter.org/helm-chart/) | [Changelog](https://jupyterhub.readthedocs.io/en/stable/reference/changelog.html)
