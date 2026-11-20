@@ -37,6 +37,7 @@ jobs:
       EXECWHACKER_CRON_IMAGE_PATH: ${{ vars.EXECWHACKER_CRON_IMAGE_PATH }}
       EXECWHACKER_CRON_IMAGE_TAG: ${{ vars.EXECWHACKER_CRON_IMAGE_TAG }}
       IS_CRYPTNONO_ENABLED: ${{ vars.IS_CRYPTNONO_ENABLED }}
+      IS_CROWDSTRIKE_ENABLED: ${{ vars.IS_CROWDSTRIKE_ENABLED }}
       AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       UI_IAM_ROLE: ${{ vars.UI_IAM_ROLE }}
       ADMIN_USERS: ${{ vars.ADMIN_USERS }}
@@ -56,6 +57,35 @@ jobs:
 
       - name: Checkout Repo
         uses: actions/checkout@v6
+
+      - name: Resolve CrowdStrike image credentials
+        if: env.IS_CROWDSTRIKE_ENABLED == 'true'
+        env:
+          FALCON_CLIENT_ID: ${{ secrets.CROWDSTRIKE_CLIENT_ID }}
+          FALCON_CLIENT_SECRET: ${{ secrets.CROWDSTRIKE_CLIENT_SECRET }}
+          FALCON_CLOUD: ${{ vars.CROWDSTRIKE_CLOUD }} # Optional for specifying the CrowdStrike cloud region (e.g., us1, us2, eu1, etc.)
+        run: |
+          set -euo pipefail
+          script_path="$(mktemp)"
+          trap 'rm -f "$script_path"' EXIT
+          curl --fail --silent --show-error --location \
+            --output "$script_path" \
+            https://raw.githubusercontent.com/CrowdStrike/falcon-scripts/v1.14.0/bash/containers/falcon-container-sensor-pull/falcon-container-sensor-pull.sh
+          chmod 700 "$script_path"
+          export SENSOR_TYPE=falcon-sensor
+
+          image_uri="$("$script_path" --get-image-path)"
+          pull_token="$("$script_path" --get-pull-token)"
+          crowdstrike_cid="$("$script_path" --get-cid)"
+          if [[ -z "$image_uri" || -z "$pull_token" || -z "$crowdstrike_cid" ]]; then
+            echo "Failed to resolve CrowdStrike image credentials." >&2
+            exit 1
+          fi
+
+          echo "::add-mask::$pull_token"
+          printf 'CROWDSTRIKE_IMAGE_URI=%s\n' "$image_uri" >> "$GITHUB_ENV"
+          printf 'CROWDSTRIKE_PULL_TOKEN=%s\n' "$pull_token" >> "$GITHUB_ENV"
+          printf 'CROWDSTRIKE_CID=%s\n' "$crowdstrike_cid" >> "$GITHUB_ENV"
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4

@@ -126,6 +126,20 @@ class ClusterCdkStack(Stack):
             and True
         )
 
+        ########
+        #
+        # Parameters related to CrowdStrike Falcon Container Security
+        #
+        ########
+
+        self.IS_CROWDSTRIKE_ENABLED = (
+            os.getenv("IS_CROWDSTRIKE_ENABLED", "false").strip().lower() == "true"
+        )
+        # The CROWDSTRIKE_CID is required to configure the Falcon node sensor.
+        self.CROWDSTRIKE_CID = os.getenv("CROWDSTRIKE_CID")
+        if self.IS_CROWDSTRIKE_ENABLED and not self.CROWDSTRIKE_CID:
+            raise ValueError("CROWDSTRIKE_CID is required when CrowdStrike is enabled")
+
         # See what vars are defined within this context
         print("vars within CDK...")
         for k, v in vars(self).items():
@@ -1674,6 +1688,79 @@ class ClusterCdkStack(Stack):
             version=self.autoscaler_helm_version,
             values=autoscaler_helm_chart_values,
         )
+
+        #####################################################################
+        #
+        #    Setup Optional CrowdStrike Falcon Node Security
+        #
+        #####################################################################
+
+        if self.IS_CROWDSTRIKE_ENABLED:
+            self.crowdstrike_helm_version = "1.37.0"
+
+            # The CrowdStrike helm chart requires a pull token and image uri to be set as environment variables.
+            # These are used to pull the CrowdStrike image from the private registry.
+            crowdstrike_image_uri = os.getenv("CROWDSTRIKE_IMAGE_URI", "")
+            crowdstrike_pull_token = os.getenv("CROWDSTRIKE_PULL_TOKEN", "")
+            crowdstrike_image_repository, separator, crowdstrike_image_tag = (
+                crowdstrike_image_uri.rpartition(":")
+            )
+            if not all(
+                [
+                    crowdstrike_image_repository,
+                    separator,
+                    crowdstrike_image_tag,
+                    crowdstrike_pull_token,
+                ]
+            ):
+                raise ValueError(
+                    "CrowdStrike image URI and pull token are required when CrowdStrike is enabled"
+                )
+
+            crowdstrike_helm_chart_values = {
+                "falcon": {
+                    "cid": self.CROWDSTRIKE_CID,
+                    "tags": {"lab": self.LAB_SHORT_NAME},
+                },
+                "node": {
+                    "enabled": True,
+                    "image": {
+                        "repository": crowdstrike_image_repository,
+                        "tag": crowdstrike_image_tag,
+                        "registryConfigJSON": crowdstrike_pull_token,
+                    },
+                    "daemonset": {
+                        "nodeAffinity": {
+                            "requiredDuringSchedulingIgnoredDuringExecution": {
+                                "nodeSelectorTerms": [
+                                    {
+                                        "matchExpressions": [
+                                            {
+                                                "key": "hub.jupyter.org/node-purpose",
+                                                "operator": "In",
+                                                "values": ["user"],
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                },
+                "container": {"enabled": False},
+            }
+
+            self.cluster.add_helm_chart(
+                "CrowdStrikeFalcon",
+                chart="falcon-sensor",
+                repository="https://crowdstrike.github.io/falcon-helm",
+                namespace="crowdstrike",
+                wait=True,  # Until the pods are ready
+                atomic=False,
+                timeout=Duration.minutes(2),
+                version=self.crowdstrike_helm_version,
+                values=crowdstrike_helm_chart_values,
+            )
 
         #####################################################################
         #
