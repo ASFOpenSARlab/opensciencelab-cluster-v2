@@ -362,7 +362,6 @@ def get_user_volume(
         "kind": "PersistentVolumeClaim",
         "metadata": {
             "annotations": annotations,
-            "cluster_name": CLUSTER_NAME,
             "labels": labels,
             "name": pvc_name,
             "namespace": NAMESPACE,
@@ -381,7 +380,6 @@ def get_user_volume(
         "kind": "PersistentVolume",
         "metadata": {
             "annotations": pvc_manifest["metadata"]["annotations"],
-            "cluster_name": CLUSTER_NAME,
             "labels": {
                 "topology.kubernetes.io/region": REGION_NAME,
                 "topology.kubernetes.io/zone": AZ_NAME,
