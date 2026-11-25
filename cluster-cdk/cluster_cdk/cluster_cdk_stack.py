@@ -1232,7 +1232,7 @@ class ClusterCdkStack(Stack):
                             ),
                         ],
                         create_rule=dlm.CfnLifecyclePolicy.CreateRuleProperty(
-                            interval=12,  # every 24 hours
+                            interval=12,  # every 12 hours
                             interval_unit="HOURS",
                             times=["12:00"],  # Start window time (UTC HH:MM format)
                         ),
